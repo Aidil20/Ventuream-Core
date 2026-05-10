@@ -16,12 +16,20 @@ import {
   Menu,
   ChevronRight,
   RefreshCw,
+  Activity,
   Zap,
   Cloud,
   FileUp,
   Database,
   ExternalLink,
-  Plus
+  Plus,
+  BarChart3,
+  Globe,
+  Gavel,
+  Droplets,
+  FileText,
+  Radar,
+  X
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { fetchLatestInsights, MarketInsight, fetchStockRecommendations, StockRecommendation, ScanOptions } from './services/marketService';
@@ -29,8 +37,9 @@ import TradingViewWidget from './components/TradingViewWidget';
 import PortfolioChart from './components/PortfolioChart';
 import { useTransactionManager } from './hooks/useTransactionManager';
 import { TransactionTable } from './components/TransactionTable';
-import { Settings2, Filter, Target } from 'lucide-react';
+import { Settings2, Filter, Target, ArrowLeft, Info } from 'lucide-react';
 import { Sparkline } from './components/Sparkline';
+import { AssetDetail } from './components/AssetDetail';
 
 const ASSETS = [
   {
@@ -68,6 +77,42 @@ const ASSETS = [
     percentage: '1.8%',
     liquidity: 'Low',
     performance: [30, 32, 28, 30, 29, 31, 30]
+  },
+  {
+    id: '4',
+    name: 'DMS Propertindo',
+    symbol: 'OTAS',
+    category: 'Real Estate',
+    value: 'Rp 244.5k',
+    status: 'Performing',
+    type: 'Equities',
+    percentage: '3.1%',
+    liquidity: 'Medium',
+    performance: [20, 25, 30, 35, 40, 45, 50]
+  },
+  {
+    id: '5',
+    name: 'Trimitra Propertindo',
+    symbol: 'ANDI',
+    category: 'Property',
+    value: 'Rp 306.9k',
+    status: 'Bearish',
+    type: 'Equities',
+    percentage: '-4.2%',
+    liquidity: 'Low',
+    performance: [55, 50, 48, 45, 42, 40, 38]
+  },
+  {
+    id: '6',
+    name: 'Multi Makmur Lemindo',
+    symbol: 'IPAC',
+    category: 'Real Estate',
+    value: 'Rp 213.0k',
+    status: 'Stable',
+    type: 'Equities',
+    percentage: '-5.9%',
+    liquidity: 'Low',
+    performance: [40, 38, 35, 32, 30, 28, 25]
   }
 ];
 
@@ -80,12 +125,32 @@ const HOLDINGS = [
   { symbol: 'IPAC', name: 'Multi Makmur Lemindo', qty: '1,500', value: '213,000', change: '-5.9%', type: 'Real Estate', performance: [40, 38, 35, 32, 30, 28, 25] },
 ];
 
+const SIDEBAR_MENU = [
+  { id: 1, label: "Analisis Portofolio", icon: BarChart3, path: "portfolio" },
+  { id: 2, label: "Gateway Internasional", icon: Globe, path: "gateway" },
+  { id: 3, label: "Laporan Regulasi", icon: Gavel, path: "compliance" },
+  { id: 4, label: "Pengaturan Likuiditas", icon: Droplets, path: "liquidity" },
+  { id: 5, label: "Laporan Keuangan", icon: FileText, path: "financials" },
+  { 
+    id: 6, 
+    label: "Smart Scanner IDX", 
+    provider: "By Ventuream AM", 
+    icon: Radar, 
+    path: "https://www.tradingview.com/screener/7lUlY4am/",
+    external: true,
+    color: "#FFD700"
+  },
+];
+
 export default function App() {
   const [activeTab, setActiveTab] = useState('home');
+  const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+  const [selectedAssetId, setSelectedAssetId] = useState<string | null>(null);
   const [insight, setInsight] = useState<MarketInsight | null>(null);
   const [stocks, setStocks] = useState<StockRecommendation[]>([]);
   const [isFetching, setIsFetching] = useState(false);
   const [isScanning, setIsScanning] = useState(false);
+  const [liquidityValue, setLiquidityValue] = useState(12.4); // Simulated low liquidity for alert demo
   const [showScanParams, setShowScanParams] = useState(false);
   const [scanOptions, setScanOptions] = useState<ScanOptions>({
     sector: '',
@@ -120,12 +185,55 @@ export default function App() {
   }, []);
 
   const renderContent = () => {
+    if (activeTab === 'asset-detail' && selectedAssetId) {
+      const selectedAsset = ASSETS.find(a => a.id === selectedAssetId);
+      if (selectedAsset) {
+        return (
+          <AssetDetail 
+            asset={selectedAsset} 
+            onBack={() => setActiveTab('home')} 
+          />
+        );
+      }
+    }
+
     switch (activeTab) {
       case 'home':
         return (
           <>
             {/* PERFORMANCE HISTORY CHART */}
             <PortfolioChart />
+
+            {/* LIQUIDITY ALERT */}
+            <AnimatePresence>
+              {liquidityValue < 15 && (
+                <motion.div
+                  initial={{ opacity: 0, height: 0 }}
+                  animate={{ opacity: 1, height: 'auto' }}
+                  exit={{ opacity: 0, height: 0 }}
+                  className="px-2 mb-4"
+                >
+                  <div className="bg-red-500/10 border border-red-500/30 p-4 rounded-2xl flex items-center gap-4 shadow-lg shadow-red-500/5">
+                    <div className="p-2 bg-red-500/20 rounded-xl">
+                      <Bell className="w-5 h-5 text-red-500 animate-bounce" />
+                    </div>
+                    <div className="flex-1">
+                      <p className="text-[10px] font-black text-red-500 uppercase tracking-widest mb-0.5">Critical Liquidity Alert</p>
+                      <p className="text-[11px] text-slate-300 font-bold">
+                        Portfolio liquidity has dropped to <span className="text-red-400">{liquidityValue}%</span>. 
+                        Threshold (15%) breached. Consider rebalancing.
+                      </p>
+                    </div>
+                    <button 
+                      onClick={() => setLiquidityValue(18.5)}
+                      className="p-2 hover:bg-red-500/20 rounded-lg transition-colors"
+                    >
+                      <RefreshCw className="w-4 h-4 text-red-500" />
+                    </button>
+                  </div>
+                </motion.div>
+              )}
+            </AnimatePresence>
 
             {/* 2. METRIK TOTAL ASSET & INCOME (Di Bawah Chart) */}
             <section className="grid grid-cols-2 gap-4">
@@ -202,6 +310,10 @@ export default function App() {
                     animate={{ opacity: 1, x: 0 }}
                     transition={{ delay: 0.1 * (index + 3) }}
                     whileTap={{ scale: 0.98 }}
+                    onClick={() => {
+                      setSelectedAssetId(asset.id);
+                      setActiveTab('asset-detail');
+                    }}
                     className="bg-slate-900/40 p-4 rounded-[2rem] flex justify-between items-center border border-slate-800/80 hover:bg-slate-800/50 hover:border-[#deff9a]/20 transition-all cursor-pointer group shadow-lg"
                   >
                     <div className="flex items-center gap-4">
@@ -297,9 +409,14 @@ export default function App() {
                           {insight.sentiment}
                         </span>
                       </div>
-                      <p className="text-xs text-slate-400 leading-relaxed min-h-[3em]">
-                        {insight.insight}
-                      </p>
+                      <div className="space-y-3">
+                        <p className="text-[11px] text-[#deff9a] leading-relaxed italic border-l-2 border-[#deff9a]/30 pl-3">
+                          {insight.insight_id}
+                        </p>
+                        <p className="text-[11px] text-slate-400 leading-relaxed font-medium">
+                          {insight.insight}
+                        </p>
+                      </div>
                     </motion.div>
                   ) : (
                     <div className="animate-pulse space-y-2">
@@ -321,11 +438,58 @@ export default function App() {
         return (
           <div className="space-y-6">
             <div className="flex justify-between items-center px-1">
-              <h3 className="text-sm font-semibold text-slate-300">Market Intelligence</h3>
+              <h3 className="text-sm font-black text-white uppercase tracking-widest flex items-center gap-2">
+                <div className="w-1.5 h-1.5 bg-[#deff9a] rounded-full animate-pulse" />
+                Market Discovery
+              </h3>
               <div className="flex items-center gap-2">
                 <span className="text-[10px] text-green-400 font-bold bg-green-900/20 px-2 py-0.5 rounded-full border border-green-800/30">IDX OPEN</span>
               </div>
             </div>
+
+            {/* IDX PREMIUM DISCOVERY CARD */}
+            <motion.div 
+              initial={{ opacity: 0, y: 15 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="relative overflow-hidden group"
+            >
+              <div className="absolute inset-0 bg-gradient-to-r from-[#deff9a]/10 to-blue-500/10 opacity-0 group-hover:opacity-100 transition-opacity duration-500 rounded-[2.5rem]" />
+              <div className="bg-slate-900/60 p-6 rounded-[2.5rem] border border-[#deff9a]/10 backdrop-blur-xl relative z-10 shadow-2xl">
+                <div className="flex justify-between items-start mb-4">
+                  <div>
+                    <div className="flex items-center gap-2 mb-1">
+                      <span className="text-[10px] px-2 py-0.5 rounded-full bg-[#deff9a] text-slate-950 font-black uppercase tracking-tighter">AI POWERED</span>
+                      <span className="text-[10px] px-2 py-0.5 rounded-full bg-slate-800 text-[#deff9a] font-black uppercase tracking-tighter">IDX REALTIME</span>
+                    </div>
+                    <h4 className="text-xl font-black text-white tracking-tight uppercase">Ventuream Smart Scanner</h4>
+                    <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest mt-1">Screener ID: 7lUlY4am (IDX Focus)</p>
+                  </div>
+                  <div className="p-3 bg-slate-950/80 rounded-2xl border border-white/5">
+                    <Target className="w-5 h-5 text-[#deff9a]" />
+                  </div>
+                </div>
+                <p className="text-xs text-slate-400 mb-6 leading-relaxed font-medium">
+                  Scan 800+ IDX tickers for breakout patterns and relative strength using core Ventuream intelligence. Precision targeting for the Indonesian market.
+                </p>
+                <button 
+                  onClick={updateStocks}
+                  disabled={isScanning}
+                  className="w-full py-4 bg-[#deff9a] text-slate-950 font-black text-[11px] uppercase tracking-[0.2em] rounded-2xl shadow-[0_0_30px_rgba(222,255,154,0.15)] hover:scale-[1.01] active:scale-[0.98] transition-all disabled:opacity-50 flex items-center justify-center gap-3"
+                >
+                  {isScanning ? (
+                    <>
+                      <RefreshCw className="w-4 h-4 animate-spin text-slate-900" />
+                      Initializing IDX Scan...
+                    </>
+                  ) : (
+                    <>
+                      <Activity className="w-4 h-4" />
+                      Execute Smart IDX Scan
+                    </>
+                  )}
+                </button>
+              </div>
+            </motion.div>
             
             <motion.div
               initial={{ opacity: 0, scale: 0.95 }}
@@ -614,6 +778,13 @@ export default function App() {
                     initial={{ opacity: 0, y: 10 }}
                     animate={{ opacity: 1, y: 0 }}
                     transition={{ delay: idx * 0.05 }}
+                    onClick={() => {
+                      const foundAsset = ASSETS.find(a => a.symbol === asset.symbol);
+                      if (foundAsset) {
+                        setSelectedAssetId(foundAsset.id);
+                        setActiveTab('asset-detail');
+                      }
+                    }}
                     className="bg-slate-900/40 p-4 rounded-2xl border border-slate-800/50 flex justify-between items-center group cursor-pointer hover:bg-slate-800/30 transition-colors"
                   >
                     <div className="flex items-center gap-3">
@@ -699,19 +870,128 @@ export default function App() {
             </div>
           </div>
         );
+      case 'gateway':
+      case 'compliance':
+      case 'liquidity':
+      case 'financials':
+        return (
+          <div className="space-y-4">
+            <div className="flex items-center gap-2 mb-2">
+              <button onClick={() => setActiveTab('home')} className="p-1.5 bg-slate-900 rounded-lg border border-slate-800 text-[#deff9a]">
+                <ArrowLeft className="w-4 h-4" />
+              </button>
+              <h3 className="text-sm font-semibold text-slate-300 uppercase tracking-widest">
+                {SIDEBAR_MENU.find(m => m.path === activeTab)?.label || 'Institutional Tool'}
+              </h3>
+            </div>
+            <div className="bg-slate-900/50 p-8 rounded-[2.5rem] border border-slate-800 flex flex-col items-center text-center">
+              <div className="p-4 bg-slate-800/50 rounded-full border border-slate-700 mb-4">
+                {(() => {
+                  const Icon = SIDEBAR_MENU.find(m => m.path === activeTab)?.icon || Info;
+                  return <Icon className="w-8 h-8 text-[#deff9a]" />;
+                })()}
+              </div>
+              <p className="text-sm font-bold text-slate-200">Institutional Access Restricted</p>
+              <p className="text-[10px] text-slate-500 mt-2 leading-relaxed uppercase tracking-widest">
+                This module requires Level 3 clearance. Contact VentureAM Institutional Support for activation.
+              </p>
+              <button 
+                onClick={() => setActiveTab('home')}
+                className="mt-8 px-6 py-3 bg-[#deff9a] text-slate-950 text-[10px] font-black uppercase tracking-widest rounded-xl shadow-lg shadow-[#deff9a]/10"
+              >
+                Return to Dashboard
+              </button>
+            </div>
+          </div>
+        );
       default:
         return null;
     }
   };
 
   return (
-    <div className="min-h-screen pb-24 max-w-md mx-auto relative bg-[#020617]">
+    <div className="min-h-screen pb-24 max-w-md mx-auto relative bg-[#020617] overflow-hidden">
+      {/* SIDEBAR OVERLAY */}
+      <AnimatePresence>
+        {isSidebarOpen && (
+          <>
+            <motion.div 
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setIsSidebarOpen(false)}
+              className="fixed inset-0 bg-[#020617]/80 backdrop-blur-sm z-40 max-w-md mx-auto"
+            />
+            <motion.aside
+              initial={{ x: '-100%' }}
+              animate={{ x: 0 }}
+              exit={{ x: '-100%' }}
+              transition={{ type: 'spring', damping: 25, stiffness: 200 }}
+              className="fixed inset-y-0 left-0 w-4/5 max-w-[320px] bg-[#020617] border-r border-slate-800 z-50 p-6 flex flex-col"
+            >
+              <div className="flex justify-between items-center mb-8">
+                <div>
+                  <h2 className="text-lg font-black text-[#deff9a] tracking-tighter">VentureAM</h2>
+                  <p className="text-[8px] text-slate-500 font-black uppercase tracking-[0.2em]">Institutional System</p>
+                </div>
+                <button onClick={() => setIsSidebarOpen(false)} className="p-2 bg-slate-900 rounded-xl border border-slate-800 text-slate-400">
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              <nav className="flex-1 space-y-2">
+                {SIDEBAR_MENU.map((item) => (
+                  <button
+                    key={item.id}
+                    onClick={() => {
+                      if (item.external) {
+                        window.open(item.path, '_blank');
+                      } else {
+                        setActiveTab(item.path);
+                        setIsSidebarOpen(false);
+                      }
+                    }}
+                    className={`w-full flex items-center gap-4 p-4 rounded-2xl transition-all border ${
+                      activeTab === item.path 
+                      ? 'bg-[#deff9a]/10 border-[#deff9a]/20 text-[#deff9a]' 
+                      : 'bg-slate-900/40 border-slate-800 hover:bg-slate-800/60 text-slate-400'
+                    }`}
+                  >
+                    <item.icon className="w-5 h-5" style={{ color: item.color }} />
+                    <div className="text-left">
+                      <p className="text-xs font-black uppercase tracking-tight">{item.label}</p>
+                      {item.provider && <p className="text-[8px] text-slate-500 font-bold uppercase">{item.provider}</p>}
+                    </div>
+                  </button>
+                ))}
+              </nav>
+
+              <div className="mt-auto pt-6 border-t border-slate-800/50">
+                <div className="bg-slate-900/40 p-4 rounded-2xl border border-slate-800">
+                  <p className="text-[10px] text-slate-500 font-bold uppercase tracking-widest mb-2">User Credentials</p>
+                  <p className="text-[11px] text-slate-200 font-black tracking-tight">{process.env.USER_EMAIL || 'Institutional User'}</p>
+                  <p className="text-[9px] text-[#deff9a] font-mono mt-0.5">AUTH TIER 3: VERIFIED</p>
+                </div>
+              </div>
+            </motion.aside>
+          </>
+        )}
+      </AnimatePresence>
+
       {/* Header */}
       <header className="p-6 border-b border-slate-800 flex justify-between items-center sticky top-0 bg-[#020617]/80 backdrop-blur-xl z-20">
-        <div>
-          <h1 className="text-[10px] text-slate-500 uppercase tracking-[0.2em] font-medium">PT Venture Asset Management</h1>
-          <div className="flex items-center gap-2">
-            <h2 className="text-2xl font-bold text-[#deff9a]">Ventuream Core</h2>
+        <div className="flex items-center gap-4">
+          <button 
+            onClick={() => setIsSidebarOpen(true)}
+            className="p-2.5 bg-slate-900 text-[#deff9a] rounded-xl border border-slate-800 shadow-lg shadow-[#deff9a]/5 active:scale-95 transition-transform"
+          >
+            <Menu className="w-5 h-5" />
+          </button>
+          <div>
+            <h1 className="text-[10px] text-slate-500 uppercase tracking-[0.2em] font-medium">PT Venture Asset Management</h1>
+            <div className="flex items-center gap-2">
+              <h2 className="text-2xl font-bold text-[#deff9a]">Ventuream Core</h2>
+            </div>
           </div>
         </div>
         <div className="flex flex-col items-end gap-1">

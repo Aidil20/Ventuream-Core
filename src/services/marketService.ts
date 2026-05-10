@@ -9,6 +9,7 @@ const ai = new GoogleGenAI({ apiKey: apiKey || "" });
 export interface MarketInsight {
   headline: string;
   insight: string;
+  insight_id: string; // Indonesian version
   timestamp: string;
   sentiment: 'bullish' | 'bearish' | 'neutral';
 }
@@ -70,6 +71,7 @@ export async function fetchLatestInsights(): Promise<MarketInsight> {
     return {
       headline: "Market Intelligence Active",
       insight: "Synchronizing with core VentureAM intelligence feeds. Real-time metrics are being prioritized for verified institutional gateways.",
+      insight_id: "Intelijen Pasar Aktif. Sinkronisasi dengan umpan intelijen inti VentureAM sedang berlangsung.",
       sentiment: "neutral",
       timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
     };
@@ -77,8 +79,8 @@ export async function fetchLatestInsights(): Promise<MarketInsight> {
   
   try {
     const response = await ai.models.generateContent({
-      model: "gemini-flash-latest",
-      contents: "Generate a single professional, concise market insight for an Indonesian asset management dashboard. The insight should focus on one of these assets: Sukuk Maki Tech (Bonds), ADRO coal (Energy), or GOTO (Tech). Return it in JSON format.",
+      model: "gemini-1.5-flash",
+      contents: "Generate a professional, concise market insight for an Indonesian asset management dashboard. Provide the results in BOTH English and Indonesian. The insight should focus on one of these assets: Sukuk Maki Tech (Bonds), ADRO coal (Energy), or GOTO (Tech). Return it in JSON format.",
       config: {
         responseMimeType: "application/json",
         responseSchema: {
@@ -86,11 +88,15 @@ export async function fetchLatestInsights(): Promise<MarketInsight> {
           properties: {
             headline: {
               type: Type.STRING,
-              description: "A short, punchy headline (e.g., 'ADRO Dividend Update' or 'Sukuk Tech Stability').",
+              description: "A short, punchy headline in English.",
             },
             insight: {
               type: Type.STRING,
-              description: "A professional one-sentence analysis or news snippet.",
+              description: "A professional one-sentence analysis in English.",
+            },
+            insight_id: {
+              type: Type.STRING,
+              description: "The same professional one-sentence analysis translated into Indonesian.",
             },
             sentiment: {
               type: Type.STRING,
@@ -98,7 +104,7 @@ export async function fetchLatestInsights(): Promise<MarketInsight> {
               description: "The market sentiment of this insight.",
             },
           },
-          required: ["headline", "insight", "sentiment"],
+          required: ["headline", "insight", "insight_id", "sentiment"],
         },
       },
     });
@@ -133,6 +139,7 @@ export async function fetchLatestInsights(): Promise<MarketInsight> {
     return {
       headline: "Market Intelligence Active",
       insight: "Synchronizing with core VentureAM intelligence feeds. Real-time metrics are being prioritized for verified institutional gateways.",
+      insight_id: "Intelijen Pasar Aktif. Sinkronisasi dengan umpan intelijen inti VentureAM sedang berlangsung.",
       sentiment: "neutral",
       timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
     };
@@ -174,7 +181,7 @@ export async function fetchStockRecommendations(options?: ScanOptions): Promise<
     const prompt = `Generate 4 realistic asset recommendations for the Indonesian market${assetTypePrompt}${sectorPrompt}${riskPrompt}${signalPrompt}${sortPrompt}. Include Symbol, Full Name, typical price in IDR (string with commas), 24h change % (string with + or -), and a signal (BUY/SELL/HOLD). Return as a JSON array of objects.`;
 
     const response = await ai.models.generateContent({
-      model: "gemini-flash-latest",
+      model: "gemini-1.5-flash",
       contents: prompt,
       config: {
         responseMimeType: "application/json",
