@@ -1,6 +1,10 @@
 import { GoogleGenAI, Type } from "@google/genai";
 
-const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
+const apiKey = process.env.GEMINI_API_KEY;
+if (!apiKey || apiKey === "MY_GEMINI_API_KEY") {
+  console.warn("[VentureAM AI] Gemini API Key is missing or using placeholder. AI features will use fallbacks.");
+}
+const ai = new GoogleGenAI({ apiKey: apiKey || "" });
 
 export interface MarketInsight {
   headline: string;
@@ -73,7 +77,7 @@ export async function fetchLatestInsights(): Promise<MarketInsight> {
   
   try {
     const response = await ai.models.generateContent({
-      model: "gemini-3-flash-preview",
+      model: "gemini-flash-latest",
       contents: "Generate a single professional, concise market insight for an Indonesian asset management dashboard. The insight should focus on one of these assets: Sukuk Maki Tech (Bonds), ADRO coal (Energy), or GOTO (Tech). Return it in JSON format.",
       config: {
         responseMimeType: "application/json",
@@ -170,7 +174,7 @@ export async function fetchStockRecommendations(options?: ScanOptions): Promise<
     const prompt = `Generate 4 realistic asset recommendations for the Indonesian market${assetTypePrompt}${sectorPrompt}${riskPrompt}${signalPrompt}${sortPrompt}. Include Symbol, Full Name, typical price in IDR (string with commas), 24h change % (string with + or -), and a signal (BUY/SELL/HOLD). Return as a JSON array of objects.`;
 
     const response = await ai.models.generateContent({
-      model: "gemini-3-flash-preview",
+      model: "gemini-flash-latest",
       contents: prompt,
       config: {
         responseMimeType: "application/json",
