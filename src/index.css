@@ -1,0 +1,18 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+@import "tailwindcss";
+
+@theme {
+  --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
+  --color-brand: #deff9a;
+  --color-brand-alt: #4ade80;
+}
+
+@layer base {
+  body {
+    @apply bg-slate-950 text-slate-200 antialiased font-sans;
+  }
+}
+
+.gold-gradient {
+  background: linear-gradient(135deg, var(--color-brand) 0%, var(--color-brand-alt) 100%);
+}
