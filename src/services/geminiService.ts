@@ -1,6 +1,7 @@
 import { GoogleGenAI, Type } from "@google/genai";
 
-const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
+const apiKey = typeof process !== 'undefined' ? process.env.GEMINI_API_KEY : '';
+const ai = new GoogleGenAI({ apiKey: apiKey || '' });
 
 const NEWS_CACHE_KEY = 'vnt_market_news_cache';
 const SUPPRESS_API_KEY = 'vnt_gemini_suppress_until';

@@ -63,7 +63,7 @@ export default function PortfolioChart() {
       animate={{ opacity: 1, y: 0 }}
       className="bg-slate-900/60 p-6 rounded-[2.5rem] border border-slate-800/80 backdrop-blur-xl shadow-2xl overflow-hidden relative group"
     >
-      <div className="absolute top-0 right-0 -mr-20 -mt-20 w-64 h-64 bg-[#deff9a]/5 blur-[100px] rounded-full group-hover:bg-[#deff9a]/10 transition-all duration-700" />
+      <div className="absolute top-0 right-0 -mr-20 -mt-20 w-64 h-64 bg-[#DFFF00]/5 blur-[100px] rounded-full group-hover:bg-[#DFFF00]/10 transition-all duration-700" />
       
       <div className="flex justify-center mb-8 relative z-10">
         <div className="flex bg-slate-950/50 p-1 rounded-2xl border border-slate-800/50 shadow-inner">
@@ -73,7 +73,7 @@ export default function PortfolioChart() {
               onClick={() => setRange(r)}
               className={`px-4 py-2 rounded-xl text-[10px] font-black transition-all duration-300 ${
                 range === r 
-                  ? 'bg-slate-800 text-[#deff9a] shadow-[0_0_15px_rgba(222,255,154,0.15)] ring-1 ring-slate-700/50' 
+                  ? 'bg-slate-800 text-[#DFFF00] shadow-[0_0_15px_rgba(223,255,0,0.15)] ring-1 ring-slate-700/50' 
                   : 'text-slate-500 hover:text-slate-300'
               }`}
             >
@@ -89,8 +89,8 @@ export default function PortfolioChart() {
             <AreaChart data={data} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
               <defs>
                 <linearGradient id="colorValue" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="5%" stopColor="#deff9a" stopOpacity={0.6}/>
-                  <stop offset="95%" stopColor="#deff9a" stopOpacity={0}/>
+                  <stop offset="5%" stopColor="#DFFF00" stopOpacity={0.6}/>
+                  <stop offset="95%" stopColor="#DFFF00" stopOpacity={0}/>
                 </linearGradient>
               </defs>
               <CartesianGrid 
@@ -116,13 +116,13 @@ export default function PortfolioChart() {
                 dx={-5}
               />
               <Tooltip 
-                cursor={{ stroke: '#deff9a', strokeWidth: 1, strokeDasharray: '4 4' }}
+                cursor={{ stroke: '#DFFF00', strokeWidth: 1, strokeDasharray: '4 4' }}
                 content={({ active, payload }) => {
                   if (active && payload && payload.length) {
                     return (
-                      <div className="bg-[#020617]/90 border border-[#deff9a]/30 p-3 rounded-2xl shadow-2xl backdrop-blur-xl ring-1 ring-white/5">
+                      <div className="bg-black/90 border border-[#DFFF00]/30 p-3 rounded-2xl shadow-2xl backdrop-blur-xl ring-1 ring-white/5">
                         <p className="text-[9px] font-black text-slate-500 uppercase tracking-widest mb-1">{payload[0].payload.time}</p>
-                        <p className="text-sm font-black text-[#deff9a] font-mono">
+                        <p className="text-sm font-black text-[#DFFF00] font-mono">
                           {formatValue(payload[0].value as number)}
                         </p>
                       </div>
@@ -134,13 +134,13 @@ export default function PortfolioChart() {
               <Area 
                 type="monotone" 
                 dataKey="value" 
-                stroke="#deff9a" 
+                stroke="#DFFF00" 
                 strokeWidth={4}
                 fillOpacity={1} 
                 fill="url(#colorValue)" 
                 animationDuration={1500}
-                dot={{ fill: '#deff9a', stroke: '#020617', strokeWidth: 3, r: 5 }}
-                activeDot={{ r: 8, fill: '#deff9a', stroke: '#fff', strokeWidth: 3 }}
+                dot={{ fill: '#DFFF00', stroke: '#000', strokeWidth: 3, r: 5 }}
+                activeDot={{ r: 8, fill: '#DFFF00', stroke: '#fff', strokeWidth: 3 }}
               />
             </AreaChart>
           </ResponsiveContainer>

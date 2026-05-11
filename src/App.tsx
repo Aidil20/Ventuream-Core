@@ -1254,12 +1254,12 @@ export default function App() {
   };
 
   return (
-    <div className="min-h-screen bg-[#020617] text-slate-200 font-sans select-none overflow-x-hidden">
+    <div className="min-h-screen bg-black text-slate-200 font-sans select-none overflow-x-hidden">
       <div className="flex flex-col lg:flex-row max-w-[1440px] mx-auto min-h-screen">
         {/* Desktop Sidebar */}
-        <aside className="hidden lg:flex sidebar-nav flex-col bg-[#020617] border-r border-slate-800 p-6 sticky top-0 h-screen">
+        <aside className="hidden lg:flex sidebar-nav flex-col bg-black border-r border-slate-800 p-6 sticky top-0 h-screen">
           <div className="mb-8">
-            <h2 className="text-3xl font-black text-[#deff9a] tracking-tight">VentureAM</h2>
+            <h2 className="text-3xl font-black text-[#DFFF00] tracking-tight">VentureAM</h2>
             <p className="text-[10px] text-slate-500 font-black uppercase tracking-[0.3em] mt-1">Institutional System</p>
           </div>
 
@@ -1292,9 +1292,9 @@ export default function App() {
           <div className="mt-auto pt-6 border-t border-slate-800/50">
             <div className="bg-slate-900/40 p-4 rounded-2xl border border-slate-800">
               <p className="text-[10px] text-slate-500 font-bold uppercase tracking-widest mb-2">Institutional Identification</p>
-              <p className="text-[11px] text-slate-200 font-black tracking-tight">{process.env.USER_EMAIL || 'Institutional User'}</p>
+              <p className="text-[11px] text-slate-200 font-black tracking-tight">{(typeof process !== 'undefined' && process.env.USER_EMAIL) || 'Institutional User'}</p>
               <div className="flex items-center justify-between mt-2">
-                <p className="text-[9px] text-[#deff9a] font-mono">ROLE: {userRole.replace('_', ' ')}</p>
+                <p className="text-[9px] text-[#DFFF00] font-mono">ROLE: {userRole.replace('_', ' ')}</p>
                 <div className="flex items-center gap-1.5 px-2 py-0.5 bg-green-500/10 border border-green-500/20 rounded-lg">
                   <p className="text-[8px] text-green-500 font-black uppercase">Verified</p>
                 </div>
@@ -1305,34 +1305,22 @@ export default function App() {
 
         <div className="flex-1 flex flex-col min-h-screen">
           {/* Header */}
-          <header className="px-6 py-6 lg:px-10 lg:py-8 border-b border-slate-800 flex justify-between items-center sticky top-0 bg-[#020617]/90 backdrop-blur-xl z-20">
+          <header className="px-6 py-4 lg:px-10 lg:py-6 border-b border-zinc-800 flex justify-between items-center sticky top-0 bg-black/90 backdrop-blur-xl z-20">
             <div className="flex items-center gap-4">
               <button 
                 onClick={() => setIsSidebarOpen(true)}
-                className="lg:hidden p-2.5 bg-slate-900 text-[#deff9a] rounded-xl border border-slate-800 shadow-lg active:scale-95 transition-transform"
+                className="lg:hidden p-2.5 bg-slate-900 text-[#DFFF00] rounded-xl border border-slate-800 shadow-lg active:scale-95 transition-transform"
               >
                 <Menu className="w-5 h-5" />
               </button>
               <div className="flex flex-col">
-                <h1 className="text-2xl lg:text-3xl font-black text-[#deff9a] tracking-tight leading-none">VentureAM</h1>
-                <p className="text-[10px] lg:text-sm text-white/80 uppercase tracking-[0.2em] font-bold mt-1">Institutional System</p>
+                <h1 className="text-xl lg:text-2xl font-bold text-[#DFFF00] leading-none">VentureAM</h1>
+                <p className="text-xs text-zinc-400 mt-1 uppercase tracking-wider font-medium">Institutional System</p>
               </div>
             </div>
-            <div className="flex flex-col items-end gap-1">
-              <div className="flex items-center gap-2 px-2 py-1 bg-slate-900/50 rounded-lg border border-slate-800">
-                <div className="h-1.5 w-1.5 bg-[#deff9a] rounded-full animate-pulse shadow-[0_0_8px_rgba(222,255,154,0.5)]"></div>
-                <span className="text-[8px] lg:text-[9px] font-mono text-slate-400 tracking-tighter uppercase whitespace-nowrap">VentureAM International Gateway</span>
-              </div>
-              <div className="flex flex-col items-end gap-0.5">
-                <div className="flex items-center gap-1.5">
-                  <span className="text-[7px] lg:text-[8px] text-green-500 font-bold uppercase tracking-tighter">CGS International Securities</span>
-                  <div className="h-1 w-1 bg-green-500 rounded-full shadow-[0_0_4px_rgba(34,197,94,0.5)]"></div>
-                </div>
-                <div className="flex items-center gap-1.5">
-                  <span className="text-[7px] lg:text-[8px] text-green-500 font-bold uppercase tracking-tighter">IBKR Global Status: Connected</span>
-                  <div className="h-1 w-1 bg-green-500 rounded-full shadow-[0_0_4px_rgba(34,197,94,0.5)]"></div>
-                </div>
-              </div>
+            <div className="text-right text-[10px] text-zinc-500 uppercase tracking-widest font-black">
+              INTERNATIONAL GATEWAY<br/>
+              <span className="text-white font-bold">NOT CONNECTED</span>
             </div>
           </header>
 
@@ -1389,14 +1377,14 @@ export default function App() {
                 animate={{ opacity: 1 }}
                 exit={{ opacity: 0 }}
                 onClick={() => setIsSidebarOpen(false)}
-                className="fixed inset-0 bg-[#020617]/80 backdrop-blur-sm z-[60] lg:hidden"
+                className="fixed inset-0 bg-black/80 backdrop-blur-sm z-[60] lg:hidden"
               />
               <motion.aside
                 initial={{ x: '-100%' }}
                 animate={{ x: 0 }}
                 exit={{ x: '-100%' }}
                 transition={{ type: 'spring', damping: 25, stiffness: 200 }}
-                className="fixed inset-y-0 left-0 w-4/5 max-w-[320px] bg-[#020617] border-r border-slate-800 z-[70] p-6 flex flex-col lg:hidden"
+                className="fixed inset-y-0 left-0 w-4/5 max-w-[320px] bg-black border-r border-slate-800 z-[70] p-6 flex flex-col lg:hidden"
               >
                 <div className="flex justify-between items-center mb-8">
                   <div>
@@ -1447,7 +1435,7 @@ function NavButton({ icon, label, active, onClick }: { icon: React.ReactNode, la
   return (
     <button 
       onClick={onClick}
-      className={`flex flex-col items-center gap-1 transition-all duration-300 relative ${active ? 'text-[#deff9a]' : 'text-slate-500 hover:text-slate-400'}`}
+      className={`flex flex-col items-center gap-1 transition-all duration-300 relative ${active ? 'text-[#DFFF00]' : 'text-slate-500 hover:text-slate-400'}`}
     >
       <motion.div
         animate={{ scale: active ? 1.1 : 1 }}
@@ -1459,7 +1447,7 @@ function NavButton({ icon, label, active, onClick }: { icon: React.ReactNode, la
       {active && (
         <motion.div 
           layoutId="activeTab"
-          className="absolute -top-1 w-8 h-0.5 bg-[#deff9a] rounded-full blur-[1px]" 
+          className="absolute -top-1 w-8 h-0.5 bg-[#DFFF00] rounded-full blur-[1px]" 
         />
       )}
     </button>

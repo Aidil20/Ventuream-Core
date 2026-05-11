@@ -1,6 +1,6 @@
 import { GoogleGenAI, Type } from "@google/genai";
 
-const apiKey = process.env.GEMINI_API_KEY;
+const apiKey = typeof process !== 'undefined' ? process.env.GEMINI_API_KEY : undefined;
 if (!apiKey || apiKey === "MY_GEMINI_API_KEY") {
   console.warn("[VentureAM AI] Gemini API Key is missing or using placeholder. AI features will use fallbacks.");
 }
