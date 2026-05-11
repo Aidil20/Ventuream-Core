@@ -1,6 +1,6 @@
 {
-  "short_name": "Venture-Ai",
-  "name": "Venture-Ai Asset Management",
+  "short_name": "VentureAM",
+  "name": "VentureAM Institutional System",
   "icons": [
     {
       "src": "/favicon.ico",
@@ -11,5 +11,13 @@
   "start_url": ".",
   "display": "standalone",
   "theme_color": "#020617",
-  "background_color": "#020617"
+  "background_color": "#020617",
+  "orientation": "any",
+  "shortcuts": [
+    {
+      "name": "Market Scanner",
+      "url": "/market",
+      "icons": [{ "src": "/icon-scanner.png", "sizes": "192x192" }]
+    }
+  ]
 }

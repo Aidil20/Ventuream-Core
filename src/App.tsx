@@ -33,6 +33,7 @@ import {
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { fetchLatestInsights, MarketInsight, fetchStockRecommendations, StockRecommendation, ScanOptions } from './services/marketService';
+import { fetchMarketNewsSummary, MarketNewsItem } from './services/geminiService';
 import TradingViewWidget from './components/TradingViewWidget';
 import PortfolioChart from './components/PortfolioChart';
 import { useTransactionManager } from './hooks/useTransactionManager';
@@ -40,6 +41,8 @@ import { TransactionTable } from './components/TransactionTable';
 import { Settings2, Filter, Target, ArrowLeft, Info } from 'lucide-react';
 import { Sparkline } from './components/Sparkline';
 import { AssetDetail } from './components/AssetDetail';
+import VamSmartScanner from './components/VamSmartScanner';
+import GlobalIndicesFeed from './components/GlobalIndicesFeed';
 
 const ASSETS = [
   {
@@ -136,20 +139,26 @@ const SIDEBAR_MENU = [
     label: "Smart Scanner IDX", 
     provider: "By Ventuream AM", 
     icon: Radar, 
-    path: "https://www.tradingview.com/screener/7lUlY4am/",
-    external: true,
+    path: "scanner",
     color: "#FFD700"
   },
 ];
 
 export default function App() {
   const [activeTab, setActiveTab] = useState('home');
+  const [securityView, setSecurityView] = useState<'main' | 'history' | 'devices'>('main');
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+  const [showVamScanner, setShowVamScanner] = useState(false);
+  const [userRole, setUserRole] = useState('President_Director'); // Added role state
   const [selectedAssetId, setSelectedAssetId] = useState<string | null>(null);
   const [insight, setInsight] = useState<MarketInsight | null>(null);
   const [stocks, setStocks] = useState<StockRecommendation[]>([]);
   const [isFetching, setIsFetching] = useState(false);
   const [isScanning, setIsScanning] = useState(false);
+  const [isMarketSyncing, setIsMarketSyncing] = useState(false);
+  const [marketNews, setMarketNews] = useState<MarketNewsItem[]>([]);
+  const [isFetchingNews, setIsFetchingNews] = useState(false);
+  const [lastMarketSync, setLastMarketSync] = useState(new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }));
   const [liquidityValue, setLiquidityValue] = useState(12.4); // Simulated low liquidity for alert demo
   const [showScanParams, setShowScanParams] = useState(false);
   const [scanOptions, setScanOptions] = useState<ScanOptions>({
@@ -169,6 +178,14 @@ export default function App() {
     setIsFetching(false);
   }, [isFetching]);
 
+  const updateMarketNews = useCallback(async (force = false) => {
+    if (isFetchingNews) return;
+    setIsFetchingNews(true);
+    const news = await fetchMarketNewsSummary(force);
+    setMarketNews(news);
+    setIsFetchingNews(false);
+  }, [isFetchingNews]);
+
   const updateStocks = useCallback(async () => {
     if (isScanning) return;
     setIsScanning(true);
@@ -177,11 +194,40 @@ export default function App() {
     setIsScanning(false);
   }, [isScanning, scanOptions]);
 
+  const syncMarketConnectivity = useCallback(async () => {
+    if (isMarketSyncing) return;
+    setIsMarketSyncing(true);
+    
+    // Simulate a multi-step institutional sync
+    await new Promise(resolve => setTimeout(resolve, 800));
+    await updateInsights();
+    await new Promise(resolve => setTimeout(resolve, 800));
+    await updateMarketNews(true); // Force clear cache on explicit sync
+    await new Promise(resolve => setTimeout(resolve, 800));
+    await updateStocks();
+    
+    setLastMarketSync(new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }));
+    setIsMarketSyncing(false);
+  }, [isMarketSyncing, updateInsights, updateStocks, updateMarketNews]);
+
   useEffect(() => {
     updateInsights();
     updateStocks();
-    const interval = setInterval(updateInsights, 600000); // Poll insights every 10 minutes
+    updateMarketNews();
+    const interval = setInterval(() => {
+      updateInsights();
+      updateMarketNews();
+    }, 1200000); // Poll every 20 minutes to save quota
     return () => clearInterval(interval);
+  }, [updateInsights, updateStocks, updateMarketNews]);
+
+  // Security Strategy: Context Menu Protection
+  useEffect(() => {
+    const handleContextMenu = (e: MouseEvent) => {
+      e.preventDefault();
+    };
+    document.addEventListener('contextmenu', handleContextMenu);
+    return () => document.removeEventListener('contextmenu', handleContextMenu);
   }, []);
 
   const renderContent = () => {
@@ -432,6 +478,67 @@ export default function App() {
                 </button>
               </div>
             </motion.section>
+            
+            {/* AI Market News Summary */}
+            <motion.section
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              transition={{ delay: 0.9 }}
+              className="mt-6"
+            >
+              <div className="flex justify-between items-center mb-4 px-2">
+                <div className="flex items-center gap-2">
+                  <Globe className="w-4 h-4 text-[#deff9a]" />
+                  <h3 className="text-xs font-black text-slate-400 uppercase tracking-[0.3em]">Institutional News</h3>
+                </div>
+                <button 
+                  onClick={() => updateMarketNews(true)}
+                  disabled={isFetchingNews}
+                  className="p-2 bg-slate-900/50 rounded-xl border border-slate-800 disabled:opacity-50"
+                >
+                  <RefreshCw className={`w-3 h-3 text-slate-500 ${isFetchingNews ? 'animate-spin' : ''}`} />
+                </button>
+              </div>
+
+              <div className="space-y-4 max-h-[400px] overflow-y-auto pr-1 scrollbar-hide">
+                {isFetchingNews && marketNews.length === 0 ? (
+                  Array(3).fill(0).map((_, i) => (
+                    <div key={i} className="bg-slate-900/40 p-4 rounded-3xl border border-slate-800 animate-pulse">
+                      <div className="h-3 bg-slate-800 rounded w-1/4 mb-2"></div>
+                      <div className="h-4 bg-slate-800 rounded w-3/4 mb-3"></div>
+                      <div className="h-3 bg-slate-800 rounded w-full"></div>
+                    </div>
+                  ))
+                ) : (
+                  marketNews.map((news, idx) => (
+                    <motion.div
+                      key={idx}
+                      initial={{ opacity: 0, x: 20 }}
+                      animate={{ opacity: 1, x: 0 }}
+                      transition={{ delay: 0.1 * idx }}
+                      className="bg-slate-900/40 p-4 rounded-3xl border border-slate-800/50 hover:border-[#deff9a]/20 transition-all group"
+                    >
+                      <div className="flex justify-between items-start mb-2">
+                        <div className="flex items-center gap-2">
+                          <span className="text-[8px] font-black text-[#deff9a] uppercase tracking-widest">{news.source}</span>
+                          <span className="w-1 h-3 bg-slate-800 rounded-full" />
+                          <span className="text-[8px] text-slate-500 font-mono">{news.timestamp}</span>
+                        </div>
+                        <span className={`text-[7px] px-1.5 py-0.5 rounded font-black uppercase ${
+                          news.sentiment === 'bullish' ? 'bg-green-500/10 text-green-400' :
+                          news.sentiment === 'bearish' ? 'bg-red-500/10 text-red-500' :
+                          'bg-slate-800 text-slate-400'
+                        }`}>
+                          {news.sentiment}
+                        </span>
+                      </div>
+                      <h4 className="text-xs font-black text-slate-200 mb-2 leading-tight uppercase tracking-tight group-hover:text-white transition-colors">{news.headline}</h4>
+                      <p className="text-[10px] text-slate-400 leading-relaxed line-clamp-3 font-medium">{news.summary}</p>
+                    </motion.div>
+                  ))
+                )}
+              </div>
+            </motion.section>
           </>
         );
       case 'market':
@@ -447,50 +554,8 @@ export default function App() {
               </div>
             </div>
 
-            {/* IDX PREMIUM DISCOVERY CARD */}
-            <motion.div 
-              initial={{ opacity: 0, y: 15 }}
-              animate={{ opacity: 1, y: 0 }}
-              className="relative overflow-hidden group"
-            >
-              <div className="absolute inset-0 bg-gradient-to-r from-[#deff9a]/10 to-blue-500/10 opacity-0 group-hover:opacity-100 transition-opacity duration-500 rounded-[2.5rem]" />
-              <div className="bg-slate-900/60 p-6 rounded-[2.5rem] border border-[#deff9a]/10 backdrop-blur-xl relative z-10 shadow-2xl">
-                <div className="flex justify-between items-start mb-4">
-                  <div>
-                    <div className="flex items-center gap-2 mb-1">
-                      <span className="text-[10px] px-2 py-0.5 rounded-full bg-[#deff9a] text-slate-950 font-black uppercase tracking-tighter">AI POWERED</span>
-                      <span className="text-[10px] px-2 py-0.5 rounded-full bg-slate-800 text-[#deff9a] font-black uppercase tracking-tighter">IDX REALTIME</span>
-                    </div>
-                    <h4 className="text-xl font-black text-white tracking-tight uppercase">Ventuream Smart Scanner</h4>
-                    <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest mt-1">Screener ID: 7lUlY4am (IDX Focus)</p>
-                  </div>
-                  <div className="p-3 bg-slate-950/80 rounded-2xl border border-white/5">
-                    <Target className="w-5 h-5 text-[#deff9a]" />
-                  </div>
-                </div>
-                <p className="text-xs text-slate-400 mb-6 leading-relaxed font-medium">
-                  Scan 800+ IDX tickers for breakout patterns and relative strength using core Ventuream intelligence. Precision targeting for the Indonesian market.
-                </p>
-                <button 
-                  onClick={updateStocks}
-                  disabled={isScanning}
-                  className="w-full py-4 bg-[#deff9a] text-slate-950 font-black text-[11px] uppercase tracking-[0.2em] rounded-2xl shadow-[0_0_30px_rgba(222,255,154,0.15)] hover:scale-[1.01] active:scale-[0.98] transition-all disabled:opacity-50 flex items-center justify-center gap-3"
-                >
-                  {isScanning ? (
-                    <>
-                      <RefreshCw className="w-4 h-4 animate-spin text-slate-900" />
-                      Initializing IDX Scan...
-                    </>
-                  ) : (
-                    <>
-                      <Activity className="w-4 h-4" />
-                      Execute Smart IDX Scan
-                    </>
-                  )}
-                </button>
-              </div>
-            </motion.div>
-            
+            <GlobalIndicesFeed />
+
             <motion.div
               initial={{ opacity: 0, scale: 0.95 }}
               animate={{ opacity: 1, scale: 1 }}
@@ -661,7 +726,7 @@ export default function App() {
               </div>
             </div>
 
-            <div className="grid grid-cols-2 gap-3 pb-4">
+            <div className="grid grid-cols-2 gap-3 mb-6">
               {['COMPOSITE', 'USD/IDR', 'GOLD', 'FTSE'].map((index) => (
                 <div key={index} className="bg-slate-900/50 p-3 rounded-xl border border-slate-800/50 flex justify-between items-center">
                   <span className="text-[10px] font-bold text-slate-500 uppercase tracking-tighter">{index}</span>
@@ -674,6 +739,66 @@ export default function App() {
                 </div>
               ))}
             </div>
+
+            {/* IDX PREMIUM DISCOVERY CARD */}
+            <motion.div 
+              initial={{ opacity: 0, y: 15 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="relative overflow-hidden group mb-4"
+            >
+              <div className="absolute inset-0 bg-gradient-to-r from-[#deff9a]/10 to-blue-500/10 opacity-0 group-hover:opacity-100 transition-opacity duration-500 rounded-[2.5rem]" />
+              <div className="bg-slate-900/60 p-6 rounded-[2.5rem] border border-[#deff9a]/10 backdrop-blur-xl relative z-10 shadow-2xl">
+                <div className="flex justify-between items-start mb-4">
+                  <div>
+                    <div className="flex items-center gap-2 mb-1">
+                      <span className="text-[10px] px-2 py-0.5 rounded-full bg-[#deff9a] text-slate-950 font-black uppercase tracking-tighter">AI POWERED</span>
+                      <span className="text-[10px] px-2 py-0.5 rounded-full bg-slate-800 text-[#deff9a] font-black uppercase tracking-tighter">IDX REALTIME</span>
+                    </div>
+                    <h4 className="text-xl font-black text-white tracking-tight uppercase">Ventuream Smart Scanner</h4>
+                    <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest mt-1">Screener ID: 7lUlY4am (IDX Focus)</p>
+                  </div>
+                  <div className="p-3 bg-slate-950/80 rounded-2xl border border-white/5">
+                    <Target className="w-5 h-5 text-[#deff9a]" />
+                  </div>
+                </div>
+                <p className="text-xs text-slate-400 mb-6 leading-relaxed font-medium">
+                  Scan 800+ IDX tickers for breakout patterns and relative strength using core Ventuream intelligence. Precision targeting for the Indonesian market.
+                </p>
+                <button 
+                  onClick={() => {
+                    updateStocks();
+                    setShowVamScanner(!showVamScanner);
+                  }}
+                  disabled={isScanning}
+                  className="w-full py-4 bg-[#deff9a] text-slate-950 font-black text-[11px] uppercase tracking-[0.2em] rounded-2xl shadow-[0_0_30px_rgba(222,255,154,0.15)] hover:scale-[1.01] active:scale-[0.98] transition-all disabled:opacity-50 flex items-center justify-center gap-3"
+                >
+                  {isScanning ? (
+                    <>
+                      <RefreshCw className="w-4 h-4 animate-spin text-slate-900" />
+                      Initializing IDX Scan...
+                    </>
+                  ) : (
+                    <>
+                      <Activity className="w-4 h-4" />
+                      {showVamScanner ? 'Hide Smart Scanner' : 'Execute Smart IDX Scan'}
+                    </>
+                  )}
+                </button>
+                
+                <AnimatePresence>
+                  {showVamScanner && (
+                    <motion.div
+                      initial={{ opacity: 0, height: 0, marginTop: 0 }}
+                      animate={{ opacity: 1, height: 'auto', marginTop: 24 }}
+                      exit={{ opacity: 0, height: 0, marginTop: 0 }}
+                      className="overflow-hidden"
+                    >
+                      <VamSmartScanner />
+                    </motion.div>
+                  )}
+                </AnimatePresence>
+              </div>
+            </motion.div>
           </div>
         );
       case 'portfolio':
@@ -682,8 +807,12 @@ export default function App() {
             <div className="flex justify-between items-center px-1">
               <h3 className="text-sm font-semibold text-slate-300">Portfolio Hub</h3>
               <div className="flex items-center gap-2">
-                <button className="p-2 bg-slate-800 text-[#deff9a] rounded-xl hover:bg-slate-700 transition-colors">
-                  <RefreshCw className="w-4 h-4" />
+                <button 
+                  onClick={syncMarketConnectivity}
+                  disabled={isMarketSyncing}
+                  className="p-2 bg-slate-800 text-[#deff9a] rounded-xl hover:bg-slate-700 transition-colors disabled:opacity-50"
+                >
+                  <RefreshCw className={`w-4 h-4 ${isMarketSyncing ? 'animate-spin' : ''}`} />
                 </button>
                 <button className="p-2 bg-[#deff9a] text-slate-950 rounded-xl flex items-center gap-2 font-bold text-[10px] uppercase tracking-wider px-3">
                   <Plus className="w-3 h-3" />
@@ -730,18 +859,32 @@ export default function App() {
             </div>
 
             {/* Sync Status Card */}
-            <div className="bg-slate-900/50 p-4 rounded-2xl border border-slate-800 flex items-center justify-between">
+            <motion.div 
+              whileTap={{ scale: 0.98 }}
+              onClick={syncMarketConnectivity}
+              className={`bg-slate-900/50 p-4 rounded-2xl border border-slate-800 flex items-center justify-between cursor-pointer hover:bg-slate-800/40 transition-colors ${isMarketSyncing ? 'border-[#deff9a]/30' : ''}`}
+            >
               <div className="flex items-center gap-3">
-                <div className="p-2 bg-[#deff9a]/10 rounded-lg">
-                  <RefreshCw className="w-4 h-4 text-[#deff9a]" />
+                <div className={`p-2 rounded-lg ${isMarketSyncing ? 'bg-[#deff9a] text-slate-950' : 'bg-[#deff9a]/10 text-[#deff9a]'}`}>
+                  <RefreshCw className={`w-4 h-4 ${isMarketSyncing ? 'animate-spin' : ''}`} />
                 </div>
                 <div>
                   <p className="text-[10px] text-slate-500 uppercase font-bold tracking-tighter">Market Connectivity</p>
-                  <p className="text-xs font-bold text-slate-200">Unified Data Feed (IDX + US)</p>
+                  <div className="flex items-center gap-2">
+                    <p className="text-xs font-bold text-slate-200">
+                      {isMarketSyncing ? 'Synchronizing Feeds...' : 'Unified Data Feed (IDX + US)'}
+                    </p>
+                    {!isMarketSyncing && <div className="w-1.5 h-1.5 bg-green-500 rounded-full animate-pulse" />}
+                  </div>
                 </div>
               </div>
-              <span className="text-[8px] font-mono text-slate-500 bg-slate-800 px-2 py-1 rounded">V2.4 SYNC</span>
-            </div>
+              <div className="text-right">
+                <span className="text-[8px] font-mono text-slate-500 bg-slate-800 px-2 py-1 rounded block mb-1 uppercase tracking-tighter">
+                  {isMarketSyncing ? 'Active Sync' : 'V2.4 SYNC'}
+                </span>
+                <p className="text-[7px] text-slate-600 font-bold uppercase tracking-widest">Last: {lastMarketSync}</p>
+              </div>
+            </motion.div>
 
             {/* Performance Chart */}
             <motion.div
@@ -850,58 +993,259 @@ export default function App() {
           </div>
         );
       case 'security':
+        if (securityView === 'history') {
+          return (
+            <div className="space-y-4">
+              <div className="flex items-center gap-2 mb-2">
+                <button onClick={() => setSecurityView('main')} className="p-1.5 bg-slate-900 rounded-lg border border-slate-800 text-[#deff9a]">
+                  <ArrowLeft className="w-4 h-4" />
+                </button>
+                <h3 className="text-sm font-semibold text-slate-300 uppercase tracking-widest">Login History</h3>
+              </div>
+              <div className="space-y-3">
+                {[
+                  { id: 1, device: 'iPhone 15 Pro', location: 'Jakarta, ID', time: 'Today, 06:12', status: 'Current' },
+                  { id: 2, device: 'Chrome / MacOS', location: 'Singapore, SG', time: 'Yesterday, 22:45', status: 'Success' },
+                  { id: 3, device: 'iPad Air', location: 'Jakarta, ID', time: '10 May, 14:20', status: 'Success' },
+                  { id: 4, device: 'Unknown Linux', location: 'Bandung, ID', time: '08 May, 09:12', status: 'Blocked', fail: true },
+                ].map((log) => (
+                  <div key={log.id} className="bg-slate-900/40 p-4 rounded-2xl border border-slate-800/50 flex justify-between items-center">
+                    <div>
+                      <p className="text-xs font-black text-slate-200 uppercase tracking-tight">{log.device}</p>
+                      <p className="text-[10px] text-slate-500 font-bold uppercase tracking-widest mt-0.5">{log.location} • {log.time}</p>
+                    </div>
+                    <span className={`text-[8px] px-2 py-0.5 rounded-lg font-black uppercase ${log.fail ? 'bg-red-500/10 text-red-500 border border-red-500/20' : 'bg-green-500/10 text-green-400 border border-green-500/20'}`}>
+                      {log.status}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          );
+        }
+
+        if (securityView === 'devices') {
+          return (
+            <div className="space-y-4">
+              <div className="flex items-center gap-2 mb-2">
+                <button onClick={() => setSecurityView('main')} className="p-1.5 bg-slate-900 rounded-lg border border-slate-800 text-[#deff9a]">
+                  <ArrowLeft className="w-4 h-4" />
+                </button>
+                <h3 className="text-sm font-semibold text-slate-300 uppercase tracking-widest">Device Authorization</h3>
+              </div>
+              <div className="bg-slate-900/50 p-6 rounded-[2.5rem] border border-slate-800 flex flex-col items-center text-center mb-6">
+                <Zap className="w-8 h-8 text-[#deff9a] mb-2" />
+                <p className="text-xs font-black text-white uppercase tracking-widest">Ventuream Device Shield</p>
+                <p className="text-[10px] text-slate-500 mt-2 leading-relaxed uppercase tracking-widest">
+                  Only authorized devices can execute high-liquidity operations or access multi-channel gateway protocols.
+                </p>
+              </div>
+              <div className="space-y-3">
+                {[
+                  { id: 1, name: 'Main Corporate Terminal', type: 'Workstation', id_code: 'VNT-8821' },
+                  { id: 2, name: 'Personal ID Device', type: 'Mobile (iOS)', id_code: 'VNT-0012' },
+                ].map((device) => (
+                  <div key={device.id} className="bg-slate-900/40 p-4 rounded-2xl border border-[#deff9a]/10 flex justify-between items-center group">
+                    <div className="flex items-center gap-4">
+                      <div className="p-2 bg-[#deff9a]/5 rounded-xl border border-[#deff9a]/10">
+                        <Cloud className="w-4 h-4 text-[#deff9a]" />
+                      </div>
+                      <div>
+                        <p className="text-xs font-black text-slate-100 uppercase tracking-tight">{device.name}</p>
+                        <p className="text-[10px] text-slate-500 font-bold uppercase tracking-widest">{device.type} • {device.id_code}</p>
+                      </div>
+                    </div>
+                    <button className="text-[8px] font-black text-red-500 uppercase tracking-widest hover:bg-red-500/10 px-3 py-1.5 rounded-lg border border-red-500/20 transition-all">
+                      Revoke
+                    </button>
+                  </div>
+                ))}
+              </div>
+              <button className="w-full mt-4 py-4 border-2 border-dashed border-slate-800 rounded-2xl text-slate-500 text-[10px] font-black uppercase tracking-widest hover:border-[#deff9a]/30 transition-all">
+                + Authorize New Device
+              </button>
+            </div>
+          );
+        }
+
         return (
-          <div className="space-y-4">
+          <div className="space-y-6">
             <h3 className="text-sm font-semibold text-slate-300 px-1">Security Status</h3>
-            <div className="bg-slate-900/50 p-6 rounded-2xl border border-slate-800 flex flex-col items-center text-center">
+            
+            <div className="bg-slate-900/50 p-6 rounded-[2.5rem] border border-slate-800 flex flex-col items-center text-center mb-2">
               <ShieldCheck className="w-12 h-12 text-[#deff9a] mb-4" />
               <p className="text-sm font-bold text-slate-200">Biometric Protection Active</p>
               <p className="text-[10px] text-slate-500 mt-1 uppercase tracking-widest">Encrypted via AES-256</p>
               <div className="mt-6 w-full space-y-3 text-left">
-                <div className="flex justify-between items-center p-3 bg-slate-800/30 rounded-xl border border-slate-700/50">
-                  <span className="text-xs text-slate-400">Login History</span>
+                <button 
+                  onClick={() => setSecurityView('history')}
+                  className="w-full flex justify-between items-center p-4 bg-slate-800/30 rounded-2xl border border-slate-700/50 hover:bg-slate-800/50 transition-colors"
+                >
+                  <div className="flex items-center gap-3">
+                    <Activity className="w-4 h-4 text-[#deff9a]" />
+                    <span className="text-xs font-black text-slate-300 uppercase tracking-tight">Login History</span>
+                  </div>
                   <ChevronRight className="w-4 h-4 text-slate-600" />
-                </div>
-                <div className="flex justify-between items-center p-3 bg-slate-800/30 rounded-xl border border-slate-700/50">
-                  <span className="text-xs text-slate-400">Device Authorization</span>
+                </button>
+                <button 
+                  onClick={() => setSecurityView('devices')}
+                  className="w-full flex justify-between items-center p-4 bg-slate-800/30 rounded-2xl border border-slate-700/50 hover:bg-slate-800/50 transition-colors"
+                >
+                  <div className="flex items-center gap-3">
+                    <Database className="w-4 h-4 text-[#deff9a]" />
+                    <span className="text-xs font-black text-slate-300 uppercase tracking-tight">Device Authorization</span>
+                  </div>
                   <ChevronRight className="w-4 h-4 text-slate-600" />
+                </button>
+              </div>
+            </div>
+
+            {/* Multi-channel Alert Configuration */}
+            <div className="space-y-4">
+              <div className="flex items-center gap-2 px-1">
+                <Bell className="w-4 h-4 text-[#deff9a]" />
+                <h4 className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Multi-channel Gateway Alerts</h4>
+              </div>
+              <div className="bg-slate-900/60 p-5 rounded-[2.5rem] border border-[#deff9a]/10 backdrop-blur-xl">
+                <div className="space-y-5">
+                  <div className="flex justify-between items-center">
+                    <div className="flex items-center gap-3">
+                      <div className="p-2 bg-blue-500/10 rounded-xl border border-blue-500/20">
+                        <FileText className="w-4 h-4 text-blue-400" />
+                      </div>
+                      <div>
+                        <p className="text-xs font-black text-white uppercase tracking-tight">Email Notifications</p>
+                      </div>
+                    </div>
+                    <div className="w-10 h-5 bg-[#deff9a] rounded-full relative p-1 cursor-pointer">
+                      <div className="w-3 h-3 bg-slate-950 rounded-full translate-x-5" />
+                    </div>
+                  </div>
+                  
+                  <div className="flex justify-between items-center">
+                    <div className="flex items-center gap-3">
+                      <div className="p-2 bg-green-500/10 rounded-xl border border-green-500/20">
+                        <Zap className="w-4 h-4 text-green-400" />
+                      </div>
+                      <div>
+                        <p className="text-xs font-black text-white uppercase tracking-tight">WhatsApp Gateway</p>
+                      </div>
+                    </div>
+                    <div className="w-10 h-5 bg-[#deff9a] rounded-full relative p-1 cursor-pointer">
+                      <div className="w-3 h-3 bg-slate-950 rounded-full translate-x-5" />
+                    </div>
+                  </div>
+                  
+                  <div className="pt-4 border-t border-slate-800/10">
+                    <p className="text-[9px] text-slate-500 font-bold uppercase tracking-widest leading-relaxed">
+                      Instant alerts dispatched for unauthorized withdrawals, new device logins, and liquidity threshold breaches.
+                    </p>
+                  </div>
                 </div>
               </div>
             </div>
           </div>
         );
-      case 'gateway':
-      case 'compliance':
-      case 'liquidity':
-      case 'financials':
+      case 'scanner':
         return (
           <div className="space-y-4">
             <div className="flex items-center gap-2 mb-2">
               <button onClick={() => setActiveTab('home')} className="p-1.5 bg-slate-900 rounded-lg border border-slate-800 text-[#deff9a]">
                 <ArrowLeft className="w-4 h-4" />
               </button>
-              <h3 className="text-sm font-semibold text-slate-300 uppercase tracking-widest">
-                {SIDEBAR_MENU.find(m => m.path === activeTab)?.label || 'Institutional Tool'}
-              </h3>
-            </div>
-            <div className="bg-slate-900/50 p-8 rounded-[2.5rem] border border-slate-800 flex flex-col items-center text-center">
-              <div className="p-4 bg-slate-800/50 rounded-full border border-slate-700 mb-4">
-                {(() => {
-                  const Icon = SIDEBAR_MENU.find(m => m.path === activeTab)?.icon || Info;
-                  return <Icon className="w-8 h-8 text-[#deff9a]" />;
-                })()}
+              <div className="flex flex-col">
+                <h3 className="text-sm font-semibold text-slate-300 uppercase tracking-widest">
+                  {SIDEBAR_MENU.find(m => m.path === activeTab)?.label || 'Institutional Tool'}
+                </h3>
+                <span className="text-[8px] text-[#deff9a] font-black uppercase tracking-tighter">Authority: Fully Unlocked</span>
               </div>
-              <p className="text-sm font-bold text-slate-200">Institutional Access Restricted</p>
-              <p className="text-[10px] text-slate-500 mt-2 leading-relaxed uppercase tracking-widest">
-                This module requires Level 3 clearance. Contact VentureAM Institutional Support for activation.
-              </p>
-              <button 
-                onClick={() => setActiveTab('home')}
-                className="mt-8 px-6 py-3 bg-[#deff9a] text-slate-950 text-[10px] font-black uppercase tracking-widest rounded-xl shadow-lg shadow-[#deff9a]/10"
-              >
-                Return to Dashboard
-              </button>
             </div>
+            <VamSmartScanner />
+          </div>
+        );
+      case 'gateway':
+      case 'compliance':
+      case 'liquidity':
+      case 'financials':
+        const isUnlocked = userRole === 'President_Director';
+        return (
+          <div className="space-y-4">
+            <div className="flex items-center gap-2 mb-2">
+              <button onClick={() => setActiveTab('home')} className="p-1.5 bg-slate-900 rounded-lg border border-slate-800 text-[#deff9a]">
+                <ArrowLeft className="w-4 h-4" />
+              </button>
+              <div className="flex flex-col">
+                <h3 className="text-sm font-semibold text-slate-300 uppercase tracking-widest">
+                  {SIDEBAR_MENU.find(m => m.path === activeTab)?.label || 'Institutional Tool'}
+                </h3>
+                {isUnlocked && <span className="text-[8px] text-[#deff9a] font-black uppercase tracking-tighter">Authority: Fully Unlocked</span>}
+              </div>
+            </div>
+            
+            {isUnlocked ? (
+              <motion.div 
+                initial={{ opacity: 0, scale: 0.98 }}
+                animate={{ opacity: 1, scale: 1 }}
+                className="bg-slate-900/50 p-6 rounded-[2.5rem] border border-[#deff9a]/20 backdrop-blur-xl"
+              >
+                <div className="flex items-center gap-4 mb-6">
+                  <div className="p-3 bg-[#deff9a]/10 rounded-2xl border border-[#deff9a]/20">
+                    {(() => {
+                      const Icon = SIDEBAR_MENU.find(m => m.path === activeTab)?.icon || Info;
+                      return <Icon className="w-6 h-6 text-[#deff9a]" />;
+                    })()}
+                  </div>
+                  <div>
+                    <p className="text-lg font-black text-white uppercase tracking-tight">Active Protocol</p>
+                    <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest">Secure Institutional Gateway</p>
+                  </div>
+                </div>
+                
+                <div className="grid grid-cols-2 gap-3 mb-6">
+                  <div className="bg-slate-950/60 p-4 rounded-2xl border border-slate-800">
+                    <p className="text-[10px] text-slate-500 font-black uppercase mb-1">Status</p>
+                    <p className="text-sm font-black text-green-400 uppercase">Operational</p>
+                  </div>
+                  <div className="bg-slate-950/60 p-4 rounded-2xl border border-slate-800">
+                    <p className="text-[10px] text-slate-500 font-black uppercase mb-1">Network</p>
+                    <p className="text-sm font-black text-blue-400 uppercase">Primary</p>
+                  </div>
+                </div>
+
+                <div className="space-y-3 p-4 bg-slate-950/40 rounded-2xl border border-slate-800/50">
+                  <div className="flex justify-between items-center text-[10px] font-bold text-slate-400 uppercase">
+                    <span>Synchronization</span>
+                    <span>100%</span>
+                  </div>
+                  <div className="w-full h-1 bg-slate-800 rounded-full overflow-hidden">
+                    <motion.div 
+                      initial={{ width: 0 }}
+                      animate={{ width: '100%' }}
+                      className="h-full bg-[#deff9a]"
+                    />
+                  </div>
+                </div>
+              </motion.div>
+            ) : (
+              <div className="bg-slate-900/50 p-8 rounded-[2.5rem] border border-slate-800 flex flex-col items-center text-center">
+                <div className="p-4 bg-slate-800/50 rounded-full border border-slate-700 mb-4">
+                  {(() => {
+                    const Icon = SIDEBAR_MENU.find(m => m.path === activeTab)?.icon || Info;
+                    return <Icon className="w-8 h-8 text-[#deff9a]" />;
+                  })()}
+                </div>
+                <p className="text-sm font-bold text-slate-200">Institutional Access Restricted</p>
+                <p className="text-[10px] text-slate-500 mt-2 leading-relaxed uppercase tracking-widest">
+                  This module requires Level 3 clearance. Contact VentureAM Institutional Support for activation.
+                </p>
+                <button 
+                  onClick={() => setActiveTab('home')}
+                  className="mt-8 px-6 py-3 bg-[#deff9a] text-slate-950 text-[10px] font-black uppercase tracking-widest rounded-xl shadow-lg shadow-[#deff9a]/10"
+                >
+                  Return to Dashboard
+                </button>
+              </div>
+            )}
           </div>
         );
       default:
@@ -910,119 +1254,106 @@ export default function App() {
   };
 
   return (
-    <div className="min-h-screen pb-24 max-w-md mx-auto relative bg-[#020617] overflow-hidden">
-      {/* SIDEBAR OVERLAY */}
-      <AnimatePresence>
-        {isSidebarOpen && (
-          <>
-            <motion.div 
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              onClick={() => setIsSidebarOpen(false)}
-              className="fixed inset-0 bg-[#020617]/80 backdrop-blur-sm z-40 max-w-md mx-auto"
-            />
-            <motion.aside
-              initial={{ x: '-100%' }}
-              animate={{ x: 0 }}
-              exit={{ x: '-100%' }}
-              transition={{ type: 'spring', damping: 25, stiffness: 200 }}
-              className="fixed inset-y-0 left-0 w-4/5 max-w-[320px] bg-[#020617] border-r border-slate-800 z-50 p-6 flex flex-col"
-            >
-              <div className="flex justify-between items-center mb-8">
-                <div>
-                  <h2 className="text-lg font-black text-[#deff9a] tracking-tighter">VentureAM</h2>
-                  <p className="text-[8px] text-slate-500 font-black uppercase tracking-[0.2em]">Institutional System</p>
+    <div className="min-h-screen bg-[#020617] text-slate-200 font-sans select-none overflow-x-hidden">
+      <div className="flex flex-col lg:flex-row max-w-[1440px] mx-auto min-h-screen">
+        {/* Desktop Sidebar */}
+        <aside className="hidden lg:flex sidebar-nav flex-col bg-[#020617] border-r border-slate-800 p-6 sticky top-0 h-screen">
+          <div className="mb-8">
+            <h2 className="text-3xl font-black text-[#deff9a] tracking-tight">VentureAM</h2>
+            <p className="text-[10px] text-slate-500 font-black uppercase tracking-[0.3em] mt-1">Institutional System</p>
+          </div>
+
+          <nav className="flex-1 space-y-2">
+            {SIDEBAR_MENU.map((item) => (
+              <button
+                key={item.id}
+                onClick={() => {
+                  if ('external' in item && item.external) {
+                    window.open(item.path, '_blank');
+                  } else {
+                    setActiveTab(item.path);
+                  }
+                }}
+                className={`w-full flex items-center gap-4 p-4 rounded-3xl transition-all border ${
+                  activeTab === item.path 
+                  ? 'bg-[#deff9a]/10 border-[#deff9a]/20 text-[#deff9a]' 
+                  : 'bg-slate-900/40 border-slate-800 hover:bg-slate-800/60 text-slate-400'
+                }`}
+              >
+                <item.icon className="w-5 h-5" style={{ color: item.color }} />
+                <div className="text-left">
+                  <p className="text-xs font-black uppercase tracking-tight">{item.label}</p>
+                  {item.provider && <p className="text-[8px] text-slate-500 font-bold uppercase">{item.provider}</p>}
                 </div>
-                <button onClick={() => setIsSidebarOpen(false)} className="p-2 bg-slate-900 rounded-xl border border-slate-800 text-slate-400">
-                  <X className="w-5 h-5" />
-                </button>
-              </div>
+              </button>
+            ))}
+          </nav>
 
-              <nav className="flex-1 space-y-2">
-                {SIDEBAR_MENU.map((item) => (
-                  <button
-                    key={item.id}
-                    onClick={() => {
-                      if (item.external) {
-                        window.open(item.path, '_blank');
-                      } else {
-                        setActiveTab(item.path);
-                        setIsSidebarOpen(false);
-                      }
-                    }}
-                    className={`w-full flex items-center gap-4 p-4 rounded-2xl transition-all border ${
-                      activeTab === item.path 
-                      ? 'bg-[#deff9a]/10 border-[#deff9a]/20 text-[#deff9a]' 
-                      : 'bg-slate-900/40 border-slate-800 hover:bg-slate-800/60 text-slate-400'
-                    }`}
-                  >
-                    <item.icon className="w-5 h-5" style={{ color: item.color }} />
-                    <div className="text-left">
-                      <p className="text-xs font-black uppercase tracking-tight">{item.label}</p>
-                      {item.provider && <p className="text-[8px] text-slate-500 font-bold uppercase">{item.provider}</p>}
-                    </div>
-                  </button>
-                ))}
-              </nav>
-
-              <div className="mt-auto pt-6 border-t border-slate-800/50">
-                <div className="bg-slate-900/40 p-4 rounded-2xl border border-slate-800">
-                  <p className="text-[10px] text-slate-500 font-bold uppercase tracking-widest mb-2">User Credentials</p>
-                  <p className="text-[11px] text-slate-200 font-black tracking-tight">{process.env.USER_EMAIL || 'Institutional User'}</p>
-                  <p className="text-[9px] text-[#deff9a] font-mono mt-0.5">AUTH TIER 3: VERIFIED</p>
+          <div className="mt-auto pt-6 border-t border-slate-800/50">
+            <div className="bg-slate-900/40 p-4 rounded-2xl border border-slate-800">
+              <p className="text-[10px] text-slate-500 font-bold uppercase tracking-widest mb-2">Institutional Identification</p>
+              <p className="text-[11px] text-slate-200 font-black tracking-tight">{process.env.USER_EMAIL || 'Institutional User'}</p>
+              <div className="flex items-center justify-between mt-2">
+                <p className="text-[9px] text-[#deff9a] font-mono">ROLE: {userRole.replace('_', ' ')}</p>
+                <div className="flex items-center gap-1.5 px-2 py-0.5 bg-green-500/10 border border-green-500/20 rounded-lg">
+                  <p className="text-[8px] text-green-500 font-black uppercase">Verified</p>
                 </div>
               </div>
-            </motion.aside>
-          </>
-        )}
-      </AnimatePresence>
-
-      {/* Header */}
-      <header className="p-6 border-b border-slate-800 flex justify-between items-center sticky top-0 bg-[#020617]/80 backdrop-blur-xl z-20">
-        <div className="flex items-center gap-4">
-          <button 
-            onClick={() => setIsSidebarOpen(true)}
-            className="p-2.5 bg-slate-900 text-[#deff9a] rounded-xl border border-slate-800 shadow-lg shadow-[#deff9a]/5 active:scale-95 transition-transform"
-          >
-            <Menu className="w-5 h-5" />
-          </button>
-          <div>
-            <h1 className="text-[10px] text-slate-500 uppercase tracking-[0.2em] font-medium">PT Venture Asset Management</h1>
-            <div className="flex items-center gap-2">
-              <h2 className="text-2xl font-bold text-[#deff9a]">Ventuream Core</h2>
             </div>
           </div>
-        </div>
-        <div className="flex flex-col items-end gap-1">
-          <div className="flex items-center gap-2 px-2 py-1 bg-slate-900/50 rounded-lg border border-slate-800">
-            <div className="h-2 w-2 bg-[#deff9a] rounded-full animate-pulse shadow-[0_0_8px_rgba(222,255,154,0.5)]"></div>
-            <span className="text-[8px] font-mono text-slate-400 tracking-tighter uppercase line-clamp-1">Gateway: VentureAM international gateway</span>
-          </div>
-          <div className="flex flex-col items-end">
-            <span className="text-[7px] text-slate-600 font-mono">ventuream.cloudflareaccess.com</span>
-            <span className="text-[6px] text-green-500 font-bold uppercase tracking-tighter mt-0.5">connect to CGS International Securities</span>
-            <span className="text-[6px] text-orange-400 font-bold uppercase tracking-tighter">IBKR Global Status: Connected</span>
-          </div>
-        </div>
-      </header>
+        </aside>
 
-      <main className="p-4 space-y-6">
-        <AnimatePresence mode="wait">
-          <motion.div
-            key={activeTab}
-            initial={{ opacity: 0, x: 20 }}
-            animate={{ opacity: 1, x: 0 }}
-            exit={{ opacity: 0, x: -20 }}
-            transition={{ duration: 0.2 }}
-          >
-            {renderContent()}
-          </motion.div>
-        </AnimatePresence>
-      </main>
+        <div className="flex-1 flex flex-col min-h-screen">
+          {/* Header */}
+          <header className="px-6 py-6 lg:px-10 lg:py-8 border-b border-slate-800 flex justify-between items-center sticky top-0 bg-[#020617]/90 backdrop-blur-xl z-20">
+            <div className="flex items-center gap-4">
+              <button 
+                onClick={() => setIsSidebarOpen(true)}
+                className="lg:hidden p-2.5 bg-slate-900 text-[#deff9a] rounded-xl border border-slate-800 shadow-lg active:scale-95 transition-transform"
+              >
+                <Menu className="w-5 h-5" />
+              </button>
+              <div className="flex flex-col">
+                <h1 className="text-2xl lg:text-3xl font-black text-[#deff9a] tracking-tight leading-none">VentureAM</h1>
+                <p className="text-[10px] lg:text-sm text-white/80 uppercase tracking-[0.2em] font-bold mt-1">Institutional System</p>
+              </div>
+            </div>
+            <div className="flex flex-col items-end gap-1">
+              <div className="flex items-center gap-2 px-2 py-1 bg-slate-900/50 rounded-lg border border-slate-800">
+                <div className="h-1.5 w-1.5 bg-[#deff9a] rounded-full animate-pulse shadow-[0_0_8px_rgba(222,255,154,0.5)]"></div>
+                <span className="text-[8px] lg:text-[9px] font-mono text-slate-400 tracking-tighter uppercase whitespace-nowrap">VentureAM International Gateway</span>
+              </div>
+              <div className="flex flex-col items-end gap-0.5">
+                <div className="flex items-center gap-1.5">
+                  <span className="text-[7px] lg:text-[8px] text-green-500 font-bold uppercase tracking-tighter">CGS International Securities</span>
+                  <div className="h-1 w-1 bg-green-500 rounded-full shadow-[0_0_4px_rgba(34,197,94,0.5)]"></div>
+                </div>
+                <div className="flex items-center gap-1.5">
+                  <span className="text-[7px] lg:text-[8px] text-green-500 font-bold uppercase tracking-tighter">IBKR Global Status: Connected</span>
+                  <div className="h-1 w-1 bg-green-500 rounded-full shadow-[0_0_4px_rgba(34,197,94,0.5)]"></div>
+                </div>
+              </div>
+            </div>
+          </header>
 
-      {/* Navigation */}
-      <footer className="fixed bottom-0 left-0 right-0 max-w-md mx-auto bg-[#020617]/90 backdrop-blur-xl border-t border-slate-800 p-4 flex justify-around items-center z-20">
+          <main className="p-4 lg:p-10 space-y-8 flex-1">
+            <AnimatePresence mode="wait">
+              <motion.div
+                key={activeTab}
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -10 }}
+                transition={{ duration: 0.2 }}
+                className={activeTab === 'home' ? 'main-dashboard-container p-0' : ''}
+              >
+                {renderContent()}
+              </motion.div>
+            </AnimatePresence>
+          </main>
+        </div>
+
+        {/* Navigation - Bottom bar only on mobile */}
+        <footer className="lg:hidden fixed bottom-6 left-1/2 -translate-x-1/2 w-[calc(100%-32px)] max-w-sm bg-slate-900/90 backdrop-blur-xl border border-slate-800 p-3 rounded-3xl flex justify-around items-center z-40 shadow-2xl">
         <NavButton 
           active={activeTab === 'home'} 
           onClick={() => setActiveTab('home')}
@@ -1047,7 +1378,67 @@ export default function App() {
           icon={<ShieldCheck className="w-5 h-5" />} 
           label="Security" 
         />
-      </footer>
+        </footer>
+
+        {/* Mobile Overlay Sidebar - Keep for small screen menu */}
+        <AnimatePresence>
+          {isSidebarOpen && (
+            <>
+              <motion.div 
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                onClick={() => setIsSidebarOpen(false)}
+                className="fixed inset-0 bg-[#020617]/80 backdrop-blur-sm z-[60] lg:hidden"
+              />
+              <motion.aside
+                initial={{ x: '-100%' }}
+                animate={{ x: 0 }}
+                exit={{ x: '-100%' }}
+                transition={{ type: 'spring', damping: 25, stiffness: 200 }}
+                className="fixed inset-y-0 left-0 w-4/5 max-w-[320px] bg-[#020617] border-r border-slate-800 z-[70] p-6 flex flex-col lg:hidden"
+              >
+                <div className="flex justify-between items-center mb-8">
+                  <div>
+                    <h2 className="text-xl font-black text-[#deff9a] tracking-tight">VentureAM</h2>
+                    <p className="text-[9px] text-slate-500 font-black uppercase tracking-[0.2em]">Institutional System</p>
+                  </div>
+                  <button onClick={() => setIsSidebarOpen(false)} className="p-2 bg-slate-900 rounded-xl border border-slate-800 text-slate-400">
+                    <X className="w-5 h-5" />
+                  </button>
+                </div>
+
+                <nav className="flex-1 space-y-2">
+                  {SIDEBAR_MENU.map((item) => (
+                    <button
+                      key={item.id}
+                      onClick={() => {
+                        if ('external' in item && item.external) {
+                          window.open(item.path, '_blank');
+                        } else {
+                          setActiveTab(item.path);
+                          setIsSidebarOpen(false);
+                        }
+                      }}
+                      className={`w-full flex items-center gap-4 p-4 rounded-2xl transition-all border ${
+                        activeTab === item.path 
+                        ? 'bg-[#deff9a]/10 border-[#deff9a]/20 text-[#deff9a]' 
+                        : 'bg-slate-900/40 border-slate-800 hover:bg-slate-800/60 text-slate-400'
+                      }`}
+                    >
+                      <item.icon className="w-5 h-5" style={{ color: item.color }} />
+                      <div className="text-left">
+                        <p className="text-xs font-black uppercase tracking-tight">{item.label}</p>
+                        {item.provider && <p className="text-[8px] text-slate-500 font-bold uppercase">{item.provider}</p>}
+                      </div>
+                    </button>
+                  ))}
+                </nav>
+              </motion.aside>
+            </>
+          )}
+        </AnimatePresence>
+      </div>
     </div>
   );
 }

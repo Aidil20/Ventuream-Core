@@ -16,3 +16,45 @@
 .gold-gradient {
   background: linear-gradient(135deg, var(--color-brand) 0%, var(--color-brand-alt) 100%);
 }
+
+/* Container Utama Dashboard */
+.main-dashboard-container {
+  display: flex;
+  flex-direction: column; /* Default untuk HP */
+  gap: 20px;
+  padding: 16px;
+  width: 100%;
+}
+
+/* Penyesuaian untuk Layar Desktop (Lebar > 1024px) */
+@media (min-width: 1024px) {
+  .main-dashboard-container {
+    flex-direction: row; /* Elemen berjajar ke samping */
+    flex-wrap: nowrap;
+    max-width: 1440px;
+    margin: 0 auto;
+    padding: 0;
+  }
+
+  .summary-card {
+    flex: 1; /* Kartu ringkasan akan melebar mengisi ruang */
+    min-width: 300px;
+  }
+
+  .sidebar-nav {
+    width: 280px; /* Sidebar tetap di kiri untuk versi Desktop */
+    display: block !important;
+    position: sticky;
+    top: 0;
+    height: 100vh;
+  }
+}
+
+.scrollbar-hide::-webkit-scrollbar {
+  display: none;
+}
+
+.scrollbar-hide {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
