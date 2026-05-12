@@ -1,6 +1,56 @@
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
 @import "tailwindcss";
 
+.sidebar-menu {
+    width: 200px;
+    border-right: 1px solid #333;
+    padding: 10px;
+}
+
+.menu-item {
+    padding: 10px;
+    cursor: pointer;
+    color: #00ffff;
+    border: 1px solid transparent;
+}
+
+.menu-item:hover, .menu-item.active {
+    background: #1a1a1a;
+    border: 1px solid #ff9900;
+}
+
+.scanner-option-box {
+    margin-top: 20px;
+    padding: 20px;
+    border: 1px solid #444;
+    background: #050505;
+}
+
+.scanner-btn {
+    background: #222;
+    color: #fff;
+    border: 1px solid #555;
+    padding: 10px 20px;
+    margin: 5px;
+    cursor: pointer;
+    font-family: 'Roboto Mono', monospace;
+}
+
+.scanner-btn:hover {
+    background: #ff9900;
+    color: #000;
+}
+
+.metric-tag {
+    display: inline-block;
+    background: #333;
+    color: #00ffff;
+    padding: 2px 8px;
+    margin: 2px;
+    font-size: 10px;
+    border-radius: 3px;
+}
+
 @theme {
   --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
   --color-brand: #deff9a;

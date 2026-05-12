@@ -1,30 +1,48 @@
 import React, { useEffect, useRef, memo } from 'react';
 
-function TradingViewWidget() {
+interface TradingViewWidgetProps {
+  symbol?: string;
+}
+
+function TradingViewWidget({ symbol = "IDX:BBCA" }: TradingViewWidgetProps) {
   const container = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    if (container.current && !container.current.querySelector('script')) {
+    const currentContainer = container.current;
+    if (currentContainer) {
+      currentContainer.innerHTML = '';
       const script = document.createElement("script");
       script.src = "https://s3.tradingview.com/external-embedding/embed-widget-advanced-chart.js";
       script.type = "text/javascript";
       script.async = true;
       script.innerHTML = JSON.stringify({
         "autosize": true,
-        "symbol": "BINANCE:BTCUSDT",
+        "symbol": symbol,
         "interval": "D",
-        "timezone": "Etc/UTC",
+        "timezone": "Asia/Jakarta",
         "theme": "dark",
         "style": "1",
-        "locale": "en",
+        "locale": "id",
         "enable_publishing": false,
         "allow_symbol_change": true,
         "calendar": false,
+        "studies": [
+          "MASimple@tv-basicstudies",
+          "MAExp@tv-basicstudies",
+          "RSI@tv-basicstudies",
+          "MACD@tv-basicstudies",
+          "BB@tv-basicstudies"
+        ],
         "support_host": "https://www.tradingview.com"
       });
-      container.current.appendChild(script);
+      currentContainer.appendChild(script);
     }
-  }, []);
+    return () => {
+      if (currentContainer) {
+        currentContainer.innerHTML = '';
+      }
+    };
+  }, [symbol]);
 
   return (
     <div className="tradingview-widget-container h-[400px] w-full rounded-2xl overflow-hidden border border-slate-800" ref={container}>

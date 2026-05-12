@@ -3,7 +3,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import { io } from 'socket.io-client';
 import { 
   Home, 
   PieChart, 
@@ -29,10 +30,19 @@ import {
   Droplets,
   FileText,
   Radar,
-  X
+  X,
+  Scale
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
-import { fetchLatestInsights, MarketInsight, fetchStockRecommendations, StockRecommendation, ScanOptions } from './services/marketService';
+import { Decimal } from 'decimal.js';
+import { 
+  fetchLatestInsights, 
+  MarketInsight, 
+  fetchStockRecommendations, 
+  StockRecommendation, 
+  ScanOptions, 
+  fetchLivePrices 
+} from './services/marketService';
 import { fetchMarketNewsSummary, MarketNewsItem } from './services/geminiService';
 import TradingViewWidget from './components/TradingViewWidget';
 import PortfolioChart from './components/PortfolioChart';
@@ -42,7 +52,11 @@ import { Settings2, Filter, Target, ArrowLeft, Info } from 'lucide-react';
 import { Sparkline } from './components/Sparkline';
 import { AssetDetail } from './components/AssetDetail';
 import VamSmartScanner from './components/VamSmartScanner';
+import IntradayScanner from './components/IntradayScanner';
 import GlobalIndicesFeed from './components/GlobalIndicesFeed';
+import TradingViewMarketWidget from './components/TradingViewMarketWidget';
+import TradingViewScreenerWidget from './components/TradingViewScreenerWidget';
+import { MarketMetricCard } from './components/MarketMetricCard';
 
 const ASSETS = [
   {
@@ -129,26 +143,98 @@ const HOLDINGS = [
 ];
 
 const SIDEBAR_MENU = [
-  { id: 1, label: "Analisis Portofolio", icon: BarChart3, path: "portfolio" },
-  { id: 2, label: "Gateway Internasional", icon: Globe, path: "gateway" },
-  { id: 3, label: "Laporan Regulasi", icon: Gavel, path: "compliance" },
-  { id: 4, label: "Pengaturan Likuiditas", icon: Droplets, path: "liquidity" },
-  { id: 5, label: "Laporan Keuangan", icon: FileText, path: "financials" },
+  { id: 1, label: "Analisis Portofolio", icon: BarChart3, path: "portfolio", color: "#deff9a" },
+  { id: 7, label: "Rebalancing Asset", icon: Scale, path: "rebalancer", color: "#deff9a" },
+  { id: 2, label: "Gateway Internasional", icon: Globe, path: "gateway", color: "#94a3b8" },
+  { id: 3, label: "Laporan Regulasi", icon: Gavel, path: "compliance", color: "#94a3b8" },
+  { id: 4, label: "Pengaturan Likuiditas", icon: Droplets, path: "liquidity", color: "#94a3b8" },
+  { id: 5, label: "Laporan Keuangan", icon: FileText, path: "financials", color: "#94a3b8" },
   { 
     id: 6, 
     label: "Smart Scanner IDX", 
     provider: "By Ventuream AM", 
     icon: Radar, 
     path: "scanner",
-    color: "#FFD700"
+    color: "#FFD700",
+    markets: [
+      {
+        id: 'idx',
+        label: 'IDX Market',
+        modules: [
+          'High Volume Breakout',
+          'Price Breakout Volume MA10 Today',
+          'Big Accumulation'
+        ]
+      },
+      {
+        id: 'global',
+        label: 'Global Market',
+        modules: [
+          'Volatility Scanner',
+          'FX Momentum Feed',
+          'Yield Arbitrage'
+        ]
+      }
+    ]
   },
 ];
 
+import BloombergTable from './components/BloombergTable';
+import VAMTerminalScanner from './components/VAMTerminalScanner';
+import RebalanceTool from './components/RebalanceTool';
+
+const myCGSPortfolio = {
+  accountID: "YU001HC5400154",
+  owner: "PT Venture Asset Management",
+  cashBalance: 308000,
+  assets: [
+    { ticker: "COAL.JK", lots: 62, averagePrice: 72.7581, marketPrice: 57 },
+    { ticker: "DEFI.JK", lots: 10, averagePrice: 224, marketPrice: 177 },
+    { ticker: "KOTA.JK", lots: 15, averagePrice: 151, marketPrice: 134 },
+    { ticker: "LAND.JK", lots: 31, averagePrice: 103.3548, marketPrice: 89 },
+    { ticker: "LPKR.JK", lots: 20, averagePrice: 84, marketPrice: 81 },
+    { ticker: "PIPA.JK", lots: 15, averagePrice: 151, marketPrice: 134 },
+    { ticker: "WMUU.JK", lots: 20, averagePrice: 96, marketPrice: 68 }
+  ]
+};
+
+const MarketFeedLog = ({ stockData }: { stockData: StockRecommendation }) => {
+  const timeString = stockData.detectedAt 
+    ? new Date(stockData.detectedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })
+    : new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+    
+  return (
+    <div className="flex items-start gap-4 p-3 border-b border-white/5 last:border-0 hover:bg-white/5 transition-colors group">
+      <div className="flex flex-col items-center gap-1 min-w-[50px]">
+        <span className="text-[9px] font-mono text-zinc-500">{timeString}</span>
+        <div className="w-px h-full bg-zinc-800 group-last:hidden" />
+      </div>
+      <div className="flex-1">
+        <p className="text-[11px] leading-relaxed text-zinc-300">
+          <span className="font-black text-white">{stockData.symbol}</span> detected: 
+          Price (<span className="text-blue-400">Rp {stockData.price}</span> <span className="text-[8px] animate-pulse font-black text-blue-500/80">LIVE</span>) &gt; EMA20 (<span className="text-orange-400">Rp {stockData.ema20}</span>). 
+          <span className="ml-2 inline-flex items-center gap-1.5 font-bold uppercase tracking-widest text-[9px]">
+            Strength: <span className="text-[#00ff00] bg-[#00ff00]/10 px-1.5 py-0.5 rounded border border-[#00ff00]/20">QUALIFIED</span>
+          </span>
+        </p>
+      </div>
+    </div>
+  );
+};
+
 export default function App() {
+  const [selectedSymbol, setSelectedSymbol] = useState('IDX:COMPOSITE');
+  const [assetsData, setAssetsData] = useState(ASSETS);
   const [activeTab, setActiveTab] = useState('home');
+  const [activeScannerMarket, setActiveScannerMarket] = useState<'IDX' | 'GLOBAL' | null>(null);
+  const [activeScannerModule, setActiveScannerModule] = useState<string | null>(null);
+  const [expandedMarket, setExpandedMarket] = useState<string | null>(null);
+  const [portfolioData, setPortfolioData] = useState<any[]>([]);
+  const [totalPortfolioValue, setTotalPortfolioValue] = useState(0);
   const [securityView, setSecurityView] = useState<'main' | 'history' | 'devices'>('main');
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [showVamScanner, setShowVamScanner] = useState(false);
+  const [showIntradayScanner, setShowIntradayScanner] = useState(false);
   const [userRole, setUserRole] = useState('President_Director'); // Added role state
   const [selectedAssetId, setSelectedAssetId] = useState<string | null>(null);
   const [insight, setInsight] = useState<MarketInsight | null>(null);
@@ -158,6 +244,42 @@ export default function App() {
   const [isMarketSyncing, setIsMarketSyncing] = useState(false);
   const [marketNews, setMarketNews] = useState<MarketNewsItem[]>([]);
   const [isFetchingNews, setIsFetchingNews] = useState(false);
+  const [technicalLogs, setTechnicalLogs] = useState<StockRecommendation[]>([]);
+  const [logSortBy, setLogSortBy] = useState<'timestamp' | 'symbol'>('timestamp');
+  const [logSortOrder, setLogSortOrder] = useState<'asc' | 'desc'>('desc');
+
+  // Aggregated loading state for global indicator
+  const isAnySyncing = useMemo(() => 
+    isFetching || isScanning || isFetchingNews || isMarketSyncing,
+    [isFetching, isScanning, isFetchingNews, isMarketSyncing]
+  );
+
+  const livePricesMap = useMemo(() => {
+    const map: Record<string, number> = {};
+    stocks.forEach(s => {
+      if (s.currentPrice) map[s.symbol] = s.currentPrice;
+    });
+    return map;
+  }, [stocks]);
+
+  const sortedLogs = useMemo(() => {
+    return [...technicalLogs].sort((a, b) => {
+      let comparison = 0;
+      if (logSortBy === 'timestamp') {
+        comparison = (a.detectedAt || 0) - (b.detectedAt || 0);
+      } else if (logSortBy === 'symbol') {
+        comparison = a.symbol.localeCompare(b.symbol);
+      }
+      return logSortOrder === 'asc' ? comparison : -comparison;
+    });
+  }, [technicalLogs, logSortBy, logSortOrder]);
+
+  // Guard refs for stable callbacks
+  const isFetchingRef = React.useRef(false);
+  const isScanningRef = React.useRef(false);
+  const isFetchingNewsRef = React.useRef(false);
+  const isMarketSyncingRef = React.useRef(false);
+
   const [lastMarketSync, setLastMarketSync] = useState(new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }));
   const [liquidityValue, setLiquidityValue] = useState(12.4); // Simulated low liquidity for alert demo
   const [showScanParams, setShowScanParams] = useState(false);
@@ -166,60 +288,296 @@ export default function App() {
     riskProfile: 'moderate',
     signalFilter: 'ALL',
     assetType: 'Equities',
-    sortBy: 'signal'
+    sortBy: 'signal',
+    timeframe: '1D'
   });
+
   const { history, recordTransaction } = useTransactionManager();
 
+  const updateCGSPrices = useCallback(async () => {
+    // Simulate fetching live data based on CGS iTrade images with minimal jitter
+    const updated = myCGSPortfolio.assets.map(asset => {
+      // Small jitter (0.2-0.5%) to keep it feeling "live" but anchored
+      const voltMult = isMarketSyncingRef.current ? 0.005 : 0.002;
+      const jitter = (Math.random() - 0.5) * (asset.marketPrice * voltMult);
+      const currentPrice = new Decimal(asset.marketPrice).plus(jitter);
+      
+      const lots = new Decimal(asset.lots);
+      const avgPrice = new Decimal(asset.averagePrice);
+      const multiplier = new Decimal(100);
+
+      const totalCost = avgPrice.times(lots).times(multiplier);
+      const marketValue = currentPrice.times(lots).times(multiplier);
+      const unrealized = marketValue.minus(totalCost);
+      const change = currentPrice.minus(avgPrice).div(avgPrice).times(multiplier);
+
+      return {
+        ...asset,
+        currentPrice: currentPrice.toNumber(),
+        change: change.toNumber(),
+        marketValue: marketValue.toNumber(),
+        unrealized: unrealized.toNumber()
+      };
+    });
+    setPortfolioData(updated);
+    setTotalPortfolioValue(updated.reduce((acc, curr) => new Decimal(acc).plus(curr.marketValue).toNumber(), 0));
+  }, []);
+
+  useEffect(() => {
+    updateCGSPrices();
+    const portfolioInterval = setInterval(updateCGSPrices, 3000); // Live price simulation
+    return () => clearInterval(portfolioInterval);
+  }, [updateCGSPrices]);
+
   const updateInsights = useCallback(async () => {
-    if (isFetching) return;
+    if (isFetchingRef.current) return;
+    isFetchingRef.current = true;
     setIsFetching(true);
-    const newInsight = await fetchLatestInsights();
-    setInsight(newInsight);
-    setIsFetching(false);
-  }, [isFetching]);
+    try {
+      const newInsight = await fetchLatestInsights();
+      setInsight(newInsight);
+    } finally {
+      isFetchingRef.current = false;
+      setIsFetching(false);
+    }
+  }, []);
 
   const updateMarketNews = useCallback(async (force = false) => {
-    if (isFetchingNews) return;
+    if (isFetchingNewsRef.current) return;
+    isFetchingNewsRef.current = true;
     setIsFetchingNews(true);
-    const news = await fetchMarketNewsSummary(force);
-    setMarketNews(news);
-    setIsFetchingNews(false);
-  }, [isFetchingNews]);
+    try {
+      const news = await fetchMarketNewsSummary(force);
+      setMarketNews(news);
+    } finally {
+      isFetchingNewsRef.current = false;
+      setIsFetchingNews(false);
+    }
+  }, []);
 
   const updateStocks = useCallback(async () => {
-    if (isScanning) return;
+    if (isScanningRef.current) return;
+    isScanningRef.current = true;
     setIsScanning(true);
-    const newStocks = await fetchStockRecommendations(scanOptions);
-    setStocks(newStocks);
-    setIsScanning(false);
-  }, [isScanning, scanOptions]);
+    try {
+      const newStocks = await fetchStockRecommendations(scanOptions);
+      setStocks(newStocks);
+      
+      // Update technical logs if new qualifying stocks found
+      if (newStocks && newStocks.length > 0) {
+        setTechnicalLogs(prev => {
+          const now = Date.now();
+          const newEntries = newStocks
+            .filter(stock => !prev.some(p => p.symbol === stock.symbol && p.price === stock.price))
+            .map(stock => ({ ...stock, detectedAt: now }));
+          return [...newEntries, ...prev].slice(0, 50);
+        });
+      }
+    } finally {
+      isScanningRef.current = false;
+      setIsScanning(false);
+    }
+  }, [scanOptions]);
 
   const syncMarketConnectivity = useCallback(async () => {
-    if (isMarketSyncing) return;
+    if (isMarketSyncingRef.current) return;
+    isMarketSyncingRef.current = true;
     setIsMarketSyncing(true);
     
-    // Simulate a multi-step institutional sync
-    await new Promise(resolve => setTimeout(resolve, 800));
-    await updateInsights();
-    await new Promise(resolve => setTimeout(resolve, 800));
-    await updateMarketNews(true); // Force clear cache on explicit sync
-    await new Promise(resolve => setTimeout(resolve, 800));
-    await updateStocks();
-    
-    setLastMarketSync(new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }));
-    setIsMarketSyncing(false);
-  }, [isMarketSyncing, updateInsights, updateStocks, updateMarketNews]);
+    try {
+      // 1. Standard institutional sync cycle
+      await new Promise(resolve => setTimeout(resolve, 800));
+      await updateInsights();
+      await new Promise(resolve => setTimeout(resolve, 800));
+      await updateMarketNews(true);
+      await new Promise(resolve => setTimeout(resolve, 800));
+      await updateStocks();
+
+      // 2. Real-time Price Sync (Yahoo Finance / TradingView Simulation via AI)
+      const portfolioTickers = portfolioData.map(a => a.ticker.replace('.JK', ''));
+      const stockTickers = stocks.map(s => s.symbol);
+      const assetTickers = ASSETS.map(a => a.symbol);
+      const holdingTickers = HOLDINGS.map(h => h.symbol);
+      const tickersToFetch = [...new Set([
+        ...portfolioTickers, 
+        ...stockTickers, 
+        ...assetTickers, 
+        ...holdingTickers,
+        'BBCA', 'BBRI', 'TLKM', 'ADRO', 'COMPOSITE', 'USDIDR', 'STI'
+      ])];
+      
+      const livePrices = await fetchLivePrices(tickersToFetch);
+
+      if (livePrices && livePrices.length > 0) {
+        // Update Assets List
+        setAssetsData(prev => prev.map(asset => {
+          const live = livePrices.find(l => l.symbol === asset.symbol);
+          if (live) {
+            return {
+              ...asset,
+              value: `Rp ${(live.price / 1000).toFixed(1)}k`,
+              percentage: (live.changePercent >= 0 ? '+' : '') + live.changePercent.toFixed(1) + '%',
+              status: live.changePercent > 0.5 ? 'Bullish' : live.changePercent < -0.5 ? 'Bearish' : 'Stable'
+            };
+          }
+          return asset;
+        }));
+
+        // Update Portfolio Data
+        setPortfolioData(prev => prev.map(asset => {
+          const ticker = asset.ticker.replace('.JK', '');
+          const live = livePrices.find(l => l.symbol === ticker || l.symbol === asset.ticker);
+          if (live) {
+            return { ...asset, marketPrice: live.price };
+          }
+          return asset;
+        }));
+
+        // Update Scan/Stock List Data
+        setStocks(prev => prev.map(stock => {
+          const live = livePrices.find(l => l.symbol === stock.symbol);
+          if (live) {
+            return {
+              ...stock,
+              price: live.price.toLocaleString('id-ID'),
+              change: (live.changePercent >= 0 ? '+' : '') + live.changePercent.toFixed(2) + '%'
+            };
+          }
+          return stock;
+        }));
+
+        // Update Technical Logs
+        setTechnicalLogs(prev => prev.map(log => {
+          const live = livePrices.find(l => l.symbol === log.symbol);
+          if (live) {
+            return {
+              ...log,
+              price: live.price.toLocaleString('id-ID')
+            };
+          }
+          return log;
+        }));
+      }
+      
+      setLastMarketSync(new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }));
+    } catch (err) {
+      console.error("Sync Error:", err);
+    } finally {
+      isMarketSyncingRef.current = false;
+      setIsMarketSyncing(false);
+    }
+  }, [updateInsights, updateStocks, updateMarketNews, portfolioData, stocks]);
+
+  // Effects
+  useEffect(() => {
+    // VAM Gateway Core: Real-time WebSocket Protocol
+    const socket = io();
+
+    socket.on('connect', () => {
+      console.log('[VAM PROTOCOL] Real-time Gateway Tunnel Established');
+    });
+
+    socket.on('market-update', (data: { 
+      symbol: string; 
+      price: number; 
+      changePercent: number; 
+      vwap?: number;
+      ema20?: number;
+      ema50?: number;
+      rsi?: number;
+      macdHist?: number;
+      timestamp: number 
+    }) => {
+      const { symbol, price, changePercent } = data;
+
+      // Update Assets Data (State)
+      setAssetsData(prev => prev.map(asset => {
+        if (asset.symbol === symbol) {
+          return {
+            ...asset,
+            value: `Rp ${(price / 1000).toFixed(1)}k`,
+            percentage: (changePercent >= 0 ? '+' : '') + changePercent.toFixed(1) + '%',
+            status: changePercent > 0.5 ? 'Bullish' : changePercent < -0.5 ? 'Bearish' : 'Stable'
+          };
+        }
+        return asset;
+      }));
+
+      // Update Stocks List (State)
+      setStocks(prev => prev.map(stock => {
+        if (stock.symbol === symbol) {
+          return {
+            ...stock,
+            price: price.toLocaleString('id-ID'),
+            currentPrice: price,
+            change: (changePercent >= 0 ? '+' : '') + changePercent.toFixed(2) + '%'
+          };
+        }
+        return stock;
+      }));
+
+      // Update Portfolio (State)
+      setPortfolioData(prev => prev.map(asset => {
+        const cleanTicker = asset.ticker.replace('.JK', '');
+        if (cleanTicker === symbol || asset.ticker === symbol) {
+          return { ...asset, marketPrice: price };
+        }
+        return asset;
+      }));
+
+      // Dispatch custom event for child components like IntradayScanner
+      window.dispatchEvent(new CustomEvent('vam-market-update', { detail: data }));
+
+      // Update Technical Logs (State)
+      setTechnicalLogs(prev => prev.map(log => {
+        if (log.symbol === symbol) {
+          return { ...log, price: price.toLocaleString('id-ID') };
+        }
+        return log;
+      }));
+
+      // Direct DOM Update (Fast Path) for sub-second visual feedback
+      const tickerElements = document.querySelectorAll(`[id^="price-${symbol}"]`);
+      tickerElements.forEach(el => {
+        if (el instanceof HTMLElement) {
+          el.innerText = `Rp ${new Intl.NumberFormat('id-ID').format(price)}`;
+          el.classList.add('text-[#deff9a]', 'animate-pulse');
+          setTimeout(() => el.classList.remove('animate-pulse'), 400);
+        }
+      });
+    });
+
+    return () => {
+      socket.disconnect();
+    };
+  }, []);
 
   useEffect(() => {
     updateInsights();
-    updateStocks();
     updateMarketNews();
-    const interval = setInterval(() => {
-      updateInsights();
-      updateMarketNews();
-    }, 1200000); // Poll every 20 minutes to save quota
-    return () => clearInterval(interval);
-  }, [updateInsights, updateStocks, updateMarketNews]);
+    updateStocks();
+  }, [updateInsights, updateMarketNews, updateStocks]);
+
+  useEffect(() => {
+    updateCGSPrices();
+    // Only low-frequency sync for non-streamed items (e.g. portfolio data not on standard exchange)
+    const portfolioInterval = setInterval(updateCGSPrices, 30000); 
+    return () => clearInterval(portfolioInterval);
+  }, [updateCGSPrices]);
+
+  useEffect(() => {
+    // The high-freq tick and sync logic is now handled by the WebSocket stream in the previous useEffect.
+    // We only keep a very occasional background sync for general metadata.
+    const backgroundSyncInterval = setInterval(() => {
+      if (!isMarketSyncingRef.current) {
+        updateStocks();
+        updateMarketNews();
+        syncMarketConnectivity();
+      }
+    }, 120000); // 2 minutes
+    
+    return () => clearInterval(backgroundSyncInterval);
+  }, [updateStocks, updateMarketNews]);
 
   // Security Strategy: Context Menu Protection
   useEffect(() => {
@@ -232,7 +590,7 @@ export default function App() {
 
   const renderContent = () => {
     if (activeTab === 'asset-detail' && selectedAssetId) {
-      const selectedAsset = ASSETS.find(a => a.id === selectedAssetId);
+      const selectedAsset = assetsData.find(a => a.id === selectedAssetId);
       if (selectedAsset) {
         return (
           <AssetDetail 
@@ -246,7 +604,12 @@ export default function App() {
     switch (activeTab) {
       case 'home':
         return (
-          <>
+          <div className="space-y-6">
+            {/* Access Restricted Bar */}
+            <div className="bg-green-600/20 text-green-400 p-4 rounded-2xl text-center font-black text-xs uppercase tracking-[0.2em] border border-green-500/30 shadow-lg shadow-green-500/5">
+              INSTITUTIONAL ACCESS RESTRICTED
+            </div>
+
             {/* PERFORMANCE HISTORY CHART */}
             <PortfolioChart />
 
@@ -349,7 +712,7 @@ export default function App() {
               </div>
               
               <div className="space-y-4">
-                {ASSETS.map((asset, index) => (
+                {assetsData.map((asset, index) => (
                   <motion.div 
                     key={asset.id}
                     initial={{ opacity: 0, x: -20 }}
@@ -539,7 +902,7 @@ export default function App() {
                 )}
               </div>
             </motion.section>
-          </>
+          </div>
         );
       case 'market':
         return (
@@ -561,128 +924,161 @@ export default function App() {
               animate={{ opacity: 1, scale: 1 }}
               className="relative"
             >
-              <TradingViewWidget />
+              <TradingViewWidget symbol={selectedSymbol} />
             </motion.div>
 
-            {/* Recommendation Terminal */}
             <div className="space-y-4">
               <div className="flex items-center justify-between px-1">
                 <div className="flex items-center gap-2">
                   <TrendingUp className="w-4 h-4 text-[#deff9a]" />
-                  <h4 className="text-xs font-bold text-slate-400 uppercase tracking-widest">IDX AI Recommendations</h4>
+                  <div className="flex flex-col">
+                    <h4 className="text-xs font-bold text-slate-100 uppercase tracking-widest">IDX Intelligence Scanner</h4>
+                    <span className="text-[7px] text-slate-500 font-bold uppercase tracking-widest flex items-center gap-1">
+                      <Zap className="w-2 h-2 text-orange-400" /> REAL-TIME SMART FILTERING
+                    </span>
+                  </div>
                 </div>
-                <div className="flex items-center gap-2">
-                  <button 
-                    onClick={() => setShowScanParams(!showScanParams)}
-                    className={`p-1.5 rounded-lg border border-slate-800 transition-colors ${showScanParams ? 'bg-[#deff9a]/10 text-[#deff9a]' : 'bg-slate-900/50 text-slate-500 hover:text-slate-300'}`}
-                  >
-                    <Settings2 className="w-3.5 h-3.5" />
-                  </button>
-                  <button 
-                    onClick={updateStocks}
-                    disabled={isScanning}
-                    className="text-[10px] text-[#deff9a] font-bold uppercase tracking-wider flex items-center gap-1 hover:opacity-80 transition-opacity disabled:opacity-50"
-                  >
-                    <RefreshCw className={`w-3 h-3 ${isScanning ? 'animate-spin' : ''}`} />
-                    {isScanning ? 'Scanning...' : 'Run Market Scan'}
-                  </button>
+              <div className="flex items-center gap-2">
+                <button 
+                  onClick={() => setShowIntradayScanner(!showIntradayScanner)}
+                  className={`px-3 py-1.5 rounded-xl border text-[9px] font-black tracking-widest transition-all flex items-center gap-2 ${
+                    showIntradayScanner 
+                      ? 'bg-[#d4af37]/20 border-[#d4af37]/50 text-[#d4af37]' 
+                      : 'bg-zinc-900/50 border-white/5 text-zinc-400 hover:text-white hover:bg-zinc-800'
+                  }`}
+                >
+                  <Radar className={`w-3.5 h-3.5 ${showIntradayScanner ? 'animate-pulse' : ''}`} />
+                  {showIntradayScanner ? 'HIDE RADAR' : 'INTRADAY RADAR'}
+                </button>
+                <div className="flex items-center gap-1.5 bg-[#deff9a]/10 px-2 py-1 rounded-full border border-[#deff9a]/20">
+                  <div className="w-1.5 h-1.5 bg-[#deff9a] rounded-full animate-pulse shadow-[0_0_8px_rgba(222,255,154,0.5)]" />
+                  <span className="text-[8px] text-[#deff9a] font-black uppercase tracking-widest whitespace-nowrap">LIVE TRADINGVIEW FEED</span>
+                </div>
+              </div>
+            </div>
+
+            <AnimatePresence>
+              {showIntradayScanner && (
+                <motion.div
+                  initial={{ opacity: 0, height: 0, scale: 0.95 }}
+                  animate={{ opacity: 1, height: 'auto', scale: 1 }}
+                  exit={{ opacity: 0, height: 0, scale: 0.95 }}
+                  className="overflow-hidden"
+                >
+                  <IntradayScanner />
+                </motion.div>
+              )}
+            </AnimatePresence>
+
+              {/* DISCOVERY FILTER CHECK */}
+              {stocks && stocks.length > 0 && (
+                <div className="px-1 py-1">
+                   <div className="flex items-center gap-2 px-3 py-1.5 bg-blue-500/10 border border-blue-500/20 rounded-full w-fit">
+                    <Activity className="w-3 h-3 text-blue-400" />
+                    <span className="text-[8px] font-black text-blue-400 uppercase tracking-widest">
+                      {stocks.length} assets successfully filtered via VentureAM Smart Algorithm
+                    </span>
+                   </div>
+                </div>
+              )}
+
+              {/* LOCKED FILTERS BANNER */}
+              <div className="bg-slate-900/40 p-3 rounded-2xl border border-[#deff9a]/10 flex flex-col gap-2">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <ShieldCheck className="w-3 h-3 text-[#deff9a]" />
+                    <span className="text-[9px] font-black text-slate-300 uppercase tracking-widest">Active Smart Constraints</span>
+                  </div>
+                  <span className="text-[8px] font-bold text-[#deff9a] bg-[#deff9a]/10 px-2 py-0.5 rounded border border-[#deff9a]/20 uppercase">Locked</span>
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  <div className="px-2 py-1 bg-slate-950 rounded-lg border border-slate-800 text-[8px] font-mono text-slate-400 flex items-center gap-1.5">
+                    <div className="w-1 h-1 bg-blue-400 rounded-full" /> PRICE &gt; EMA(20)
+                  </div>
+                  <div className="px-2 py-1 bg-slate-950 rounded-lg border border-slate-800 text-[8px] font-mono text-slate-400 flex items-center gap-1.5">
+                    <div className="w-1 h-1 bg-orange-400 rounded-full" /> EPS GROW (TTM) &lt; 10%
+                  </div>
+                </div>
+              </div>
+              
+              {/* TECHNICAL SIGNAL FEED LOG */}
+              <div className="space-y-3 mb-4">
+                <div className="flex items-center gap-2 overflow-x-auto pb-1 scrollbar-hide">
+                  {['1D', '5D', '1W', '1M', '1Y'].map((tf) => (
+                    <button 
+                      key={tf}
+                      onClick={() => setScanOptions(prev => ({ ...prev, timeframe: tf as any }))}
+                      className={`text-[9px] font-black px-3 py-1.5 rounded-full transition-all whitespace-nowrap border ${
+                        scanOptions.timeframe === tf 
+                        ? 'bg-[#deff9a] text-black border-[#deff9a]' 
+                        : 'bg-white/5 text-slate-500 border-white/10 hover:border-white/20'
+                      }`}
+                    >
+                      {tf}
+                    </button>
+                  ))}
                 </div>
               </div>
 
-              <AnimatePresence>
-                {showScanParams && (
-                  <motion.div
-                    initial={{ height: 0, opacity: 0 }}
-                    animate={{ height: 'auto', opacity: 1 }}
-                    exit={{ height: 0, opacity: 0 }}
-                    className="overflow-hidden"
-                  >
-                    <div className="bg-slate-900/60 p-4 rounded-2xl border border-slate-800/50 mb-3 grid grid-cols-1 gap-3">
-                      <div className="grid grid-cols-2 gap-3">
-                        <div className="space-y-1.5">
-                          <label className="text-[9px] font-bold text-slate-500 uppercase tracking-wider flex items-center gap-1.5 px-1">
-                            <Database className="w-2.5 h-2.5" /> Asset Type
-                          </label>
-                          <select 
-                            value={scanOptions.assetType}
-                            onChange={(e) => setScanOptions(prev => ({ ...prev, assetType: e.target.value }))}
-                            className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-[10px] text-slate-300 focus:outline-none focus:ring-1 focus:ring-[#deff9a]/50"
-                          >
-                            <option value="Equities">Equities</option>
-                            <option value="Bonds">Fixed Income (Bonds)</option>
-                            <option value="ETFs">ETFs</option>
-                          </select>
-                        </div>
-                        <div className="space-y-1.5">
-                          <label className="text-[9px] font-bold text-slate-500 uppercase tracking-wider flex items-center gap-1.5 px-1">
-                            <Filter className="w-2.5 h-2.5" /> Sector Focus
-                          </label>
-                          <select 
-                            value={scanOptions.sector}
-                            onChange={(e) => setScanOptions(prev => ({ ...prev, sector: e.target.value }))}
-                            className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-[10px] text-slate-300 focus:outline-none focus:ring-1 focus:ring-[#deff9a]/50"
-                          >
-                            <option value="">All Sectors</option>
-                            <option value="Energy">Energy & Mining</option>
-                            <option value="Financial">Financial Services</option>
-                            <option value="Tech">Technology & Digital</option>
-                            <option value="Property">Real Estate & Property</option>
-                            <option value="Consumer">Consumer Goods</option>
-                          </select>
-                        </div>
-                      </div>
-
-                      <div className="grid grid-cols-2 gap-3">
-                        <div className="space-y-1.5">
-                          <label className="text-[9px] font-bold text-slate-500 uppercase tracking-wider flex items-center gap-1.5 px-1">
-                            <ShieldCheck className="w-2.5 h-2.5" /> Risk Profile
-                          </label>
-                          <select 
-                            value={scanOptions.riskProfile}
-                            onChange={(e) => setScanOptions(prev => ({ ...prev, riskProfile: e.target.value }))}
-                            className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-[10px] text-slate-300 focus:outline-none focus:ring-1 focus:ring-[#deff9a]/50"
-                          >
-                            <option value="conservative">Conservative</option>
-                            <option value="moderate">Moderate</option>
-                            <option value="aggressive">Aggressive</option>
-                          </select>
-                        </div>
-                        <div className="space-y-1.5">
-                          <label className="text-[9px] font-bold text-slate-500 uppercase tracking-wider flex items-center gap-1.5 px-1">
-                            <Target className="w-2.5 h-2.5" /> Signal Filter
-                          </label>
-                          <select 
-                            value={scanOptions.signalFilter}
-                            onChange={(e) => setScanOptions(prev => ({ ...prev, signalFilter: e.target.value }))}
-                            className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-[10px] text-slate-300 focus:outline-none focus:ring-1 focus:ring-[#deff9a]/50"
-                          >
-                            <option value="ALL">All Signals</option>
-                            <option value="BUY">Strong Buy Only</option>
-                            <option value="SELL">Sell Signals Only</option>
-                            <option value="HOLD">Hold Signals Only</option>
-                          </select>
-                        </div>
-                      </div>
-
-                      <div className="space-y-1.5">
-                        <label className="text-[9px] font-bold text-slate-500 uppercase tracking-wider flex items-center gap-1.5 px-1">
-                          <TrendingUp className="w-2.5 h-2.5" /> Sort Results By
-                        </label>
-                        <select 
-                          value={scanOptions.sortBy}
-                          onChange={(e) => setScanOptions(prev => ({ ...prev, sortBy: e.target.value as any }))}
-                          className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-[10px] text-slate-300 focus:outline-none focus:ring-1 focus:ring-[#deff9a]/50"
-                        >
-                          <option value="signal">Signal Strength</option>
-                          <option value="price">Price (IDR)</option>
-                          <option value="change">24h Performance</option>
-                        </select>
-                      </div>
+              {/* TECHNICAL SIGNAL FEED LOG */}
+              <div className="bg-zinc-900/50 rounded-[2.5rem] border border-white/10 overflow-hidden shadow-2xl backdrop-blur-xl">
+                <div className="p-5 border-b border-white/5 flex items-center justify-between bg-zinc-900/60">
+                   <div className="flex items-center gap-3">
+                    <div className="p-2 bg-[#DFFF00]/10 rounded-xl">
+                      <Target className="w-4 h-4 text-[#DFFF00]" />
                     </div>
-                  </motion.div>
-                )}
-              </AnimatePresence>
-              
+                    <div>
+                      <h4 className="text-xs font-black text-white uppercase tracking-widest">Signal Detection Log</h4>
+                      <p className="text-[8px] text-zinc-500 font-bold uppercase mt-0.5">VentureAM Smart Scan Persistence</p>
+                    </div>
+                   </div>
+                   <div className="flex items-center gap-3">
+                      <div className="flex items-center gap-1 bg-black/40 rounded-lg p-1 border border-white/5">
+                        <button 
+                          onClick={() => setLogSortBy('timestamp')}
+                          className={`text-[9px] px-2 py-0.5 rounded transition-colors font-bold ${logSortBy === 'timestamp' ? 'bg-[#DFFF00] text-black' : 'text-zinc-500 hover:text-zinc-300'}`}
+                        >
+                          TIME
+                        </button>
+                        <button 
+                          onClick={() => setLogSortBy('symbol')}
+                          className={`text-[9px] px-2 py-0.5 rounded transition-colors font-bold ${logSortBy === 'symbol' ? 'bg-[#DFFF00] text-black' : 'text-zinc-500 hover:text-zinc-300'}`}
+                        >
+                          SYM
+                        </button>
+                      </div>
+                      <button 
+                        onClick={() => setLogSortOrder(prev => prev === 'asc' ? 'desc' : 'asc')}
+                        className="p-1 hover:bg-white/5 rounded-lg transition-colors text-zinc-500 hover:text-[#DFFF00]"
+                        title={logSortOrder === 'asc' ? 'Ascending' : 'Descending'}
+                      >
+                        {logSortOrder === 'asc' ? <ArrowUpRight className="w-3 h-3" /> : <ArrowDownRight className="w-3 h-3" />}
+                      </button>
+                      <span className="text-[8px] font-mono text-zinc-500 uppercase">Buffer: {technicalLogs.length}/50</span>
+                    </div>
+                </div>
+                
+                <div className="max-h-[300px] overflow-y-auto scrollbar-hide">
+                  {sortedLogs.length > 0 ? (
+                    sortedLogs.map((stock, i) => (
+                      <div key={`${stock.symbol}-${stock.detectedAt || i}`}>
+                        <MarketFeedLog stockData={stock} />
+                      </div>
+                    ))
+                  ) : (
+                    <div className="p-10 flex flex-col items-center justify-center text-center">
+                      <div className="w-12 h-12 rounded-full border-2 border-dashed border-zinc-800 flex items-center justify-center mb-3">
+                        <Radar className="w-6 h-6 text-zinc-700 animate-pulse" />
+                      </div>
+                      <p className="text-[10px] text-zinc-600 font-black uppercase tracking-widest leading-relaxed">
+                        Initializing Gateway Feed...<br/>Awaiting qualifying IDX signatures
+                      </p>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Discovery Feed */}
               <div className="grid grid-cols-1 gap-3">
                 <AnimatePresence mode="popLayout">
                   {stocks.length > 0 ? (
@@ -694,26 +1090,53 @@ export default function App() {
                         exit={{ opacity: 0, scale: 0.95 }}
                         transition={{ delay: idx * 0.05 }}
                         whileHover={{ x: 4 }}
-                        className="bg-slate-900/40 p-4 rounded-2xl border border-slate-800/50 flex justify-between items-center group"
+                        onClick={() => {
+                          const asset = ASSETS.find(a => a.symbol === stock.symbol);
+                          setSelectedSymbol(`IDX:${stock.symbol}`);
+                          if (asset) {
+                            setSelectedAssetId(asset.id);
+                            setActiveTab('asset-detail');
+                          }
+                        }}
+                        className="bg-slate-900/40 p-4 rounded-2xl border border-slate-800/50 flex justify-between items-center group cursor-pointer active:scale-95 transition-all"
                       >
-                        <div className="flex items-center gap-3">
-                          <div className={`text-[10px] font-bold py-1 px-2 min-w-[45px] text-center rounded-lg ${
-                            stock.signal === 'BUY' ? 'bg-green-500/10 text-green-400 border border-green-500/20' : 
-                            stock.signal === 'SELL' ? 'bg-red-500/10 text-red-400 border border-red-500/20' : 
-                            'bg-slate-800 text-slate-400'
-                          }`}>
-                            {stock.signal}
+                        <div className="flex flex-col flex-1 min-w-0">
+                          <div className="flex items-center gap-3 mb-2">
+                            <div className={`text-[10px] font-bold py-1 px-2 min-w-[45px] text-center rounded-lg ${
+                              stock.signal === 'BUY' ? 'bg-green-500/10 text-green-400 border border-green-500/20 shadow-[0_0_10px_rgba(34,197,94,0.1)]' : 
+                              stock.signal === 'SELL' ? 'bg-red-500/10 text-red-400 border border-red-500/20' : 
+                              'bg-slate-800 text-slate-400'
+                            }`}>
+                              {stock.signal}
+                            </div>
+                            <div className="min-w-0 flex-1">
+                              <p className="font-bold text-sm text-slate-100 uppercase truncate">{stock.symbol}</p>
+                              <p className="text-[9px] text-slate-500 font-bold uppercase truncate">{stock.name}</p>
+                            </div>
                           </div>
-                          <div>
-                            <p className="font-bold text-sm text-slate-100">{stock.symbol}</p>
-                            <p className="text-[10px] text-slate-500">{stock.name}</p>
+                          
+                          <div className="grid grid-cols-3 gap-2 border-t border-slate-800/50 pt-2 mt-1">
+                            <div className="flex flex-col">
+                              <span className="text-[7px] text-slate-500 uppercase font-bold tracking-widest">Volume</span>
+                              <span className="text-[10px] text-slate-300 font-mono font-bold">{stock.volume || 'N/A'}</span>
+                            </div>
+                            <div className="flex flex-col">
+                              <span className="text-[7px] text-slate-500 uppercase font-bold tracking-widest">P/E Ratio</span>
+                              <span className="text-[10px] text-slate-300 font-mono font-bold">{stock.peRatio || 'N/A'}</span>
+                            </div>
+                            <div className="flex flex-col border-l border-slate-800 pl-2">
+                              <span className="text-[7px] text-slate-500 uppercase font-bold tracking-widest">Mkt Cap</span>
+                              <span className="text-[10px] text-[#deff9a] font-mono font-bold">{stock.marketCap || 'N/A'}</span>
+                            </div>
                           </div>
                         </div>
-                        <div className="text-right">
-                          <p className="text-xs font-mono font-bold text-slate-200">Rp {stock.price}</p>
-                          <p className={`text-[10px] font-medium ${stock.change.startsWith('+') ? 'text-green-400' : 'text-red-400'}`}>
+
+                        <div className="text-right pl-4 border-l border-slate-800/50 ml-2">
+                          <p className="text-sm font-mono font-black text-slate-200">Rp {stock.price}</p>
+                          <p className={`text-[10px] font-black ${stock.change.startsWith('+') ? 'text-green-400' : 'text-red-400'}`}>
                             {stock.change}
                           </p>
+                          <div className="mt-2 text-[7px] text-slate-600 font-black uppercase tracking-tighter shadow-sm">Verified</div>
                         </div>
                       </motion.div>
                     ))
@@ -724,20 +1147,64 @@ export default function App() {
                   )}
                 </AnimatePresence>
               </div>
+
+              <div className="pt-2">
+                <button 
+                  onClick={() => setShowScanParams(!showScanParams)}
+                  className="w-full py-2 border border-slate-800 rounded-xl text-[9px] font-black text-slate-500 uppercase tracking-[0.2em] hover:bg-slate-900 transition-all flex items-center justify-center gap-2"
+                >
+                  <Search className="w-3 h-3" />
+                  {showScanParams ? "Close Deep Explorer" : "Launch Technical Explorer"}
+                </button>
+              </div>
+
+              <AnimatePresence>
+                {showScanParams && (
+                  <motion.div
+                    initial={{ height: 0, opacity: 0 }}
+                    animate={{ height: 'auto', opacity: 1 }}
+                    exit={{ height: 0, opacity: 0 }}
+                    className="overflow-hidden space-y-3"
+                  >
+                    <div className="bg-slate-900/20 rounded-2xl border border-slate-800/50 overflow-hidden shadow-2xl">
+                      <div className="p-3 border-b border-slate-800 flex justify-between items-center bg-slate-900/60">
+                        <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest">TradingView Real-time Board</span>
+                        <div className="flex items-center gap-1.5">
+                          <div className="w-1 h-1 bg-green-500 rounded-full animate-pulse" />
+                          <span className="text-[8px] text-slate-600 font-bold uppercase">Cloud Connection Active</span>
+                        </div>
+                      </div>
+                      <TradingViewScreenerWidget />
+                    </div>
+                  </motion.div>
+                )}
+              </AnimatePresence>
             </div>
 
-            <div className="grid grid-cols-2 gap-3 mb-6">
-              {['COMPOSITE', 'USD/IDR', 'GOLD', 'FTSE'].map((index) => (
-                <div key={index} className="bg-slate-900/50 p-3 rounded-xl border border-slate-800/50 flex justify-between items-center">
-                  <span className="text-[10px] font-bold text-slate-500 uppercase tracking-tighter">{index}</span>
-                  <div className="text-right">
-                    <p className="text-xs font-mono font-bold text-slate-200">
-                      {index === 'USD/IDR' ? '15,842' : '7,245.1'}
-                    </p>
-                    <p className="text-[8px] text-green-400">+0.12%</p>
-                  </div>
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-6">
+              <div onClick={() => setSelectedSymbol('IDX:COMPOSITE')} className="cursor-pointer transition-transform active:scale-95">
+                <MarketMetricCard symbol="JCI" label="JCI (IHSG)" proName="IDX:COMPOSITE" />
+              </div>
+              <div onClick={() => setSelectedSymbol('FX_IDC:USDIDR')} className="cursor-pointer transition-transform active:scale-95">
+                <MarketMetricCard symbol="USDIDR" label="USD/IDR" proName="FX_IDC:USDIDR" />
+              </div>
+              <div onClick={() => setSelectedSymbol('OANDA:XAUUSD')} className="cursor-pointer transition-transform active:scale-95">
+                <MarketMetricCard symbol="GOLD" label="GOLD" proName="OANDA:XAUUSD" />
+              </div>
+              <div onClick={() => setSelectedSymbol('STI')} className="cursor-pointer transition-transform active:scale-95">
+                <MarketMetricCard symbol="STI" label="STI Index" proName="STI" />
+              </div>
+            </div>
+
+            <div className="space-y-2 mb-6">
+              <div className="flex items-center justify-between px-1">
+                <h4 className="text-[10px] font-bold text-slate-500 uppercase tracking-[0.2em]">Institutional Market Feed</h4>
+                <div className="flex items-center gap-2">
+                  <div className="h-1 w-1 bg-[#deff9a] rounded-full animate-pulse" />
+                  <span className="text-[8px] text-slate-400 font-bold uppercase">TradingView Direct</span>
                 </div>
-              ))}
+              </div>
+              <TradingViewMarketWidget />
             </div>
 
             {/* IDX PREMIUM DISCOVERY CARD */}
@@ -764,26 +1231,36 @@ export default function App() {
                 <p className="text-xs text-slate-400 mb-6 leading-relaxed font-medium">
                   Scan 800+ IDX tickers for breakout patterns and relative strength using core Ventuream intelligence. Precision targeting for the Indonesian market.
                 </p>
-                <button 
-                  onClick={() => {
-                    updateStocks();
-                    setShowVamScanner(!showVamScanner);
-                  }}
-                  disabled={isScanning}
-                  className="w-full py-4 bg-[#deff9a] text-slate-950 font-black text-[11px] uppercase tracking-[0.2em] rounded-2xl shadow-[0_0_30px_rgba(222,255,154,0.15)] hover:scale-[1.01] active:scale-[0.98] transition-all disabled:opacity-50 flex items-center justify-center gap-3"
-                >
-                  {isScanning ? (
-                    <>
-                      <RefreshCw className="w-4 h-4 animate-spin text-slate-900" />
-                      Initializing IDX Scan...
-                    </>
-                  ) : (
-                    <>
-                      <Activity className="w-4 h-4" />
-                      {showVamScanner ? 'Hide Smart Scanner' : 'Execute Smart IDX Scan'}
-                    </>
-                  )}
-                </button>
+                <div className="flex flex-col gap-3">
+                  <button 
+                    onClick={() => {
+                      updateStocks();
+                      setShowVamScanner(!showVamScanner);
+                    }}
+                    disabled={isScanning}
+                    className="w-full py-4 bg-[#deff9a] text-slate-950 font-black text-[11px] uppercase tracking-[0.2em] rounded-2xl shadow-[0_0_30px_rgba(222,255,154,0.15)] hover:scale-[1.01] active:scale-[0.98] transition-all disabled:opacity-50 flex items-center justify-center gap-3"
+                  >
+                    {isScanning ? (
+                      <>
+                        <RefreshCw className="w-4 h-4 animate-spin text-slate-900" />
+                        Initializing IDX Scan...
+                      </>
+                    ) : (
+                      <>
+                        <Activity className="w-4 h-4" />
+                        {showVamScanner ? 'Hide Smart Scanner' : 'Execute Smart IDX Scan'}
+                      </>
+                    )}
+                  </button>
+
+                  <button 
+                    onClick={() => setShowIntradayScanner(!showIntradayScanner)}
+                    className={`w-full py-3 border ${showIntradayScanner ? 'bg-[#d4af37]/20 border-[#d4af37]/50 text-[#d4af37]' : 'border-white/10 text-white/60 hover:bg-white/5'} font-black text-[10px] uppercase tracking-[0.2em] rounded-2xl transition-all flex items-center justify-center gap-3`}
+                  >
+                    <Radar className={`w-4 h-4 ${showIntradayScanner ? 'animate-pulse' : ''}`} />
+                    {showIntradayScanner ? 'Hide Intraday Radar' : 'Launch Intraday Super-Signal'}
+                  </button>
+                </div>
                 
                 <AnimatePresence>
                   {showVamScanner && (
@@ -796,6 +1273,16 @@ export default function App() {
                       <VamSmartScanner />
                     </motion.div>
                   )}
+                  {showIntradayScanner && (
+                    <motion.div
+                      initial={{ opacity: 0, height: 0, marginTop: 0 }}
+                      animate={{ opacity: 1, height: 'auto', marginTop: 24 }}
+                      exit={{ opacity: 0, height: 0, marginTop: 0 }}
+                      className="overflow-hidden"
+                    >
+                      <IntradayScanner />
+                    </motion.div>
+                  )}
                 </AnimatePresence>
               </div>
             </motion.div>
@@ -803,194 +1290,238 @@ export default function App() {
         );
       case 'portfolio':
         return (
-          <div className="space-y-6">
-            <div className="flex justify-between items-center px-1">
-              <h3 className="text-sm font-semibold text-slate-300">Portfolio Hub</h3>
-              <div className="flex items-center gap-2">
-                <button 
-                  onClick={syncMarketConnectivity}
-                  disabled={isMarketSyncing}
-                  className="p-2 bg-slate-800 text-[#deff9a] rounded-xl hover:bg-slate-700 transition-colors disabled:opacity-50"
-                >
-                  <RefreshCw className={`w-4 h-4 ${isMarketSyncing ? 'animate-spin' : ''}`} />
-                </button>
-                <button className="p-2 bg-[#deff9a] text-slate-950 rounded-xl flex items-center gap-2 font-bold text-[10px] uppercase tracking-wider px-3">
-                  <Plus className="w-3 h-3" />
-                  Add
-                </button>
-              </div>
-            </div>
-
-            {/* Connection Status: CGS & IBKR */}
-            <div className="grid grid-cols-2 gap-3">
-              <div className="bg-slate-900/50 p-4 rounded-2xl border border-slate-800 flex flex-col gap-3 relative overflow-hidden group">
-                <div className="absolute top-0 right-0 p-4 bg-blue-500/5 blur-xl rounded-full -mr-2 -mt-2"></div>
-                <div className="flex items-center gap-2">
-                  <div className="p-1.5 bg-blue-500/10 rounded-lg">
-                    <Database className="w-3 h-3 text-blue-400" />
-                  </div>
-                  <p className="text-[9px] text-slate-500 uppercase font-bold tracking-tighter">CGS Partner</p>
-                </div>
-                <div>
-                  <p className="text-xs font-bold text-slate-200">CGS International</p>
-                  <div className="flex items-center gap-1.5 mt-1 bg-green-500/10 px-2 py-0.5 rounded-full border border-green-500/20 w-fit">
-                    <div className="w-1 h-1 bg-green-500 rounded-full animate-pulse" />
-                    <span className="text-[8px] text-green-400 font-bold uppercase tracking-tight">Connected</span>
-                  </div>
-                </div>
-              </div>
-
-              <div className="bg-slate-900/50 p-4 rounded-2xl border border-slate-800 flex flex-col gap-3 relative overflow-hidden group">
-                <div className="absolute top-0 right-0 p-4 bg-orange-500/5 blur-xl rounded-full -mr-2 -mt-2"></div>
-                <div className="flex items-center gap-2">
-                  <div className="p-1.5 bg-orange-500/10 rounded-lg">
-                    <TrendingUp className="w-3 h-3 text-orange-400" />
-                  </div>
-                  <p className="text-[9px] text-slate-500 uppercase font-bold tracking-tighter">Global Broker</p>
-                </div>
-                <div>
-                  <p className="text-xs font-bold text-slate-200">IBKR Global</p>
-                  <div className="flex items-center gap-1.5 mt-1 bg-[#deff9a]/10 px-2 py-0.5 rounded-full border border-[#deff9a]/20 w-fit">
-                    <div className="w-1 h-1 bg-[#deff9a] rounded-full animate-pulse" />
-                    <span className="text-[8px] text-[#deff9a] font-bold uppercase tracking-tight">Linked</span>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            {/* Sync Status Card */}
-            <motion.div 
-              whileTap={{ scale: 0.98 }}
-              onClick={syncMarketConnectivity}
-              className={`bg-slate-900/50 p-4 rounded-2xl border border-slate-800 flex items-center justify-between cursor-pointer hover:bg-slate-800/40 transition-colors ${isMarketSyncing ? 'border-[#deff9a]/30' : ''}`}
-            >
-              <div className="flex items-center gap-3">
-                <div className={`p-2 rounded-lg ${isMarketSyncing ? 'bg-[#deff9a] text-slate-950' : 'bg-[#deff9a]/10 text-[#deff9a]'}`}>
-                  <RefreshCw className={`w-4 h-4 ${isMarketSyncing ? 'animate-spin' : ''}`} />
-                </div>
-                <div>
-                  <p className="text-[10px] text-slate-500 uppercase font-bold tracking-tighter">Market Connectivity</p>
+          <VAMTerminalScanner 
+            defaultTab="PORTFOLIO"
+            activeMarket={activeScannerMarket}
+            activeModule={activeScannerModule}
+            livePrices={livePricesMap}
+            portfolioContent={
+              <div className="space-y-6">
+                <div className="flex justify-between items-center px-1">
+                  <h3 className="text-sm font-semibold text-slate-300">Portfolio Hub</h3>
                   <div className="flex items-center gap-2">
-                    <p className="text-xs font-bold text-slate-200">
-                      {isMarketSyncing ? 'Synchronizing Feeds...' : 'Unified Data Feed (IDX + US)'}
-                    </p>
-                    {!isMarketSyncing && <div className="w-1.5 h-1.5 bg-green-500 rounded-full animate-pulse" />}
+                    <button 
+                      onClick={syncMarketConnectivity}
+                      disabled={isMarketSyncing}
+                      className="p-2 bg-slate-800 text-[#DFFF00] rounded-xl hover:bg-slate-700 transition-colors disabled:opacity-50"
+                    >
+                      <RefreshCw className={`w-4 h-4 ${isMarketSyncing ? 'animate-spin' : ''}`} />
+                    </button>
+                    <button className="p-2 bg-[#DFFF00] text-slate-950 rounded-xl flex items-center gap-2 font-bold text-[10px] uppercase tracking-wider px-3">
+                      <Plus className="w-3 h-3" />
+                      Add
+                    </button>
                   </div>
                 </div>
-              </div>
-              <div className="text-right">
-                <span className="text-[8px] font-mono text-slate-500 bg-slate-800 px-2 py-1 rounded block mb-1 uppercase tracking-tighter">
-                  {isMarketSyncing ? 'Active Sync' : 'V2.4 SYNC'}
-                </span>
-                <p className="text-[7px] text-slate-600 font-bold uppercase tracking-widest">Last: {lastMarketSync}</p>
-              </div>
-            </motion.div>
 
-            {/* Performance Chart */}
-            <motion.div
-              initial={{ opacity: 0, scale: 0.95 }}
-              animate={{ opacity: 1, scale: 1 }}
-              transition={{ delay: 0.1 }}
-            >
-              <PortfolioChart />
-            </motion.div>
-
-            {/* Transaction History */}
-            <div className="space-y-4">
-              <div className="flex items-center justify-between px-1">
-                <h4 className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Gateway Execution Log</h4>
-                <div className="flex items-center gap-1.5">
-                  <div className="w-1 h-1 bg-[#deff9a] rounded-full animate-pulse" />
-                  <span className="text-[8px] text-[#deff9a] font-bold uppercase">Real-time History</span>
-                </div>
-              </div>
-              <TransactionTable data={history} />
-            </div>
-
-            {/* Holdings List */}
-            <div className="space-y-4">
-              <div className="flex items-center justify-between px-1">
-                <h4 className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Holdings Details</h4>
-                <span className="text-[10px] text-slate-600 font-mono">8 POSITIONS</span>
-              </div>
-              
-              <div className="space-y-3">
-                {HOLDINGS.map((asset, idx) => (
-                  <motion.div 
-                    key={asset.symbol}
-                    initial={{ opacity: 0, y: 10 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{ delay: idx * 0.05 }}
-                    onClick={() => {
-                      const foundAsset = ASSETS.find(a => a.symbol === asset.symbol);
-                      if (foundAsset) {
-                        setSelectedAssetId(foundAsset.id);
-                        setActiveTab('asset-detail');
-                      }
-                    }}
-                    className="bg-slate-900/40 p-4 rounded-2xl border border-slate-800/50 flex justify-between items-center group cursor-pointer hover:bg-slate-800/30 transition-colors"
-                  >
-                    <div className="flex items-center gap-3">
-                      <div className="w-10 h-10 rounded-xl bg-slate-800 flex items-center justify-center text-[10px] font-bold text-slate-400 border border-slate-700/50 group-hover:border-[#deff9a]/30 transition-colors">
-                        {asset.symbol}
+                {/* Connection Status: CGS & IBKR */}
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="bg-slate-900/50 p-4 rounded-2xl border border-slate-800 flex flex-col gap-3 relative overflow-hidden group">
+                    <div className="absolute top-0 right-0 p-4 bg-blue-500/5 blur-xl rounded-full -mr-2 -mt-2"></div>
+                    <div className="flex items-center gap-2">
+                      <div className="p-1.5 bg-blue-500/10 rounded-lg">
+                        <Database className="w-3 h-3 text-blue-400" />
                       </div>
-                      <div>
-                        <p className="font-bold text-sm text-slate-100">{asset.name}</p>
-                        <p className="text-[10px] text-slate-500">{asset.qty} Shares • {asset.type}</p>
+                      <p className="text-[9px] text-slate-500 uppercase font-bold tracking-tighter">CGS Partner</p>
+                    </div>
+                    <div>
+                      <p className="text-xs font-bold text-slate-200">CGS International</p>
+                      <div className="flex items-center gap-1.5 mt-1 bg-green-500/10 px-2 py-0.5 rounded-full border border-green-500/20 w-fit">
+                        <div className="w-1 h-1 bg-green-500 rounded-full animate-pulse" />
+                        <span className="text-[8px] text-green-400 font-bold uppercase tracking-tight">Connected</span>
                       </div>
                     </div>
-                    <div className="flex items-center gap-6">
-                      <div className="hidden xs:block">
-                        <Sparkline 
-                          data={asset.performance} 
-                          color={asset.change.startsWith('+') ? '#deff9a' : '#ef4444'} 
-                          height={20} 
-                        />
+                  </div>
+
+                  <div className="bg-slate-900/50 p-4 rounded-2xl border border-slate-800 flex flex-col gap-3 relative overflow-hidden group">
+                    <div className="absolute top-0 right-0 p-4 bg-orange-500/5 blur-xl rounded-full -mr-2 -mt-2"></div>
+                    <div className="flex items-center gap-2">
+                      <div className="p-1.5 bg-orange-500/10 rounded-lg">
+                        <TrendingUp className="w-3 h-3 text-orange-400" />
                       </div>
-                      <div className="text-right">
-                        <p className="text-xs font-mono font-bold text-slate-200">Rp {asset.value}</p>
-                        <p className={`text-[10px] font-medium ${asset.change.startsWith('+') ? 'text-green-400' : 
-                          asset.change === '0.0%' ? 'text-slate-500' : 'text-red-400'}`}>
-                          {asset.change}
+                      <p className="text-[9px] text-slate-500 uppercase font-bold tracking-tighter">Global Broker</p>
+                    </div>
+                    <div>
+                      <p className="text-xs font-bold text-slate-200">IBKR Global</p>
+                      <div className="flex items-center gap-1.5 mt-1 bg-[#deff9a]/10 px-2 py-0.5 rounded-full border border-[#deff9a]/20 w-fit">
+                        <div className="w-1 h-1 bg-[#deff9a] rounded-full animate-pulse" />
+                        <span className="text-[8px] text-[#deff9a] font-bold uppercase tracking-tight">Linked</span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Sync Status Card */}
+                <motion.div 
+                  whileTap={{ scale: 0.98 }}
+                  onClick={syncMarketConnectivity}
+                  className={`bg-slate-900/50 p-4 rounded-2xl border border-slate-800 flex items-center justify-between cursor-pointer hover:bg-slate-800/40 transition-colors ${isMarketSyncing ? 'border-[#deff9a]/30' : ''}`}
+                >
+                  <div className="flex items-center gap-3">
+                    <div className={`p-2 rounded-lg ${isMarketSyncing ? 'bg-[#deff9a] text-slate-950' : 'bg-[#deff9a]/10 text-[#deff9a]'}`}>
+                      <RefreshCw className={`w-4 h-4 ${isMarketSyncing ? 'animate-spin' : ''}`} />
+                    </div>
+                    <div>
+                      <p className="text-[10px] text-slate-500 uppercase font-bold tracking-tighter">Market Connectivity</p>
+                      <div className="flex items-center gap-2">
+                        <p className="text-xs font-bold text-slate-200">
+                          {isMarketSyncing ? 'Synchronizing Feeds...' : 'Unified Data Feed (IDX + US)'}
                         </p>
+                        {!isMarketSyncing && <div className="w-1.5 h-1.5 bg-green-500 rounded-full animate-pulse" />}
                       </div>
                     </div>
-                  </motion.div>
-                ))}
-              </div>
-            </div>
+                  </div>
+                  <div className="text-right">
+                    <span className="text-[8px] font-mono text-slate-500 bg-slate-800 px-2 py-1 rounded block mb-1 uppercase tracking-tighter">
+                      {isMarketSyncing ? 'Active Sync' : 'V2.4 SYNC'}
+                    </span>
+                    <p className="text-[7px] text-slate-600 font-bold uppercase tracking-widest">Last: {lastMarketSync}</p>
+                  </div>
+                </motion.div>
 
-            {/* Summary Action */}
-            <div className="bg-gradient-to-br from-slate-900 to-slate-950 p-5 rounded-2xl border border-slate-800 overflow-hidden relative">
-              <div className="absolute top-0 right-0 p-8 bg-blue-500/5 blur-3xl rounded-full -mr-4 -mt-4"></div>
-              <div className="flex justify-between items-center mb-4">
-                <h4 className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Unrealized Performance</h4>
-                <PieChart className="w-3 h-3 text-slate-600" />
-              </div>
-              <div className="space-y-4">
-                <div className="flex justify-between items-center">
-                  <span className="text-sm font-bold text-slate-300">Equity - IDX</span>
-                  <span className="text-sm font-mono text-slate-100">Rp 1.65M</span>
+                {/* Performance Chart */}
+                <motion.div
+                  initial={{ opacity: 0, scale: 0.95 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  transition={{ delay: 0.1 }}
+                >
+                  <PortfolioChart currentValue={totalPortfolioValue} />
+                </motion.div>
+
+                {/* Transaction History */}
+                <div className="space-y-4">
+                  <div className="flex items-center justify-between px-1">
+                    <h4 className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Gateway Execution Log</h4>
+                    <div className="flex items-center gap-1.5">
+                      <div className="w-1 h-1 bg-[#deff9a] rounded-full animate-pulse" />
+                      <span className="text-[8px] text-[#deff9a] font-bold uppercase">Real-time History</span>
+                    </div>
+                  </div>
+                  <TransactionTable data={history} />
                 </div>
-                <div className="w-full bg-slate-800/50 h-1.5 rounded-full overflow-hidden">
-                  <motion.div 
-                    initial={{ width: 0 }}
-                    animate={{ width: '42%' }}
-                    className="bg-red-500/50 h-full" 
+
+                {/* Holdings List */}
+                <div className="space-y-4">
+                  <div className="flex items-center justify-between px-1">
+                    <h4 className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Holdings Details</h4>
+                    <span className="text-[10px] text-slate-600 font-mono">{portfolioData.length} POSITIONS</span>
+                  </div>
+                  
+                  <div className="space-y-3">
+                    {portfolioData.map((asset, idx) => (
+                      <motion.div 
+                        key={asset.ticker}
+                        initial={{ opacity: 0, y: 10 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        transition={{ delay: idx * 0.05 }}
+                        onClick={() => {
+                          const cleanTicker = asset.ticker.split('.')[0];
+                          const foundAsset = ASSETS.find(a => a.symbol === cleanTicker);
+                          if (foundAsset) {
+                            setSelectedAssetId(foundAsset.id);
+                            setActiveTab('asset-detail');
+                          }
+                        }}
+                        className="bg-slate-900/40 p-4 rounded-2xl border border-slate-800/50 flex justify-between items-center group cursor-pointer hover:bg-slate-800/30 transition-colors"
+                      >
+                        <div className="flex items-center gap-3">
+                          <div className="w-10 h-10 rounded-xl bg-slate-800 flex items-center justify-center text-[10px] font-bold text-slate-400 border border-slate-700/50 group-hover:border-[#deff9a]/30 transition-colors uppercase">
+                            {asset.ticker.split('.')[0]}
+                          </div>
+                          <div>
+                            <p className="font-bold text-sm text-slate-100 uppercase">{asset.ticker.split('.')[0]}</p>
+                            <p className="text-[10px] text-slate-500">{asset.lots} Lots • {new Decimal(asset.averagePrice).toNumber().toFixed(2)} Avg</p>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-6">
+                          <div className="text-right">
+                            <p className="text-xs font-mono font-bold text-slate-200">Rp {asset.marketValue.toLocaleString('id-ID')}</p>
+                            <p className={`text-[10px] font-medium ${asset.change >= 0 ? 'text-green-400' : 'text-red-400'}`}>
+                              {asset.change >= 0 ? '+' : ''}{asset.change.toFixed(2)}%
+                            </p>
+                          </div>
+                        </div>
+                      </motion.div>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Bloomberg Portfolio Monitor */}
+                <div className="pt-6">
+                  <BloombergTable 
+                    portfolioData={portfolioData} 
+                    onSelectSymbol={(s) => {
+                      setSelectedSymbol(s);
+                      setActiveTab('home');
+                    }}
                   />
                 </div>
-                <div className="flex justify-between items-center text-[10px]">
-                  <span className="text-slate-500">Net Portfolio Drift</span>
-                  <span className="text-red-400 font-mono">-9.01%</span>
+
+                {/* Total Market Value Card Moved to Bottom */}
+                <div className="bg-slate-950 p-8 rounded-[2.5rem] border border-slate-800/80 shadow-2xl relative overflow-hidden group">
+                  <div className="absolute top-0 right-0 p-12 bg-blue-500/5 blur-3xl rounded-full -mr-10 -mt-10 group-hover:bg-blue-500/10 transition-all"></div>
+                  <div className="relative z-10">
+                    <p className="text-[10px] text-slate-500 font-black uppercase tracking-[0.3em] mb-2">Total Combined Market Value</p>
+                    <h2 className="text-3xl lg:text-5xl font-black text-white tracking-tighter font-mono">
+                      Rp {totalPortfolioValue.toLocaleString('id-ID')}
+                    </h2>
+                    <div className="mt-4 flex flex-wrap items-center gap-4">
+                      {(() => {
+                        const totalCost = myCGSPortfolio.assets.reduce((acc, curr) => {
+                          const assetCost = new Decimal(curr.averagePrice).times(curr.lots).times(100);
+                          return new Decimal(acc).plus(assetCost).toNumber();
+                        }, 0);
+                        const totalPL = new Decimal(totalPortfolioValue).minus(totalCost);
+                        const plPercentage = totalCost === 0 ? new Decimal(0) : totalPL.div(totalCost).times(100);
+                        const isPositive = totalPL.gte(0);
+                        return (
+                          <div className={`flex items-center gap-2 px-3 py-1 rounded-full border ${isPositive ? 'bg-green-500/10 border-green-500/20 text-green-500' : 'bg-red-500/10 border-red-500/20 text-red-500'}`}>
+                            {isPositive ? <ArrowUpRight className="w-3 h-3" /> : <ArrowDownRight className="w-3 h-3" />}
+                            <span className="text-[10px] font-black">{isPositive ? '+' : ''}{plPercentage.toNumber().toFixed(2)}% Performance</span>
+                          </div>
+                        );
+                      })()}
+                      <div className="flex items-center gap-2 px-3 py-1 bg-slate-900/80 rounded-full border border-slate-800">
+                        <span className="text-[9px] text-slate-500 font-black uppercase">RDN Cash:</span>
+                        <span className="text-[10px] text-[#DFFF00] font-mono font-bold">Rp {myCGSPortfolio.cashBalance.toLocaleString('id-ID')}</span>
+                      </div>
+                    </div>
+                  </div>
                 </div>
+
+                {/* Summary Action */}
+                <div className="bg-gradient-to-br from-slate-900 to-slate-950 p-5 rounded-2xl border border-slate-800 overflow-hidden relative">
+                  <div className="absolute top-0 right-0 p-8 bg-blue-500/5 blur-3xl rounded-full -mr-4 -mt-4"></div>
+                  <div className="flex justify-between items-center mb-4">
+                    <h4 className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Unrealized Performance</h4>
+                    <PieChart className="w-3 h-3 text-slate-600" />
+                  </div>
+                  <div className="space-y-4">
+                    <div className="flex justify-between items-center">
+                      <span className="text-sm font-bold text-slate-300">Equity - IDX</span>
+                      <span className="text-sm font-mono text-slate-100">Rp 1.65M</span>
+                    </div>
+                    <div className="w-full bg-slate-800/50 h-1.5 rounded-full overflow-hidden">
+                      <motion.div 
+                        initial={{ width: 0 }}
+                        animate={{ width: '42%' }}
+                        className="bg-red-500/50 h-full" 
+                      />
+                    </div>
+                    <div className="flex justify-between items-center text-[10px]">
+                      <span className="text-slate-500">Net Portfolio Drift</span>
+                      <span className="text-red-400 font-mono">-9.01%</span>
+                    </div>
+                  </div>
+                </div>
+                
+                <button className="w-full py-4 rounded-2xl border border-slate-800 bg-slate-900/50 text-slate-400 font-bold text-[10px] uppercase tracking-widest hover:bg-slate-800 transition-colors flex items-center justify-center gap-2">
+                  <ExternalLink className="w-3 h-3" />
+                  Share Portfolio Analysis
+                </button>
               </div>
-            </div>
-            
-            <button className="w-full py-4 rounded-2xl border border-slate-800 bg-slate-900/50 text-slate-400 font-bold text-[10px] uppercase tracking-widest hover:bg-slate-800 transition-colors flex items-center justify-center gap-2">
-              <ExternalLink className="w-3 h-3" />
-              Share Portfolio Analysis
-            </button>
-          </div>
+            }
+          />
         );
       case 'security':
         if (securityView === 'history') {
@@ -1148,19 +1679,65 @@ export default function App() {
         );
       case 'scanner':
         return (
-          <div className="space-y-4">
+          <VAMTerminalScanner 
+            defaultTab="SCANNER"
+            activeMarket={activeScannerMarket}
+            activeModule={activeScannerModule}
+            livePrices={livePricesMap}
+            portfolioContent={
+              <div className="space-y-6">
+                <BloombergTable 
+                  portfolioData={portfolioData} 
+                  onSelectSymbol={(s) => {
+                    setSelectedSymbol(s);
+                    setActiveTab('home');
+                  }}
+                />
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {portfolioData.map((asset) => (
+                    <div 
+                      key={asset.ticker} 
+                      onClick={() => {
+                        setSelectedSymbol(`IDX:${asset.ticker.replace('.JK', '')}`);
+                        setActiveTab('home');
+                      }}
+                      className="bg-slate-900/40 p-4 rounded-2xl border border-slate-800/50 flex justify-between items-center group cursor-pointer hover:bg-slate-800 transition-colors"
+                    >
+                      <div className="flex items-center gap-3">
+                        <div className="w-10 h-10 rounded-xl bg-slate-800 flex items-center justify-center text-[10px] font-bold text-slate-400 border border-slate-700/50 uppercase">
+                          {asset.ticker.split('.')[0]}
+                        </div>
+                        <div>
+                          <p className="font-bold text-sm text-slate-100 uppercase">{asset.ticker.split('.')[0]}</p>
+                          <p className="text-[10px] text-slate-500">{asset.lots} Lots • {new Decimal(asset.averagePrice).toNumber().toFixed(2)} Avg</p>
+                        </div>
+                      </div>
+                      <div className="text-right">
+                        <p className="text-xs font-mono font-bold text-slate-200">Rp {asset.marketValue.toLocaleString('id-ID')}</p>
+                        <p className={`text-[10px] font-medium ${asset.change >= 0 ? 'text-green-400' : 'text-red-400'}`}>
+                          {asset.change >= 0 ? '+' : ''}{asset.change.toFixed(2)}%
+                        </p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            }
+          />
+        );
+      case 'rebalancer':
+        return (
+          <div className="space-y-6">
             <div className="flex items-center gap-2 mb-2">
               <button onClick={() => setActiveTab('home')} className="p-1.5 bg-slate-900 rounded-lg border border-slate-800 text-[#deff9a]">
                 <ArrowLeft className="w-4 h-4" />
               </button>
-              <div className="flex flex-col">
-                <h3 className="text-sm font-semibold text-slate-300 uppercase tracking-widest">
-                  {SIDEBAR_MENU.find(m => m.path === activeTab)?.label || 'Institutional Tool'}
-                </h3>
-                <span className="text-[8px] text-[#deff9a] font-black uppercase tracking-tighter">Authority: Fully Unlocked</span>
-              </div>
+              <h3 className="text-sm font-semibold text-slate-300 uppercase tracking-widest">Portfolio Rebalance Protocol</h3>
             </div>
-            <VamSmartScanner />
+            <RebalanceTool 
+              portfolioData={portfolioData} 
+              cashBalance={myCGSPortfolio.cashBalance} 
+            />
           </div>
         );
       case 'gateway':
@@ -1265,27 +1842,90 @@ export default function App() {
 
           <nav className="flex-1 space-y-2">
             {SIDEBAR_MENU.map((item) => (
-              <button
-                key={item.id}
-                onClick={() => {
-                  if ('external' in item && item.external) {
-                    window.open(item.path, '_blank');
-                  } else {
-                    setActiveTab(item.path);
-                  }
-                }}
-                className={`w-full flex items-center gap-4 p-4 rounded-3xl transition-all border ${
-                  activeTab === item.path 
-                  ? 'bg-[#deff9a]/10 border-[#deff9a]/20 text-[#deff9a]' 
-                  : 'bg-slate-900/40 border-slate-800 hover:bg-slate-800/60 text-slate-400'
-                }`}
-              >
-                <item.icon className="w-5 h-5" style={{ color: item.color }} />
-                <div className="text-left">
-                  <p className="text-xs font-black uppercase tracking-tight">{item.label}</p>
-                  {item.provider && <p className="text-[8px] text-slate-500 font-bold uppercase">{item.provider}</p>}
-                </div>
-              </button>
+              <React.Fragment key={item.id}>
+                <button
+                  onClick={() => {
+                    if ('external' in item && item.external) {
+                      window.open(item.path, '_blank');
+                    } else {
+                      setActiveTab(item.path);
+                      if (item.path !== 'scanner') {
+                        setActiveScannerModule(null);
+                      }
+                    }
+                  }}
+                  className={`w-full flex items-center gap-4 p-4 rounded-3xl transition-all border ${
+                    activeTab === item.path 
+                    ? 'bg-[#deff9a]/10 border-[#deff9a]/20 text-[#deff9a]' 
+                    : 'bg-slate-900/40 border-slate-800 hover:bg-slate-800/60 text-slate-400'
+                  }`}
+                >
+                  <item.icon className="w-5 h-5" style={{ color: item.color }} />
+                  <div className="text-left flex-1">
+                    <p className="text-xs font-black uppercase tracking-tight">{item.label}</p>
+                    {item.provider && <p className="text-[8px] text-slate-500 font-bold uppercase">{item.provider}</p>}
+                  </div>
+                </button>
+                
+                {/* Sub-menu for Scanner Markets and Modules */}
+                {item.path === 'scanner' && (
+                  <AnimatePresence>
+                    {activeTab === 'scanner' && item.markets && (
+                      <motion.div 
+                        initial={{ opacity: 0, height: 0 }}
+                        animate={{ opacity: 1, height: 'auto' }}
+                        exit={{ opacity: 0, height: 0 }}
+                        className="overflow-hidden space-y-2 ml-4 border-l border-slate-800 pl-4 py-2"
+                      >
+                        {item.markets.map(market => (
+                          <div key={market.id} className="space-y-1">
+                            <button
+                              onClick={() => {
+                                setExpandedMarket(expandedMarket === market.id ? null : market.id);
+                                setActiveScannerMarket(market.id.toUpperCase() as any);
+                                setActiveScannerModule(null);
+                              }}
+                              className={`w-full text-left p-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all flex items-center justify-between ${
+                                activeScannerMarket === market.id.toUpperCase()
+                                ? 'text-[#00ffff] bg-[#00ffff]/5'
+                                : 'text-slate-500 hover:text-slate-300'
+                              }`}
+                            >
+                              <span>{market.label}</span>
+                              <ChevronRight className={`w-3 h-3 transition-transform ${expandedMarket === market.id ? 'rotate-90' : ''}`} />
+                            </button>
+                            
+                            <AnimatePresence>
+                              {expandedMarket === market.id && (
+                                <motion.div
+                                  initial={{ opacity: 0, height: 0 }}
+                                  animate={{ opacity: 1, height: 'auto' }}
+                                  exit={{ opacity: 0, height: 0 }}
+                                  className="ml-2 border-l border-slate-800/50 pl-3 space-y-1 overflow-hidden"
+                                >
+                                  {market.modules.map(module => (
+                                    <button
+                                      key={module}
+                                      onClick={() => setActiveScannerModule(module)}
+                                      className={`w-full text-left p-2 rounded-lg text-[9px] font-bold uppercase tracking-wider transition-all ${
+                                        activeScannerModule === module
+                                        ? 'text-[#ff9900] bg-[#ff9900]/10'
+                                        : 'text-slate-600 hover:text-slate-400'
+                                      }`}
+                                    >
+                                      &gt; {module}
+                                    </button>
+                                  ))}
+                                </motion.div>
+                              )}
+                            </AnimatePresence>
+                          </div>
+                        ))}
+                      </motion.div>
+                    )}
+                  </AnimatePresence>
+                )}
+              </React.Fragment>
             ))}
           </nav>
 
@@ -1304,6 +1944,30 @@ export default function App() {
         </aside>
 
         <div className="flex-1 flex flex-col min-h-screen">
+          {/* Global Loading Indicator (Progressive Context) */}
+          <AnimatePresence>
+            {isAnySyncing && (
+              <motion.div
+                initial={{ opacity: 0, scaleY: 0 }}
+                animate={{ opacity: 1, scaleY: 1 }}
+                exit={{ opacity: 0, scaleY: 0 }}
+                className="fixed top-0 left-0 right-0 h-1 z-[100] origin-top"
+              >
+                <div className="absolute inset-0 bg-[#deff9a]/20 blur-[2px]" />
+                <motion.div 
+                  initial={{ x: '-100%' }}
+                  animate={{ x: '100%' }}
+                  transition={{ 
+                    duration: 1.5, 
+                    repeat: Infinity, 
+                    ease: "linear" 
+                  }}
+                  className="absolute inset-y-0 w-1/3 bg-gradient-to-r from-transparent via-[#deff9a] to-transparent shadow-[0_0_15px_#deff9a]"
+                />
+              </motion.div>
+            )}
+          </AnimatePresence>
+
           {/* Header */}
           <header className="px-6 py-4 lg:px-10 lg:py-6 border-b border-zinc-800 flex justify-between items-center sticky top-0 bg-black/90 backdrop-blur-xl z-20">
             <div className="flex items-center gap-4">
@@ -1318,9 +1982,18 @@ export default function App() {
                 <p className="text-xs text-zinc-400 mt-1 uppercase tracking-wider font-medium">Institutional System</p>
               </div>
             </div>
-            <div className="text-right text-[10px] text-zinc-500 uppercase tracking-widest font-black">
-              INTERNATIONAL GATEWAY<br/>
-              <span className="text-white font-bold">NOT CONNECTED</span>
+            
+            <div className="text-right">
+              <p className="text-[9px] text-zinc-500 font-medium uppercase tracking-widest text-[#DFFF00]">VentureAM International Gateway</p>
+              <div className="flex items-center justify-end gap-2">
+                <div className={`h-1.5 w-1.5 rounded-full animate-pulse shadow-[0_0_8px_rgba(34,197,94,0.6)] ${isMarketSyncing ? 'bg-blue-500' : 'bg-green-500'}`}></div>
+                <p className="text-[11px] font-bold text-white uppercase tracking-wider">
+                  {import.meta.env.VITE_VAM_GATEWAY_SCRIPT_ID && import.meta.env.VITE_VAM_GATEWAY_SCRIPT_ID !== 'ID_SCRIPT_ANDA'
+                    ? 'CONNECTED (VAM GATEWAY + TRADINGVIEW)' 
+                    : isMarketSyncing ? 'SYNCING...' : 'CONNECTED (TRADINGVIEW)'}
+                </p>
+              </div>
+              <p className="text-[9px] text-zinc-400 uppercase tracking-tighter">Secure Institutional Data Feed</p>
             </div>
           </header>
 
@@ -1332,7 +2005,7 @@ export default function App() {
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0, y: -10 }}
                 transition={{ duration: 0.2 }}
-                className={activeTab === 'home' ? 'main-dashboard-container p-0' : ''}
+                className={activeTab === 'home' ? 'p-0' : ''}
               >
                 {renderContent()}
               </motion.div>
@@ -1396,30 +2069,96 @@ export default function App() {
                   </button>
                 </div>
 
-                <nav className="flex-1 space-y-2">
+                <nav className="flex-1 space-y-2 overflow-y-auto pr-1">
                   {SIDEBAR_MENU.map((item) => (
-                    <button
-                      key={item.id}
-                      onClick={() => {
-                        if ('external' in item && item.external) {
-                          window.open(item.path, '_blank');
-                        } else {
-                          setActiveTab(item.path);
-                          setIsSidebarOpen(false);
-                        }
-                      }}
-                      className={`w-full flex items-center gap-4 p-4 rounded-2xl transition-all border ${
-                        activeTab === item.path 
-                        ? 'bg-[#deff9a]/10 border-[#deff9a]/20 text-[#deff9a]' 
-                        : 'bg-slate-900/40 border-slate-800 hover:bg-slate-800/60 text-slate-400'
-                      }`}
-                    >
-                      <item.icon className="w-5 h-5" style={{ color: item.color }} />
-                      <div className="text-left">
-                        <p className="text-xs font-black uppercase tracking-tight">{item.label}</p>
-                        {item.provider && <p className="text-[8px] text-slate-500 font-bold uppercase">{item.provider}</p>}
-                      </div>
-                    </button>
+                    <React.Fragment key={item.id}>
+                      <button
+                        onClick={() => {
+                          if ('external' in item && item.external) {
+                            window.open(item.path, '_blank');
+                          } else {
+                            setActiveTab(item.path);
+                            if (item.path !== 'scanner') {
+                              setActiveScannerModule(null);
+                              setIsSidebarOpen(false);
+                            }
+                          }
+                        }}
+                        className={`w-full flex items-center gap-4 p-4 rounded-2xl transition-all border ${
+                          activeTab === item.path 
+                          ? 'bg-[#deff9a]/10 border-[#deff9a]/20 text-[#deff9a]' 
+                          : 'bg-slate-900/40 border-slate-800 hover:bg-slate-800/60 text-slate-400'
+                        }`}
+                      >
+                        <item.icon className="w-5 h-5" style={{ color: item.color }} />
+                        <div className="text-left flex-1">
+                          <p className="text-xs font-black uppercase tracking-tight">{item.label}</p>
+                          {item.provider && <p className="text-[8px] text-slate-500 font-bold uppercase">{item.provider}</p>}
+                        </div>
+                      </button>
+
+                      {/* Sub-menu for Scanner Markets and Modules in Mobile Sidebar */}
+                      {item.path === 'scanner' && (
+                        <AnimatePresence>
+                          {activeTab === 'scanner' && item.markets && (
+                            <motion.div 
+                              initial={{ opacity: 0, height: 0 }}
+                              animate={{ opacity: 1, height: 'auto' }}
+                              exit={{ opacity: 0, height: 0 }}
+                              className="overflow-hidden space-y-2 ml-4 border-l border-slate-800 pl-4 py-2"
+                            >
+                              {item.markets.map(market => (
+                                <div key={market.id} className="space-y-1">
+                                  <button
+                                    onClick={() => {
+                                      setExpandedMarket(expandedMarket === market.id ? null : market.id);
+                                      setActiveScannerMarket(market.id.toUpperCase() as any);
+                                      setActiveScannerModule(null);
+                                    }}
+                                    className={`w-full text-left p-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all flex items-center justify-between ${
+                                      activeScannerMarket === market.id.toUpperCase()
+                                      ? 'text-[#00ffff] bg-[#00ffff]/5'
+                                      : 'text-slate-500 hover:text-slate-300'
+                                    }`}
+                                  >
+                                    <span>{market.label}</span>
+                                    <ChevronRight className={`w-3 h-3 transition-transform ${expandedMarket === market.id ? 'rotate-90' : ''}`} />
+                                  </button>
+                                  
+                                  <AnimatePresence>
+                                    {expandedMarket === market.id && (
+                                      <motion.div
+                                        initial={{ opacity: 0, height: 0 }}
+                                        animate={{ opacity: 1, height: 'auto' }}
+                                        exit={{ opacity: 0, height: 0 }}
+                                        className="ml-2 border-l border-slate-800/50 pl-3 space-y-1 overflow-hidden"
+                                      >
+                                        {market.modules.map(module => (
+                                          <button
+                                            key={module}
+                                            onClick={() => {
+                                              setActiveScannerModule(module);
+                                              setIsSidebarOpen(false);
+                                            }}
+                                            className={`w-full text-left p-2 rounded-lg text-[9px] font-bold uppercase tracking-wider transition-all ${
+                                              activeScannerModule === module
+                                              ? 'text-[#ff9900] bg-[#ff9900]/10'
+                                              : 'text-slate-600 hover:text-slate-400'
+                                            }`}
+                                          >
+                                            &gt; {module}
+                                          </button>
+                                        ))}
+                                      </motion.div>
+                                    )}
+                                  </AnimatePresence>
+                                </div>
+                              ))}
+                            </motion.div>
+                          )}
+                        </AnimatePresence>
+                      )}
+                    </React.Fragment>
                   ))}
                 </nav>
               </motion.aside>

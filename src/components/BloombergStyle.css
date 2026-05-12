@@ -1,0 +1,44 @@
+.bloomberg-terminal {
+    background-color: #000;
+    color: #f0f0f0;
+    font-family: 'Roboto Mono', monospace;
+    padding: 20px;
+    border: 2px solid #333;
+    border-radius: 8px;
+}
+
+.terminal-header {
+    border-bottom: 1px solid #ff9900;
+    margin-bottom: 15px;
+    padding-bottom: 10px;
+    display: flex;
+    justify-content: space-between;
+}
+
+.account-id { color: #ff9900; font-weight: bold; }
+
+.portfolio-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 13px;
+}
+
+.portfolio-table th {
+    color: #00ffff; /* Cyan khas Bloomberg */
+    text-align: left;
+    border-bottom: 1px solid #333;
+    padding: 8px;
+    text-transform: uppercase;
+}
+
+.portfolio-table td {
+    padding: 8px;
+    border-bottom: 1px solid #1a1a1a;
+}
+
+/* Dinamis Warna Berdasarkan Performa */
+.price-up { color: #00ff00; }
+.price-down { color: #ff3333; }
+.price-stable { color: #ffffff; }
+
+.ticker-cell { font-weight: bold; color: #fff; }

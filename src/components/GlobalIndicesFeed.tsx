@@ -4,17 +4,20 @@ function GlobalIndicesFeed() {
   const container = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    if (container.current && !container.current.querySelector('script')) {
+    const currentContainer = container.current;
+    if (currentContainer) {
+      currentContainer.innerHTML = '';
       const script = document.createElement("script");
       script.src = "https://s3.tradingview.com/external-embedding/embed-widget-ticker-tape.js";
       script.type = "text/javascript";
       script.async = true;
       script.innerHTML = JSON.stringify({
         "symbols": [
-          { "proName": "FOREXCOM:SPX500", "title": "S&P 500" },
-          { "proName": "FOREXCOM:NSXUSD", "title": "Nasdaq 100" },
-          { "proName": "FOREXCOM:DJI", "title": "Dow Jones" },
-          { "proName": "FX_IDC:USDIDR", "title": "USD/IDR" }
+          { "description": "IHSG Composite", "proName": "IDX:COMPOSITE" },
+          { "description": "USD/IDR", "proName": "FX_IDC:USDIDR" },
+          { "description": "GOLD", "proName": "OANDA:XAUUSD" },
+          { "description": "STI Index", "proName": "STI" },
+          { "description": "S&P 500", "proName": "FOREXCOM:SPX500" }
         ],
         "showSymbolLogo": true,
         "colorTheme": "dark",
@@ -22,8 +25,13 @@ function GlobalIndicesFeed() {
         "displayMode": "regular",
         "locale": "id"
       });
-      container.current.appendChild(script);
+      currentContainer.appendChild(script);
     }
+    return () => {
+      if (currentContainer) {
+        currentContainer.innerHTML = '';
+      }
+    };
   }, []);
 
   return (
