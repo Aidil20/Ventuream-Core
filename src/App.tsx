@@ -143,7 +143,10 @@ const HOLDINGS = [
 ];
 
 const SIDEBAR_MENU = [
+  { id: 0, label: "Dashboard Utama", icon: Home, path: "home", color: "#deff9a" },
+  { id: 8, label: "Monitor Pasar", icon: Search, path: "market", color: "#deff9a" },
   { id: 1, label: "Analisis Portofolio", icon: BarChart3, path: "portfolio", color: "#deff9a" },
+  { id: 9, label: "Sistem Keamanan", icon: ShieldCheck, path: "security", color: "#deff9a" },
   { id: 7, label: "Rebalancing Asset", icon: Scale, path: "rebalancer", color: "#deff9a" },
   { id: 2, label: "Gateway Internasional", icon: Globe, path: "gateway", color: "#94a3b8" },
   { id: 3, label: "Laporan Regulasi", icon: Gavel, path: "compliance", color: "#94a3b8" },
@@ -1969,31 +1972,44 @@ export default function App() {
           </AnimatePresence>
 
           {/* Header */}
-          <header className="px-6 py-4 lg:px-10 lg:py-6 border-b border-zinc-800 flex justify-between items-center sticky top-0 bg-black/90 backdrop-blur-xl z-20">
+          <header className="px-4 py-4 lg:px-8 lg:py-6 border-b border-zinc-900 flex justify-between items-center sticky top-0 bg-black z-20">
             <div className="flex items-center gap-4">
               <button 
                 onClick={() => setIsSidebarOpen(true)}
-                className="lg:hidden p-2.5 bg-slate-900 text-[#DFFF00] rounded-xl border border-slate-800 shadow-lg active:scale-95 transition-transform"
+                className="p-3 bg-[#1e2330] text-[#DFFF00] rounded-2xl border border-zinc-800/50 shadow-xl active:scale-95 transition-all hover:bg-[#252b3d]"
               >
-                <Menu className="w-5 h-5" />
+                <Menu className="w-6 h-6" />
               </button>
-              <div className="flex flex-col">
-                <h1 className="text-xl lg:text-2xl font-bold text-[#DFFF00] leading-none">VentureAM</h1>
-                <p className="text-xs text-zinc-400 mt-1 uppercase tracking-wider font-medium">Institutional System</p>
+              
+              <div className="flex items-center gap-3">
+                <div className="flex flex-col">
+                  <h1 className="text-2xl lg:text-3xl font-bold text-[#DFFF00] leading-none tracking-tight">VentureAM</h1>
+                  <div className="flex items-center gap-2 mt-1">
+                    <p className="text-[10px] lg:text-xs text-zinc-500 uppercase tracking-[0.2em] font-bold">Institutional System</p>
+                    <div className="w-1.5 h-3 bg-[#22c55e] rounded-full animate-pulse shadow-[0_0_8px_rgba(34,197,94,0.4)]" />
+                  </div>
+                </div>
               </div>
             </div>
             
-            <div className="text-right">
-              <p className="text-[9px] text-zinc-500 font-medium uppercase tracking-widest text-[#DFFF00]">VentureAM International Gateway</p>
-              <div className="flex items-center justify-end gap-2">
-                <div className={`h-1.5 w-1.5 rounded-full animate-pulse shadow-[0_0_8px_rgba(34,197,94,0.6)] ${isMarketSyncing ? 'bg-blue-500' : 'bg-green-500'}`}></div>
-                <p className="text-[11px] font-bold text-white uppercase tracking-wider">
+            <div className="text-right flex flex-col items-end">
+              <div className="hidden sm:block">
+                <div className="flex flex-col items-end mb-0.5">
+                  <p className="text-[9px] text-zinc-500 font-bold uppercase tracking-[0.2em] leading-none">VentureAM</p>
+                  <p className="text-[9px] text-zinc-500 font-bold uppercase tracking-[0.2em] leading-tight">International Gateway</p>
+                </div>
+                
+                <p className="text-[12px] font-black text-white uppercase tracking-wider leading-tight max-w-[180px] text-right my-1">
                   {import.meta.env.VITE_VAM_GATEWAY_SCRIPT_ID && import.meta.env.VITE_VAM_GATEWAY_SCRIPT_ID !== 'ID_SCRIPT_ANDA'
                     ? 'CONNECTED (VAM GATEWAY + TRADINGVIEW)' 
-                    : isMarketSyncing ? 'SYNCING...' : 'CONNECTED (TRADINGVIEW)'}
+                    : isMarketSyncing ? 'SYNCING...' : 'CONNECTED (VAM GATEWAY + TRADINGVIEW)'}
                 </p>
+                
+                <div className="flex flex-col items-end">
+                  <p className="text-[9px] text-zinc-400 uppercase tracking-tight font-medium leading-tight">Secure Institutional Data</p>
+                  <p className="text-[9px] text-zinc-400 uppercase tracking-tight font-medium leading-none">Feed</p>
+                </div>
               </div>
-              <p className="text-[9px] text-zinc-400 uppercase tracking-tighter">Secure Institutional Data Feed</p>
             </div>
           </header>
 
@@ -2012,34 +2028,6 @@ export default function App() {
             </AnimatePresence>
           </main>
         </div>
-
-        {/* Navigation - Bottom bar only on mobile */}
-        <footer className="lg:hidden fixed bottom-6 left-1/2 -translate-x-1/2 w-[calc(100%-32px)] max-w-sm bg-slate-900/90 backdrop-blur-xl border border-slate-800 p-3 rounded-3xl flex justify-around items-center z-40 shadow-2xl">
-        <NavButton 
-          active={activeTab === 'home'} 
-          onClick={() => setActiveTab('home')}
-          icon={<Home className="w-5 h-5" />} 
-          label="Home" 
-        />
-        <NavButton 
-          active={activeTab === 'market'} 
-          onClick={() => setActiveTab('market')}
-          icon={<Search className="w-5 h-5" />} 
-          label="Market" 
-        />
-        <NavButton 
-          active={activeTab === 'portfolio'} 
-          onClick={() => setActiveTab('portfolio')}
-          icon={<PieChart className="w-5 h-5" />} 
-          label="Portfolio" 
-        />
-        <NavButton 
-          active={activeTab === 'security'} 
-          onClick={() => setActiveTab('security')}
-          icon={<ShieldCheck className="w-5 h-5" />} 
-          label="Security" 
-        />
-        </footer>
 
         {/* Mobile Overlay Sidebar - Keep for small screen menu */}
         <AnimatePresence>

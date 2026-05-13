@@ -175,7 +175,7 @@ export async function fetchScannerResults(scannerName: string): Promise<ScannerR
     const prompt = `Generate 5 realistic scanner results for the Jakarta Composite Index (JCI) market using the scanner named "${scannerName}". 
     The results should look like professional institutional data from Yahoo Finance or TradingView.
     Include Symbol, Full Name (must be a valid JCI/IDX stock), a "signal" (BUY/SELL/HOLD), a "score" (0-100), and a set of relevant metrics based on the type of scanner.
-    IMPORTANT: Always include "Price", "Change", "Volume", "P/E Ratio", and "Market Cap" in the metrics object for every entry.
+    IMPORTANT: Always include "Price", "Change", "Volume", "P/E Ratio", "Market Cap", "RSI", and "MACD" in the metrics object for every entry.
     Return as a JSON array of objects.`;
 
     const response = await ai.models.generateContent({

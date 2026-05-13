@@ -117,10 +117,10 @@ const VAMTerminalScanner: React.FC<VAMTerminalScannerProps> = ({
 
     // Konfigurasi Metrik Scanner
     const scannerConfigs: Record<string, string[]> = {
-        'High Volume Breakout': ['Volume', 'Market Cap', 'P/E Ratio', 'Price'],
-        'Price Breakout Volume MA10 Today': ['Price', 'Volume', 'Market Cap', 'P/E Ratio'],
-        'Big Accumulation': ['Accum/Dist', 'Price', 'Volume', 'Market Cap', 'P/E Ratio'],
-        'Volatility Scanner': ['ATR', 'Bollinger Band %B', 'Price', 'Volume', 'Market Cap'],
+        'High Volume Breakout': ['Volume', 'RSI', 'MACD', 'Price'],
+        'Price Breakout Volume MA10 Today': ['Price', 'Volume', 'RSI', 'MACD'],
+        'Big Accumulation': ['Accum/Dist', 'RSI', 'MACD', 'Price'],
+        'Volatility Scanner': ['ATR', 'Bollinger Band %B', 'RSI', 'MACD'],
         'FX Momentum Feed': ['RSI', 'MACD', 'Stochastic', 'EMA200'],
         'Yield Arbitrage': ['10Y-2Y Spread', 'Bond Price', 'Interest Rate', 'Duration']
     };

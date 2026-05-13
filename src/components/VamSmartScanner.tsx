@@ -21,6 +21,16 @@ function VamSmartScanner() {
         "colorTheme": "dark",
         "locale": "id",
         "isTransparent": true,
+        "columns": [
+          "base_currency",
+          "logoid",
+          "name",
+          "close",
+          "change",
+          "Relative_Strength_Index",
+          "MACD.macd",
+          "volume"
+        ],
         "filter": [
           {"left": "price", "operation": "above", "right": "ema20"},
           {"left": "change", "operation": "above", "right": 0}

@@ -3,10 +3,6 @@ import { createServer } from "http";
 import { Server } from "socket.io";
 import { createServer as createViteServer } from "vite";
 import path from "path";
-import { fileURLToPath } from "url";
-
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
 
 async function startServer() {
   const app = express();
@@ -16,6 +12,26 @@ async function startServer() {
   });
 
   const PORT = 3000;
+
+  // Middleware for parsing JSON
+  app.use(express.json());
+
+  // API Proxy for MarketStack
+  app.get("/api/marketstack/tickers", async (req, res) => {
+    const accessKey = process.env.MARKETSTACK_API_KEY;
+    if (!accessKey) {
+      return res.status(500).json({ error: "MARKETSTACK_API_KEY not configured" });
+    }
+
+    try {
+      const response = await fetch(`https://api.marketstack.com/v2/exchanges/XIDX/tickers?access_key=${accessKey}&limit=100`);
+      const data = await response.json();
+      res.json(data);
+    } catch (error) {
+      console.error("MarketStack API Error:", error);
+      res.status(500).json({ error: "Failed to fetch from MarketStack" });
+    }
+  });
 
   // --- Real-time Data Stream Logic ---
   // In a real institutional setup, this would be a feed from a Bloomberg Terminal API or FIX Protocol.

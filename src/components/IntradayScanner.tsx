@@ -18,6 +18,8 @@ interface SuperSignal {
   status: string;
   color: string;
   active_signals: string[];
+  rsi: number;
+  macdHist: number;
   timestamp: string;
 }
 
@@ -73,6 +75,8 @@ const calculateSuperSignal = (data: IntradayData): SuperSignal => {
     status: finalStatus,
     color: colorCode,
     active_signals: signals,
+    rsi: rsi,
+    macdHist: macdHist,
     timestamp: new Date().toISOString()
   };
 };
@@ -175,6 +179,7 @@ export default function IntradayScanner() {
               <th className="px-4 pb-2">Symbol</th>
               <th className="px-4 pb-2">VAM Score</th>
               <th className="px-4 pb-2">AI Verdict</th>
+              <th className="px-4 pb-2 text-center">Indicators (RSI/MACD)</th>
               <th className="px-4 pb-2">Active Signals</th>
               <th className="px-4 pb-2 text-right">Last Sync</th>
             </tr>
@@ -219,6 +224,18 @@ export default function IntradayScanner() {
                     >
                       {sig.status}
                     </span>
+                  </td>
+                  <td className="px-4 py-4 border-y border-white/5 bg-zinc-900/30 text-center">
+                    <div className="flex flex-col items-center gap-1">
+                      <div className="flex gap-2">
+                        <span className={`text-[10px] font-bold ${sig.rsi > 70 ? 'text-red-400' : sig.rsi < 30 ? 'text-green-400' : 'text-zinc-300'}`}>
+                          RSI: {sig.rsi.toFixed(1)}
+                        </span>
+                        <span className={`text-[10px] font-bold ${sig.macdHist > 0 ? 'text-green-400' : 'text-red-400'}`}>
+                          MACD: {sig.macdHist > 0 ? '+' : ''}{sig.macdHist.toFixed(2)}
+                        </span>
+                      </div>
+                    </div>
                   </td>
                   <td className="px-4 py-4 border-y border-white/5 bg-zinc-900/30">
                     <div className="flex flex-wrap gap-1.5">
