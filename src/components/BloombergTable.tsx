@@ -96,7 +96,7 @@ const BloombergTable: React.FC<BloombergTableProps> = ({ portfolioData, onSelect
             </div>
             
             <div style={{marginTop: '15px', fontSize: '10px', color: '#666'}} className="font-mono italic">
-                *DATA DELAYED 15M - SOURCE: INSTITUTIONAL FEED / YAHOO FINANCE
+                *REAL-TIME DATA - SOURCE: IDX MARKET DATA (VIA MARKETSTACK + VAM GATEWAY)
             </div>
         </div>
     );

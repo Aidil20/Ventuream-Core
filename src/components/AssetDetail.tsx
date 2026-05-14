@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { motion } from 'motion/react';
+import { motion, AnimatePresence } from 'motion/react';
 import { 
   ArrowLeft, 
   TrendingUp, 
@@ -15,11 +15,12 @@ import {
   Maximize2,
   Link,
   Loader2,
-  HelpCircle
+  HelpCircle,
+  Newspaper
 } from 'lucide-react';
 import { Sparkline } from './Sparkline';
-import { fetchCorrelationScore, CorrelationResult } from '../services/marketService';
-import { AnimatePresence } from 'motion/react';
+import { fetchCorrelationScore, CorrelationResult, fetchMarketNews, MarketNews } from '../services/marketService';
+import { NewsFeed } from './NewsFeed';
 
 interface AssetDetailProps {
   asset: {
@@ -40,7 +41,9 @@ interface AssetDetailProps {
 export function AssetDetail({ asset, onBack }: AssetDetailProps) {
   const isPositive = asset.status === 'Bullish' || asset.status === 'Performing' || asset.status === 'Stable';
   const [correlation, setCorrelation] = useState<CorrelationResult | null>(null);
+  const [news, setNews] = useState<MarketNews[]>([]);
   const [isLoadingCorrelation, setIsLoadingCorrelation] = useState(false);
+  const [isLoadingNews, setIsLoadingNews] = useState(false);
   const [showTooltip, setShowTooltip] = useState(false);
 
   useEffect(() => {
@@ -63,7 +66,21 @@ export function AssetDetail({ asset, onBack }: AssetDetailProps) {
         setIsLoadingCorrelation(false);
       }
     }
+
+    async function loadNews() {
+      setIsLoadingNews(true);
+      try {
+        const result = await fetchMarketNews(asset.symbol);
+        setNews(result);
+      } catch (e) {
+        console.error(e);
+      } finally {
+        setIsLoadingNews(false);
+      }
+    }
+
     loadCorrelation();
+    loadNews();
   }, [asset.symbol, asset.category]);
 
   return (
@@ -156,6 +173,11 @@ export function AssetDetail({ asset, onBack }: AssetDetailProps) {
             </div>
           </div>
         </div>
+      </section>
+
+      {/* Real-time News Feed */}
+      <section className="bg-slate-900/40 p-6 rounded-[2rem] border border-slate-800/80">
+        <NewsFeed news={news} isLoading={isLoadingNews} />
       </section>
 
       {/* Institutional Correlation Monitor */}

@@ -18,10 +18,10 @@ export const useTransactionManager = () => {
       id: 'TX-1',
       timestamp: new Date(Date.now() - 86400000).toISOString(),
       assetType: 'EQUITY',
-      ticker: 'BBCA',
+      ticker: 'BBRI',
       side: 'BUY',
       quantity: 1000,
-      price: 10250,
+      price: 4820,
       currency: 'IDR',
       broker: 'CGS_INTERNATIONAL'
     },

@@ -10,13 +10,16 @@ export const MarketMetricCard: React.FC<MarketMetricCardProps> = ({ symbol, proN
   const container = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    let currentContainer = container.current;
+    const currentContainer = container.current;
+    let scriptElement: HTMLScriptElement | null = null;
+    
     if (currentContainer) {
       currentContainer.innerHTML = '';
-      const script = document.createElement('script');
-      script.src = "https://s3.tradingview.com/external-embedding/embed-widget-mini-symbol-overview.js";
-      script.async = true;
-      script.innerHTML = JSON.stringify({
+      scriptElement = document.createElement('script');
+      scriptElement.src = "https://s3.tradingview.com/external-embedding/embed-widget-mini-symbol-overview.js";
+      scriptElement.async = true;
+      scriptElement.crossOrigin = "anonymous";
+      scriptElement.innerHTML = JSON.stringify({
         "symbol": proName,
         "width": "100%",
         "height": "100%",
@@ -30,9 +33,16 @@ export const MarketMetricCard: React.FC<MarketMetricCardProps> = ({ symbol, proN
         "largeChartUrl": "",
         "colorTheme": "dark"
       });
-      currentContainer.appendChild(script);
+      currentContainer.appendChild(scriptElement);
     }
     return () => {
+      if (scriptElement && scriptElement.parentNode) {
+        try {
+          scriptElement.parentNode.removeChild(scriptElement);
+        } catch (e) {
+          // Ignore
+        }
+      }
       if (currentContainer) {
         currentContainer.innerHTML = '';
       }

@@ -2,5 +2,5 @@
   "name": "Venture-Ai",
   "description": "A professional mobile asset management dashboard for VentureAM Institutional System, featuring real-time AUM tracking, priority asset monitoring, and market insights.",
   "requestFramePermissions": [],
-  "majorCapabilities": []
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }

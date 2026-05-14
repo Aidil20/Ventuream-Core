@@ -2,20 +2,23 @@ import React, { useEffect, useRef, memo } from 'react';
 
 interface TradingViewWidgetProps {
   symbol?: string;
+  studies?: string[];
 }
 
-function TradingViewWidget({ symbol = "IDX:BBCA" }: TradingViewWidgetProps) {
+function TradingViewWidget({ symbol = "IDX:BBCA", studies = ["MASimple@tv-basicstudies", "MAExp@tv-basicstudies"] }: TradingViewWidgetProps) {
   const container = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
+    let scriptElement: HTMLScriptElement | null = null;
     const currentContainer = container.current;
     if (currentContainer) {
       currentContainer.innerHTML = '';
-      const script = document.createElement("script");
-      script.src = "https://s3.tradingview.com/external-embedding/embed-widget-advanced-chart.js";
-      script.type = "text/javascript";
-      script.async = true;
-      script.innerHTML = JSON.stringify({
+      scriptElement = document.createElement("script");
+      scriptElement.src = "https://s3.tradingview.com/external-embedding/embed-widget-advanced-chart.js";
+      scriptElement.type = "text/javascript";
+      scriptElement.async = true;
+      scriptElement.crossOrigin = "anonymous";
+      scriptElement.innerHTML = JSON.stringify({
         "autosize": true,
         "symbol": symbol,
         "interval": "D",
@@ -26,23 +29,18 @@ function TradingViewWidget({ symbol = "IDX:BBCA" }: TradingViewWidgetProps) {
         "enable_publishing": false,
         "allow_symbol_change": true,
         "calendar": false,
-        "studies": [
-          "MASimple@tv-basicstudies",
-          "MAExp@tv-basicstudies",
-          "RSI@tv-basicstudies",
-          "MACD@tv-basicstudies",
-          "BB@tv-basicstudies"
-        ],
+        "studies": studies,
         "support_host": "https://www.tradingview.com"
       });
-      currentContainer.appendChild(script);
+      currentContainer.appendChild(scriptElement);
     }
     return () => {
+      // Guard against querySelector errors by ensuring we only clear if still mounted correctly
       if (currentContainer) {
         currentContainer.innerHTML = '';
       }
     };
-  }, [symbol]);
+  }, [symbol, studies]);
 
   return (
     <div className="tradingview-widget-container h-[400px] w-full rounded-2xl overflow-hidden border border-slate-800" ref={container}>

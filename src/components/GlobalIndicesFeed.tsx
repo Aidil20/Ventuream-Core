@@ -11,6 +11,7 @@ function GlobalIndicesFeed() {
       script.src = "https://s3.tradingview.com/external-embedding/embed-widget-ticker-tape.js";
       script.type = "text/javascript";
       script.async = true;
+      script.crossOrigin = "anonymous";
       script.innerHTML = JSON.stringify({
         "symbols": [
           { "description": "IHSG Composite", "proName": "IDX:COMPOSITE" },

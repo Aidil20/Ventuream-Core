@@ -108,3 +108,9 @@
   -ms-overflow-style: none;
   scrollbar-width: none;
 }
+
+@layer utilities {
+  .glow-yellow {
+    filter: drop-shadow(0 0 8px rgba(223, 255, 0, 0.4));
+  }
+}
