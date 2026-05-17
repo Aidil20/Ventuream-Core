@@ -535,7 +535,7 @@ export const StockExplorer: React.FC<StockExplorerProps> = ({
                     <span className="text-[8px] font-black text-zinc-600 uppercase tracking-widest">Day Change</span>
                     <p className={`text-xl font-black tracking-tighter flex items-center gap-1 ${stockInfo.changePercent >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
                       {stockInfo.changePercent >= 0 ? <TrendingUp className="w-4 h-4" /> : <TrendingDown className="w-4 h-4" />}
-                      {stockInfo.changePercent.toFixed(2)}%
+                      {typeof stockInfo.changePercent === 'number' ? stockInfo.changePercent.toFixed(2) : '0.00'}%
                     </p>
                   </div>
                   <div className="space-y-1">

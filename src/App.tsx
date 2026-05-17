@@ -76,6 +76,9 @@ import { NewsFeed } from './components/NewsFeed';
 import { fetchMarketNews } from './services/marketService';
 import { StockExplorer } from './components/StockExplorer';
 import { FundamentalAnalyst } from './components/FundamentalAnalyst';
+import { initAuth, googleSignIn, logout as googleLogout } from './lib/auth';
+import { DriveCenter } from './components/DriveCenter';
+import { User } from 'firebase/auth';
 
 const ASSETS = [
   {
@@ -173,6 +176,7 @@ const SIDEBAR_MENU = [
   { id: 9, label: "Sistem Keamanan", icon: ShieldCheck, path: "security", color: "#deff9a" },
   { id: 7, label: "Rebalancing Asset", icon: Scale, path: "rebalancer", color: "#deff9a" },
   { id: 2, label: "Gateway Internasional", icon: Globe, path: "gateway", color: "#deff9a" },
+  { id: 14, label: "VAM Cloud (Drive)", icon: Cloud, path: "drive", color: "#60a5fa" },
   { id: 3, label: "Laporan Regulasi", icon: Gavel, path: "compliance", color: "#94a3b8" },
   { id: 4, label: "Pengaturan Likuiditas", icon: Droplets, path: "liquidity", color: "#94a3b8" },
   { 
@@ -356,6 +360,37 @@ export default function App() {
   });
   const [logSortBy, setLogSortBy] = useState<'timestamp' | 'symbol'>('timestamp');
   const [logSortOrder, setLogSortOrder] = useState<'asc' | 'desc'>('desc');
+
+  // Auth State for Google Drive
+  const [needsAuth, setNeedsAuth] = useState(false);
+  const [googleUser, setGoogleUser] = useState<User | null>(null);
+  const [isLoggingIn, setIsLoggingIn] = useState(false);
+
+  useEffect(() => {
+    const unsubscribe = initAuth(
+      (user) => {
+        setGoogleUser(user);
+        setNeedsAuth(false);
+      },
+      () => setNeedsAuth(true)
+    );
+    return () => unsubscribe();
+  }, []);
+
+  const handleGoogleLogin = async () => {
+    setIsLoggingIn(true);
+    try {
+      const result = await googleSignIn();
+      if (result) {
+        setGoogleUser(result.user);
+        setNeedsAuth(false);
+      }
+    } catch (err) {
+      console.error('Login failed:', err);
+    } finally {
+      setIsLoggingIn(false);
+    }
+  };
 
   // Price Alerts State
   const [alerts, setAlerts] = useState<PriceAlert[]>([]);
@@ -565,8 +600,8 @@ export default function App() {
           if (live) {
             return {
               ...asset,
-              value: `Rp ${(live.price / 1000).toFixed(1)}k`,
-              percentage: (live.changePercent >= 0 ? '+' : '') + live.changePercent.toFixed(1) + '%',
+              value: `Rp ${(typeof live.price === 'number' ? live.price / 1000 : 0).toFixed(1)}k`,
+              percentage: (typeof live.changePercent === 'number' ? (live.changePercent >= 0 ? '+' : '') + live.changePercent.toFixed(1) : '0.0') + '%',
               status: live.changePercent > 0.5 ? 'Bullish' : live.changePercent < -0.5 ? 'Bearish' : 'Stable'
             };
           }
@@ -590,7 +625,7 @@ export default function App() {
             return {
               ...stock,
               price: typeof live.price === 'number' ? live.price.toLocaleString('id-ID') : (live.price || 'N/A'),
-              change: (live.changePercent >= 0 ? '+' : '') + live.changePercent.toFixed(2) + '%'
+              change: (typeof live.changePercent === 'number' ? (live.changePercent >= 0 ? '+' : '') + live.changePercent.toFixed(2) : '0.00') + '%'
             };
           }
           return stock;
@@ -603,7 +638,7 @@ export default function App() {
             return {
               ...log,
               price: typeof live.price === 'number' ? live.price.toLocaleString('id-ID') : (live.price || 'N/A'),
-              change: (live.changePercent >= 0 ? '+' : '') + live.changePercent.toFixed(2) + '%'
+              change: (typeof live.changePercent === 'number' ? (live.changePercent >= 0 ? '+' : '') + live.changePercent.toFixed(2) : '0.00') + '%'
             };
           }
           return log;
@@ -699,8 +734,8 @@ export default function App() {
         if (match) {
           return {
             ...asset,
-            value: `Rp ${(match.price / 1000).toFixed(1)}k`,
-            percentage: (match.changePercent >= 0 ? '+' : '') + match.changePercent.toFixed(1) + '%',
+            value: `Rp ${(typeof match.price === 'number' ? match.price / 1000 : 0).toFixed(1)}k`,
+            percentage: (typeof match.changePercent === 'number' ? (match.changePercent >= 0 ? '+' : '') + match.changePercent.toFixed(1) : '0.0') + '%',
             status: match.changePercent > 0.5 ? 'Bullish' : match.changePercent < -0.5 ? 'Bearish' : 'Stable'
           };
         }
@@ -715,7 +750,7 @@ export default function App() {
             ...stock,
             price: match.price.toLocaleString('id-ID'),
             currentPrice: match.price,
-            change: (match.changePercent >= 0 ? '+' : '') + match.changePercent.toFixed(2) + '%'
+            change: (typeof match.changePercent === 'number' ? (match.changePercent >= 0 ? '+' : '') + match.changePercent.toFixed(2) : '0.00') + '%'
           };
         }
         return stock;
@@ -740,8 +775,8 @@ export default function App() {
         if (asset.symbol === symbol) {
           return {
             ...asset,
-            value: `Rp ${(price / 1000).toFixed(1)}k`,
-            percentage: (changePercent >= 0 ? '+' : '') + changePercent.toFixed(1) + '%',
+            value: `Rp ${(typeof price === 'number' ? price / 1000 : 0).toFixed(1)}k`,
+            percentage: (typeof changePercent === 'number' ? (changePercent >= 0 ? '+' : '') + changePercent.toFixed(1) : '0.0') + '%',
             status: changePercent > 0.5 ? 'Bullish' : changePercent < -0.5 ? 'Bearish' : 'Stable'
           };
         }
@@ -755,7 +790,7 @@ export default function App() {
             ...stock,
             price: typeof price === 'number' ? price.toLocaleString('id-ID') : (price || 'N/A'),
             currentPrice: price,
-            change: (changePercent >= 0 ? '+' : '') + changePercent.toFixed(2) + '%'
+            change: (typeof changePercent === 'number' ? (changePercent >= 0 ? '+' : '') + changePercent.toFixed(2) : '0.00') + '%'
           };
         }
         return stock;
@@ -916,6 +951,11 @@ export default function App() {
       case 'home':
         return (
           <div className="space-y-6">
+            {/* Restricted Access Banner */}
+            <div className="bg-green-600 text-white p-4 rounded-xl text-center font-bold shadow-lg shadow-green-600/20 uppercase tracking-widest text-xs">
+              INSTITUTIONAL ACCESS RESTRICTED
+            </div>
+
             {/* PERFORMANCE HISTORY CHART */}
             <PortfolioChart />
 
@@ -1936,14 +1976,14 @@ export default function App() {
                           </div>
                           <div>
                             <p className="font-bold text-sm text-slate-100 uppercase">{asset.ticker.split('.')[0]}</p>
-                            <p className="text-[10px] text-slate-500">{asset.lots} Lots • {new Decimal(asset.averagePrice).toNumber().toFixed(2)} Avg</p>
+                            <p className="text-[10px] text-slate-500">{asset.lots} Lots • {(typeof asset.averagePrice === 'number' ? new Decimal(asset.averagePrice).toNumber() : 0).toFixed(2)} Avg</p>
                           </div>
                         </div>
                         <div className="flex items-center gap-6">
                           <div className="text-right">
                             <p className="text-xs font-mono font-bold text-slate-200">Rp {typeof asset.marketValue === 'number' ? asset.marketValue.toLocaleString('id-ID') : (asset.marketValue || 'N/A')}</p>
-                            <p className={`text-[10px] font-medium ${asset.change >= 0 ? 'text-green-400' : 'text-red-400'}`}>
-                              {asset.change >= 0 ? '+' : ''}{asset.change.toFixed(2)}%
+                            <p className={`text-[10px] font-medium ${(typeof asset.change === 'number' ? asset.change : 0) >= 0 ? 'text-green-400' : 'text-red-400'}`}>
+                              {(typeof asset.change === 'number' ? asset.change : 0) >= 0 ? '+' : ''}{(typeof asset.change === 'number' ? asset.change : 0).toFixed(2)}%
                             </p>
                           </div>
                         </div>
@@ -1987,7 +2027,7 @@ export default function App() {
                         return (
                           <div className={`flex items-center gap-2 px-3 py-1 rounded-full border ${isPositive ? 'bg-green-500/10 border-green-500/20 text-green-500' : 'bg-red-500/10 border-red-500/20 text-red-500'}`}>
                             {isPositive ? <ArrowUpRight className="w-3 h-3" /> : <ArrowDownRight className="w-3 h-3" />}
-                            <span className="text-[10px] font-black">{isPositive ? '+' : ''}{plPercentage.toNumber().toFixed(2)}% Performance</span>
+                            <span className="text-[10px] font-black">{isPositive ? '+' : ''}{(typeof plPercentage?.toNumber === 'function' ? plPercentage.toNumber() : 0).toFixed(2)}% Performance</span>
                           </div>
                         );
                       })()}
@@ -2223,15 +2263,15 @@ export default function App() {
                         </div>
                         <div>
                           <p className="font-bold text-sm text-slate-100 uppercase">{asset.ticker.split('.')[0]}</p>
-                          <p className="text-[10px] text-slate-500">{asset.lots} Lots • {new Decimal(asset.averagePrice).toNumber().toFixed(2)} Avg</p>
+                          <p className="text-[10px] text-zinc-500">{asset.lots} Lots • {(typeof asset.averagePrice === 'number' ? new Decimal(asset.averagePrice).toNumber() : 0).toFixed(2)} Avg</p>
                         </div>
                       </div>
-                      <div className="text-right">
-                        <p className="text-xs font-mono font-bold text-slate-200">Rp {typeof asset.marketValue === 'number' ? asset.marketValue.toLocaleString('id-ID') : (asset.marketValue || 'N/A')}</p>
-                        <p className={`text-[10px] font-medium ${asset.change >= 0 ? 'text-green-400' : 'text-red-400'}`}>
-                          {asset.change >= 0 ? '+' : ''}{asset.change.toFixed(2)}%
-                        </p>
-                      </div>
+                        <div className="text-right">
+                          <p className="text-xs font-mono font-bold text-slate-200">Rp {typeof asset.marketValue === 'number' ? asset.marketValue.toLocaleString('id-ID') : (asset.marketValue || 'N/A')}</p>
+                          <p className={`text-[10px] font-medium ${(typeof asset.change === 'number' ? asset.change : 0) >= 0 ? 'text-green-400' : 'text-red-400'}`}>
+                            {(typeof asset.change === 'number' ? asset.change : 0) >= 0 ? '+' : ''}{(typeof asset.change === 'number' ? asset.change : 0).toFixed(2)}%
+                          </p>
+                        </div>
                     </div>
                   ))}
                 </div>
@@ -2330,6 +2370,43 @@ export default function App() {
             </div>
           </div>
         );
+      case 'drive':
+        if (needsAuth) {
+          return (
+            <div className="flex flex-col items-center justify-center p-20 text-center bg-zinc-900/40 rounded-[2.5rem] border border-zinc-800 h-[60vh]">
+              <div className="p-6 bg-blue-500/10 rounded-full border border-blue-500/20 mb-8 blur-sm animate-pulse">
+                <Cloud className="w-12 h-12 text-blue-400" />
+              </div>
+              <h3 className="text-2xl font-black text-white uppercase tracking-tighter mb-4">Cloud Authorization Required</h3>
+              <p className="text-xs text-zinc-500 font-bold max-w-sm uppercase leading-relaxed tracking-widest mb-10">
+                To access VentureAM Cloud, please authorize your institutional Google Drive account.
+              </p>
+              
+              <button 
+                onClick={handleGoogleLogin}
+                disabled={isLoggingIn}
+                className="gsi-material-button group"
+              >
+                <div className="gsi-material-button-state"></div>
+                <div className="gsi-material-button-content-wrapper">
+                  <div className="gsi-material-button-icon">
+                    <svg version="1.1" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" style={{ display: 'block' }}>
+                      <path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"></path>
+                      <path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"></path>
+                      <path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"></path>
+                      <path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"></path>
+                      <path fill="none" d="M0 0h48v48H0z"></path>
+                    </svg>
+                  </div>
+                  <span className="gsi-material-button-contents tracking-widest uppercase font-black text-[10px]">
+                    {isLoggingIn ? 'Authorizing Gateway...' : 'Initialize Drive Connection'}
+                  </span>
+                </div>
+              </button>
+            </div>
+          );
+        }
+        return <DriveCenter onAuthRequired={() => setNeedsAuth(true)} />;
       case 'compliance':
       case 'liquidity':
         const isUnlocked = userRole === 'President_Director';
@@ -2573,30 +2650,24 @@ export default function App() {
               </button>
               
               <div className="flex flex-col">
-                <h1 className="text-xl font-bold text-[#DFFF00] leading-none tracking-tight">VentureAM</h1>
-                <span className="text-[10px] text-zinc-400 mt-1 uppercase tracking-widest font-black">Institutional System</span>
+                <h1 className="text-xl font-bold text-[#DFFF00] leading-none">VentureAM</h1>
+                <span className="text-[10px] text-zinc-400 mt-1 uppercase tracking-widest">Institutional System</span>
               </div>
             </div>
             
             <div className="text-right">
-              <p className="text-[9px] text-zinc-500 font-black uppercase tracking-[0.2em] leading-none mb-1">INTERNATIONAL GATEWAY</p>
+              <p className="text-[9px] text-zinc-500 font-medium tracking-[0.1em]">INTERNATIONAL GATEWAY</p>
               <div className="flex items-center justify-end gap-2" onClick={() => setActiveTab('gateway')}>
                 <div className={`w-1.5 h-1.5 rounded-full ${
                   networkStats.operational
                   ? 'bg-[#DFFF00] shadow-[0_0_8px_#DFFF00] animate-pulse'
                   : 'bg-red-500'
                 }`} />
-                <p className="text-[11px] font-black text-white uppercase tracking-tight cursor-pointer">
+                <p className="text-[11px] font-bold text-white uppercase tracking-tight cursor-pointer">
                   {networkStats.operational ? 'CONNECTED' : 'OFFLINE'}
                 </p>
               </div>
-              <div className="flex items-center justify-end gap-3 mt-1.5 pt-1.5 border-t border-white/5">
-                <div className="flex flex-col">
-                  <p className="text-[8px] text-zinc-600 font-bold uppercase tracking-tighter text-right">Resource Tracks</p>
-                  <p className="text-[9px] text-zinc-400 font-bold uppercase tracking-widest">IDX • TV • IBKR</p>
-                </div>
-                <Database className="w-3 h-3 text-[#DFFF00] opacity-40" />
-              </div>
+              <p className="text-[9px] text-zinc-400 mt-0.5">Gateway (IBKR/CGS)</p>
             </div>
           </header>
 
