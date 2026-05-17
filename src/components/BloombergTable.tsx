@@ -1,5 +1,6 @@
 import React from 'react';
 import './BloombergStyle.css';
+import { BrainCircuit } from 'lucide-react';
 
 interface PortfolioItem {
     ticker: string;
@@ -14,9 +15,10 @@ interface PortfolioItem {
 interface BloombergTableProps {
     portfolioData: PortfolioItem[];
     onSelectSymbol?: (symbol: string) => void;
+    onFundamentalAudit?: (symbol: string) => void;
 }
 
-const BloombergTable: React.FC<BloombergTableProps> = ({ portfolioData, onSelectSymbol }) => {
+const BloombergTable: React.FC<BloombergTableProps> = ({ portfolioData, onSelectSymbol, onFundamentalAudit }) => {
     return (
         <div className="bloomberg-terminal mt-6">
             <div className="terminal-header">
@@ -41,6 +43,7 @@ const BloombergTable: React.FC<BloombergTableProps> = ({ portfolioData, onSelect
                             <th>Change %</th>
                             <th>Mkt Value (IDR)</th>
                             <th className="text-right">Unrealized P&L</th>
+                            <th className="text-center">Audit</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -57,9 +60,11 @@ const BloombergTable: React.FC<BloombergTableProps> = ({ portfolioData, onSelect
                                         <div className="absolute -left-2 top-1/2 -translate-y-1/2 w-0.5 h-4 bg-[#00ffff] opacity-0 group-hover:opacity-100 transition-opacity"></div>
                                     </td>
                                     <td>{item.lots} LOT</td>
-                                    <td className="text-slate-400 font-mono text-[11px]">{item.averagePrice.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 4 })}</td>
+                                    <td className="text-slate-400 font-mono text-[11px]">
+                                        {typeof item.averagePrice === 'number' ? item.averagePrice.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 4 }) : 'N/A'}
+                                    </td>
                                     <td id={`price-${ticker}`} className={`font-mono ${item.change >= 0 ? "price-up" : "price-down"}`}>
-                                        {item.currentPrice.toLocaleString(undefined, { minimumFractionDigits: 1, maximumFractionDigits: 1 })}
+                                        {typeof item.currentPrice === 'number' ? item.currentPrice.toLocaleString(undefined, { minimumFractionDigits: 1, maximumFractionDigits: 1 }) : 'N/A'}
                                     </td>
                                     <td className={`font-mono text-[11px] ${item.change >= 0 ? "price-up" : "price-down"}`}>
                                         <div className="flex items-center gap-1">
@@ -68,13 +73,22 @@ const BloombergTable: React.FC<BloombergTableProps> = ({ portfolioData, onSelect
                                         </div>
                                     </td>
                                     <td style={{color: '#ff9900'}} className="font-mono">
-                                        {item.marketValue.toLocaleString('id-ID')}
+                                        {typeof item.marketValue === 'number' ? item.marketValue.toLocaleString('id-ID') : '0'}
                                     </td>
                                     <td className={`text-right font-mono ${item.unrealized >= 0 ? "price-up" : "price-down"}`}>
-                                        <div className="flex flex-col items-end">
-                                            <span>{item.unrealized >= 0 ? '+' : ''}{item.unrealized.toLocaleString('id-ID')}</span>
+                                        <div className="flex items-end flex-col">
+                                            <span>{item.unrealized >= 0 ? '+' : ''}{typeof item.unrealized === 'number' ? item.unrealized.toLocaleString('id-ID') : '0'}</span>
                                             <span className="text-[9px] opacity-80">({plPercentage >= 0 ? '+' : ''}{plPercentage.toFixed(2)}%)</span>
                                         </div>
+                                    </td>
+                                    <td className="text-center">
+                                        <button 
+                                          onClick={() => onFundamentalAudit?.(ticker)}
+                                          className="p-1.5 hover:bg-[#DFFF00]/10 rounded-lg text-[#DFFF00]/40 hover:text-[#DFFF00] transition-all"
+                                          title="Deep AI Audit"
+                                        >
+                                          <BrainCircuit className="w-4 h-4" />
+                                        </button>
                                     </td>
                                 </tr>
                             );
@@ -82,13 +96,18 @@ const BloombergTable: React.FC<BloombergTableProps> = ({ portfolioData, onSelect
                     </tbody>
                     <tfoot className="border-t-2 border-slate-800">
                         <tr>
-                            <td colSpan={5} className="py-4 font-black text-[#00ffff] text-[10px] uppercase tracking-[0.2em]">Total Portfolio Aggregation</td>
+                            <td colSpan={6} className="py-4 font-black text-[#00ffff] text-[10px] uppercase tracking-[0.2em]">Total Portfolio Aggregation</td>
                             <td style={{color: '#ff9900'}} className="font-mono font-bold py-4">
-                                {portfolioData.reduce((acc, curr) => acc + curr.marketValue, 0).toLocaleString('id-ID')}
+                                {(() => {
+                                    const total = portfolioData.reduce((acc, curr) => acc + curr.marketValue, 0);
+                                    return typeof total === 'number' ? total.toLocaleString('id-ID') : '0';
+                                })()}
                             </td>
                             <td className={`text-right font-mono font-bold py-4 ${portfolioData.reduce((acc, curr) => acc + curr.unrealized, 0) >= 0 ? "price-up" : "price-down"}`}>
-                                {portfolioData.reduce((acc, curr) => acc + curr.unrealized, 0) >= 0 ? '+' : ''}
-                                {portfolioData.reduce((acc, curr) => acc + curr.unrealized, 0).toLocaleString('id-ID')}
+                                {(() => {
+                                    const totalPL = portfolioData.reduce((acc, curr) => acc + curr.unrealized, 0);
+                                    return (totalPL >= 0 ? '+' : '') + (typeof totalPL === 'number' ? totalPL.toLocaleString('id-ID') : '0');
+                                })()}
                             </td>
                         </tr>
                     </tfoot>

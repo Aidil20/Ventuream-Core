@@ -228,14 +228,14 @@ const VAMTerminalScanner: React.FC<VAMTerminalScannerProps> = ({
                                             <div className="p-2 bg-slate-800 rounded-lg group-hover:bg-slate-950/20 transition-colors">
                                                 <Globe className="w-5 h-5 group-hover:scale-110 transition-transform" />
                                             </div>
-                                            Global Market
+                                            Market International
                                         </button>
                                     </div>
                                 </motion.div>
                             )}
 
-                            {/* STEP 2: Pilih Jenis Scanner (Jika IDX dipilih) */}
-                            {marketType === 'IDX' && (
+                            {/* STEP 2: Pilih Jenis Scanner (IDX or GLOBAL) */}
+                            {marketType && (
                                 <motion.div 
                                     initial={{ opacity: 0, x: -10 }}
                                     animate={{ opacity: 1, x: 0 }}
@@ -243,10 +243,18 @@ const VAMTerminalScanner: React.FC<VAMTerminalScannerProps> = ({
                                 >
                                     <p className="text-[10px] font-black text-[#deff9a] uppercase tracking-[0.3em] mb-8 flex items-center gap-3">
                                         <span className="w-2.5 h-2.5 bg-[#deff9a] rounded-full shadow-[0_0_10px_#deff9a]" />
-                                        Region: IDX Selected | Select Scanner Type:
+                                        Region: {marketType} Selected | {marketType === 'GLOBAL' ? 'IBKR DATA FEED ACTIVE' : 'IDX TERMINAL ACTIVE'} | Select Scanner Type:
                                     </p>
                                     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
-                                        {Object.keys(scannerConfigs).map(name => (
+                                        {Object.keys(scannerConfigs)
+                                            .filter(name => {
+                                                if (marketType === 'IDX') {
+                                                    return ['High Volume Breakout', 'Price Breakout Volume MA10 Today', 'Big Accumulation'].includes(name);
+                                                } else {
+                                                    return ['Volatility Scanner', 'FX Momentum Feed', 'Yield Arbitrage'].includes(name);
+                                                }
+                                            })
+                                            .map(name => (
                                             <button 
                                                 key={name} 
                                                 className="bg-slate-900/60 hover:bg-[#deff9a] hover:text-slate-950 text-white border border-slate-800/80 px-6 py-5 rounded-2xl font-mono text-[10px] transition-all uppercase font-black tracking-widest text-left shadow-lg" 

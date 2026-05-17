@@ -2,16 +2,16 @@ import React, { useEffect, useRef, memo } from 'react';
 
 function VamSmartScanner() {
   const container = useRef<HTMLDivElement>(null);
+  const widgetId = useRef(`tv-scanner-${Math.random().toString(36).substr(2, 9)}`);
 
   useEffect(() => {
     const currentContainer = container.current;
-    if (currentContainer) {
-      currentContainer.innerHTML = '';
+    
+    if (currentContainer && !currentContainer.querySelector('script')) {
       const script = document.createElement("script");
       script.src = "https://s3.tradingview.com/external-embedding/embed-widget-screener.js";
       script.type = "text/javascript";
       script.async = true;
-      script.crossOrigin = "anonymous";
       script.innerHTML = JSON.stringify({
         "width": "100%",
         "height": "500",
@@ -34,15 +34,16 @@ function VamSmartScanner() {
         ],
         "filter": [
           {"left": "price", "operation": "above", "right": "ema20"},
-          {"left": "change", "operation": "above", "right": 0}
+          {"left": "change", "operation": "above", "right": 0},
+          {"left": "Relative_Strength_Index", "operation": "in_range", "right": [45, 60]},
+          {"left": "MACD.macd", "operation": "above", "right": "MACD.signal"},
+          {"left": "volume", "operation": "above", "right": "volume|20"}
         ]
       });
       currentContainer.appendChild(script);
     }
     return () => {
-      if (currentContainer) {
-        currentContainer.innerHTML = '';
-      }
+      // Safe cleanup - let React handle DOM removal to avoid TV script crashes
     };
   }, []);
 
@@ -58,7 +59,7 @@ function VamSmartScanner() {
         </div>
       </div>
       <div className="tradingview-widget-container" ref={container}>
-        <div className="tradingview-widget-container__widget"></div>
+        <div className="tradingview-widget-container__widget h-[500px]"></div>
       </div>
     </div>
   );

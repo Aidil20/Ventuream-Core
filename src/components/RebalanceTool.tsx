@@ -202,7 +202,7 @@ const RebalanceTool: React.FC<RebalanceToolProps> = ({ portfolioData, cashBalanc
                     </div>
                   </div>
                   <div className="text-right">
-                    <p className="text-xs font-mono font-black text-white">Rp {rec.amount.toLocaleString('id-ID')}</p>
+                    <p className="text-xs font-mono font-black text-white">Rp {typeof rec.amount === 'number' ? rec.amount.toLocaleString('id-ID') : '0'}</p>
                     <p className="text-[8px] text-slate-500 font-bold uppercase">Estimated Impact</p>
                   </div>
                 </motion.div>

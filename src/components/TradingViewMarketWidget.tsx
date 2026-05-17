@@ -4,15 +4,13 @@ const TradingViewMarketWidget: React.FC = () => {
   const container = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    let scriptElement: HTMLScriptElement | null = null;
     const currentContainer = container.current;
-    if (currentContainer) {
-      currentContainer.innerHTML = '';
-      scriptElement = document.createElement("script");
+    
+    if (currentContainer && !currentContainer.querySelector('script')) {
+      const scriptElement = document.createElement("script");
       scriptElement.src = "https://s3.tradingview.com/external-embedding/embed-widget-market-quotes.js";
       scriptElement.type = "text/javascript";
       scriptElement.async = true;
-      scriptElement.crossOrigin = "anonymous";
       scriptElement.innerHTML = JSON.stringify({
         "width": "100%",
         "height": 450,
@@ -49,16 +47,7 @@ const TradingViewMarketWidget: React.FC = () => {
     }
     
     return () => {
-      if (scriptElement && scriptElement.parentNode) {
-        try {
-          scriptElement.parentNode.removeChild(scriptElement);
-        } catch (e) {
-          // Ignore
-        }
-      }
-      if (currentContainer) {
-        currentContainer.innerHTML = '';
-      }
+      // Safe cleanup
     };
   }, []);
 

@@ -8,11 +8,14 @@ export interface MarketNewsItem {
   timestamp: string;
   source: string;
   sentiment: 'bullish' | 'bearish' | 'neutral';
+  score?: number;
+  confidence?: number;
+  url?: string;
 }
 
-function getCachedNews(): MarketNewsItem[] | null {
+function getCachedNews(key: string): MarketNewsItem[] | null {
   try {
-    const cached = localStorage.getItem(NEWS_CACHE_KEY);
+    const cached = localStorage.getItem(key);
     if (!cached) return null;
     
     const { data, timestamp } = JSON.parse(cached);
@@ -25,9 +28,9 @@ function getCachedNews(): MarketNewsItem[] | null {
   }
 }
 
-function setCachedNews(data: MarketNewsItem[]) {
+function setCachedNews(key: string, data: MarketNewsItem[]) {
   try {
-    localStorage.setItem(NEWS_CACHE_KEY, JSON.stringify({
+    localStorage.setItem(key, JSON.stringify({
       data,
       timestamp: Date.now()
     }));
@@ -36,15 +39,22 @@ function setCachedNews(data: MarketNewsItem[]) {
   }
 }
 
-export async function fetchMarketNewsSummary(forceRefresh = false): Promise<MarketNewsItem[]> {
-  const cached = getCachedNews();
+export async function fetchMarketNewsSummary(forceRefresh = false, symbol?: string): Promise<MarketNewsItem[]> {
+  const cacheKey = symbol ? `${NEWS_CACHE_KEY}_${symbol}` : NEWS_CACHE_KEY;
+  const cached = getCachedNews(cacheKey);
   
   if (!forceRefresh && cached) {
     return cached;
   }
 
   try {
-    const response = await fetch("/api/news").catch(err => {
+    const baseUrl = "/api/news";
+    const params = new URLSearchParams();
+    if (symbol) params.append('symbol', symbol);
+    if (forceRefresh) params.append('force', 'true');
+    
+    const url = params.toString() ? `${baseUrl}?${params.toString()}` : baseUrl;
+    const response = await fetch(url).catch(err => {
       console.error("Network error fetching news:", err);
       throw new Error(`Network failure: ${err.message || 'Check connection'}`);
     });
@@ -56,7 +66,7 @@ export async function fetchMarketNewsSummary(forceRefresh = false): Promise<Mark
     }
 
     const news = await response.json();
-    setCachedNews(news);
+    setCachedNews(cacheKey, news);
     return news;
   } catch (error: any) {
     console.error("Error fetching market news summary:", error);
@@ -72,21 +82,24 @@ function getFallbackNews(): MarketNewsItem[] {
       summary: "The Jakarta Composite Index (IHSG) rose as investors react positively to improved global economic outlooks and stabilizing commodity prices.",
       timestamp: "Today",
       source: "VAM Research",
-      sentiment: "bullish"
+      sentiment: "bullish",
+      url: "https://investasi.kontan.co.id"
     },
     {
       headline: "Tech Stocks Lead US Market Gains",
       summary: "Major US indices finished higher led by strong performances in the technology sector, with focus shifting to upcoming inflation data.",
       timestamp: "Today",
       source: "VAM Research",
-      sentiment: "bullish"
+      sentiment: "bullish",
+      url: "https://www.bloomberg.com/markets"
     },
     {
       headline: "Global Commodity Markets Stabilize",
       summary: "Primary commodities are showing signs of stabilization after a period of volatility, providing a more predictable backdrop for industrial sectors.",
       timestamp: "Today",
       source: "VAM Research",
-      sentiment: "neutral"
+      sentiment: "neutral",
+      url: "https://www.reuters.com/business"
     }
   ];
 }

@@ -5,78 +5,118 @@ import { Activity, Zap, ShieldAlert, CheckCircle2, TrendingUp, Radar } from 'luc
 interface IntradayData {
   ticker: string;
   price: number;
+  change: number;
   vwap: number;
   ema20: number;
   ema50: number;
   rsi: number;
   macdHist: number;
+  bbWidth: number; // Bollinger Band Width
+  atr: number;      // Average True Range for volatility
+  volumeTrend: 'up' | 'down' | 'neutral';
 }
 
 interface SuperSignal {
   ticker: string;
+  price: number;
+  change: number;
   score: number;
   status: string;
   color: string;
   active_signals: string[];
   rsi: number;
   macdHist: number;
+  bbWidth: number;
+  volatility: 'LOW' | 'NORMAL' | 'HIGH';
   timestamp: string;
 }
 
-// VAM Core AI - Super Signal Logic Implementation
+// VAM Core AI - Refined Super Signal Logic
 const calculateSuperSignal = (data: IntradayData): SuperSignal => {
-  const { price, vwap, ema20, ema50, rsi, macdHist } = data;
+  const { price, change, vwap, ema20, ema50, rsi, macdHist, bbWidth, atr, volumeTrend } = data;
   let score = 0;
   let signals: string[] = [];
 
-  // 1. Analisis VWAP (Trend Utama)
+  // 1. Trend Integrity (VWAP) - Weighted 25%
   if (price > vwap) {
-    score += 30;
-    signals.push("Above VWAP");
+    score += 25;
+    signals.push("Above VWAP (Strong)");
+  } else if (price > vwap * 0.995) {
+    score += 10;
+    signals.push("Near VWAP Anchor");
   }
 
-  // 2. Analisis EMA (Momentum)
+  // 2. Momentum Convergence (EMA Cross) - Weighted 20%
   if (ema20 > ema50) {
-    score += 30;
+    score += 20;
     signals.push("EMA Golden Cross");
+  } else if (ema20 > ema50 * 0.998) {
+    score += 5;
+    signals.push("EMA Compression");
   }
 
-  // 3. Analisis MACD (Konfirmasi)
-  if (macdHist > 0) {
-    score += 20;
-    signals.push("MACD Positive Histogram");
-  }
-
-  // 4. Analisis RSI (Batasan Jenuh)
-  if (rsi > 40 && rsi < 70) {
-    score += 20;
-    signals.push("RSI Healthy Zone");
+  // 3. Oscillator Confirmation (RSI) - Weighted 15%
+  // Optimal 'Buy' zone is 40-60 (emerging trend)
+  if (rsi > 40 && rsi < 60) {
+    score += 15;
+    signals.push("RSI Expansion");
+  } else if (rsi >= 30 && rsi <= 40) {
+    score += 10;
+    signals.push("RSI Oversold Recovery");
   } else if (rsi >= 70) {
-    signals.push("RSI Overbought (Caution)");
+    score -= 10;
+    signals.push("RSI Exhustion (Risk)");
+  }
+
+  // 4. Volatility Expansion (BB Width) - Weighted 15%
+  if (bbWidth > 0.05) {
+    score += 15;
+    signals.push("Volatility Breakout");
+  }
+
+  // 5. Volume Flow - Weighted 15%
+  if (volumeTrend === 'up') {
+    score += 15;
+    signals.push("Accumulation Flow");
+  }
+
+  // 6. MACD Confirmation - Weighted 10%
+  if (macdHist > 0) {
+    score += 10;
+    signals.push("MACD Hist Positive");
   }
 
   let finalStatus = "NEUTRAL";
-  let colorCode = "#9ca3af"; 
+  let colorCode = "#9ca3af";
 
-  if (score >= 80) {
-    finalStatus = "STRONG BUY";
+  if (score >= 85) {
+    finalStatus = "ALPHA BUY";
     colorCode = "#d4af37"; // VAM Gold
-  } else if (score >= 50) {
-    finalStatus = "QUALIFIED";
+  } else if (score >= 65) {
+    finalStatus = "BULLISH";
     colorCode = "#22c55e"; // Green
-  } else if (score < 30) {
-    finalStatus = "AVOID/SELL";
+  } else if (score >= 40) {
+    finalStatus = "WATCHING";
+    colorCode = "#3b82f6"; // Blue
+  } else if (score < 25) {
+    finalStatus = "DISTRIBUTION";
     colorCode = "#ef4444"; // Red
   }
 
+  const volatilityRating = atr > (price * 0.02) ? 'HIGH' : atr > (price * 0.01) ? 'NORMAL' : 'LOW';
+
   return {
     ticker: data.ticker,
-    score: score,
+    price: price,
+    change: change,
+    score: Math.min(100, Math.max(0, score)),
     status: finalStatus,
     color: colorCode,
     active_signals: signals,
     rsi: rsi,
     macdHist: macdHist,
+    bbWidth: bbWidth,
+    volatility: volatilityRating as any,
     timestamp: new Date().toISOString()
   };
 };
@@ -96,24 +136,25 @@ export default function IntradayScanner() {
     const handleMarketUpdate = (e: any) => {
       const data = e.detail;
       if (data && data.vwap) {
-        // If the update contains indicator data, recalculate the signal for that ticker immediately
         setSignals(prev => {
           const updated = prev.map(sig => {
             if (sig.ticker === data.symbol) {
               return calculateSuperSignal({
                 ticker: data.symbol,
                 price: data.price,
+                change: data.change || 0,
                 vwap: data.vwap,
                 ema20: data.ema20,
                 ema50: data.ema50,
                 rsi: data.rsi,
-                macdHist: data.macdHist
+                macdHist: data.macdHist,
+                bbWidth: data.bbWidth || 0.02,
+                atr: data.atr || data.price * 0.015,
+                volumeTrend: data.volumeTrend || 'neutral'
               });
             }
             return sig;
           });
-          
-          // Re-sort if the score changed significantly
           return [...updated].sort((a, b) => b.score - a.score);
         });
       }
@@ -128,18 +169,21 @@ export default function IntradayScanner() {
 
   const runScan = () => {
     setIsScanning(true);
-    // Simulate complex calculation lag
     setTimeout(() => {
       const newSignals = MOCK_TICKERS.map(ticker => {
         const basePrice = Math.random() * 5000 + 1000;
         const mockData: IntradayData = {
           ticker,
           price: basePrice,
+          change: (Math.random() * 6) - 2, // -2% to +4%
           vwap: basePrice * (0.98 + Math.random() * 0.04),
           ema20: basePrice * (0.99 + Math.random() * 0.02),
           ema50: basePrice * (0.97 + Math.random() * 0.04),
           rsi: 30 + Math.random() * 50,
-          macdHist: Math.random() * 40 - 20
+          macdHist: Math.random() * 40 - 20,
+          bbWidth: Math.random() * 0.1,
+          atr: basePrice * (0.01 + Math.random() * 0.02),
+          volumeTrend: Math.random() > 0.6 ? 'up' : Math.random() > 0.4 ? 'down' : 'neutral'
         };
         return calculateSuperSignal(mockData);
       }).sort((a, b) => b.score - a.score);
@@ -176,12 +220,13 @@ export default function IntradayScanner() {
         <table className="w-full text-left border-separate border-spacing-y-2">
           <thead>
             <tr className="text-[9px] font-black text-zinc-500 uppercase tracking-widest">
-              <th className="px-4 pb-2">Symbol</th>
-              <th className="px-4 pb-2">VAM Score</th>
-              <th className="px-4 pb-2">AI Verdict</th>
-              <th className="px-4 pb-2 text-center">Indicators (RSI/MACD)</th>
-              <th className="px-4 pb-2">Active Signals</th>
-              <th className="px-4 pb-2 text-right">Last Sync</th>
+              <th className="px-4 pb-2">Asset ID</th>
+              <th className="px-4 pb-2">Institutional Price</th>
+              <th className="px-4 pb-2 text-center">VAM Score</th>
+              <th className="px-4 pb-2 text-center">AI Analysis</th>
+              <th className="px-4 pb-2 text-center">Indicators</th>
+              <th className="px-4 pb-2">Signal Convergence</th>
+              <th className="px-4 pb-2 text-right">Last Pulse</th>
             </tr>
           </thead>
           <tbody>
@@ -190,18 +235,31 @@ export default function IntradayScanner() {
                 <motion.tr 
                   key={sig.ticker}
                   layout
-                  initial={{ opacity: 0, x: -20 }}
-                  animate={{ opacity: 1, x: 0 }}
+                  initial={{ opacity: 0, y: 10 }}
+                  animate={{ opacity: 1, y: 0 }}
                   exit={{ opacity: 0, scale: 0.95 }}
-                  transition={{ delay: idx * 0.05, duration: 0.4 }}
+                  transition={{ delay: idx * 0.03, duration: 0.3 }}
                   className="group hover:bg-white/5 transition-colors relative"
                 >
                   <td className="px-4 py-4 rounded-l-2xl border-y border-l border-white/5 bg-zinc-900/30">
-                    <span className="font-black text-white text-sm tracking-tight">{sig.ticker}</span>
+                    <div className="flex flex-col">
+                      <span className="font-black text-white text-sm tracking-tight">{sig.ticker}</span>
+                      <span className="text-[8px] text-zinc-600 font-bold uppercase tracking-tighter">GATEWAY: IBKR/CGS</span>
+                    </div>
                   </td>
                   <td className="px-4 py-4 border-y border-white/5 bg-zinc-900/30">
-                    <div className="flex items-center gap-3">
-                      <div className="w-12 h-1.5 bg-zinc-800 rounded-full overflow-hidden">
+                    <div className="flex flex-col">
+                      <span className="font-mono font-bold text-white text-xs">
+                        {typeof sig.price === 'number' ? sig.price.toLocaleString('id-ID', { minimumFractionDigits: 0 }) : '0'} IDR
+                      </span>
+                      <span className={`text-[10px] font-black ${sig.change >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
+                        {sig.change >= 0 ? '+' : ''}{sig.change.toFixed(2)}%
+                      </span>
+                    </div>
+                  </td>
+                  <td className="px-4 py-4 border-y border-white/5 bg-zinc-900/30 text-center">
+                    <div className="flex flex-col items-center gap-1.5">
+                      <div className="w-16 h-1 bg-zinc-800 rounded-full overflow-hidden">
                         <motion.div 
                           initial={{ width: 0 }}
                           animate={{ width: `${sig.score}%` }}
@@ -213,9 +271,9 @@ export default function IntradayScanner() {
                       <span className="font-mono font-black text-[12px]" style={{ color: sig.color }}>{sig.score}</span>
                     </div>
                   </td>
-                  <td className="px-4 py-4 border-y border-white/5 bg-zinc-900/30">
+                  <td className="px-4 py-4 border-y border-white/5 bg-zinc-900/30 text-center">
                     <span 
-                      className="px-2 py-1 rounded-md text-[9px] font-black tracking-widest border"
+                      className="px-2.5 py-1 rounded-lg text-[9px] font-black tracking-widest border shadow-sm"
                       style={{ 
                         backgroundColor: `${sig.color}15`, 
                         color: sig.color,
@@ -227,28 +285,38 @@ export default function IntradayScanner() {
                   </td>
                   <td className="px-4 py-4 border-y border-white/5 bg-zinc-900/30 text-center">
                     <div className="flex flex-col items-center gap-1">
-                      <div className="flex gap-2">
-                        <span className={`text-[10px] font-bold ${sig.rsi > 70 ? 'text-red-400' : sig.rsi < 30 ? 'text-green-400' : 'text-zinc-300'}`}>
+                      <div className="grid grid-cols-2 gap-x-3 gap-y-0.5">
+                        <span className={`text-[9px] font-bold ${sig.rsi > 70 ? 'text-red-400' : sig.rsi < 40 ? 'text-emerald-400' : 'text-zinc-400'}`}>
                           RSI: {sig.rsi.toFixed(1)}
                         </span>
-                        <span className={`text-[10px] font-bold ${sig.macdHist > 0 ? 'text-green-400' : 'text-red-400'}`}>
+                        <span className={`text-[9px] font-bold ${sig.macdHist > 0 ? 'text-emerald-400' : 'text-red-400'}`}>
                           MACD: {sig.macdHist > 0 ? '+' : ''}{sig.macdHist.toFixed(2)}
+                        </span>
+                        <span className="text-[9px] font-bold text-zinc-500">
+                          BB: {(sig.bbWidth * 100).toFixed(1)}%
+                        </span>
+                        <span className={`text-[9px] font-bold ${sig.volatility === 'HIGH' ? 'text-orange-400' : 'text-zinc-500'}`}>
+                          VOL: {sig.volatility}
                         </span>
                       </div>
                     </div>
                   </td>
                   <td className="px-4 py-4 border-y border-white/5 bg-zinc-900/30">
-                    <div className="flex flex-wrap gap-1.5">
-                      {sig.active_signals.map(s => (
-                        <span key={s} className="text-[8px] font-bold text-zinc-400 bg-zinc-800/50 px-1.5 py-0.5 rounded uppercase tracking-tighter">
+                    <div className="flex flex-wrap gap-1.5 max-w-[200px]">
+                      {sig.active_signals.slice(0, 3).map(s => (
+                        <span key={s} className="text-[7px] font-black text-zinc-400 bg-zinc-800/80 px-2 py-0.5 rounded-lg border border-white/5 uppercase tracking-tighter">
                           {s}
                         </span>
                       ))}
-                      {sig.active_signals.length === 0 && <span className="text-[10px] text-zinc-600 italic">No convergence</span>}
+                      {sig.active_signals.length > 3 && (
+                        <span className="text-[7px] font-black text-[#DFFF00] bg-[#DFFF00]/10 px-2 py-0.5 rounded-lg border border-[#DFFF00]/20 uppercase">
+                          +{sig.active_signals.length - 3} MORE
+                        </span>
+                      )}
                     </div>
                   </td>
                   <td className="px-4 py-4 rounded-r-2xl border-y border-r border-white/5 bg-zinc-900/30 text-right">
-                    <span className="text-[9px] font-mono text-zinc-500">
+                    <span className="text-[9px] font-mono text-zinc-600 font-bold">
                       {new Date(sig.timestamp).toLocaleTimeString([], { hour12: false })}
                     </span>
                   </td>

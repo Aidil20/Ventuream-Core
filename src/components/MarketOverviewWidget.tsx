@@ -5,6 +5,7 @@ import { motion } from 'motion/react';
 
 function MarketOverviewWidget() {
   const container = useRef<HTMLDivElement>(null);
+  const widgetId = useRef(`tv-overview-${Math.random().toString(36).substr(2, 9)}`);
 
   const predictions = [
     { symbol: 'IHSG', prediction: 'BULLISH', confidence: '84%', movement: '+0.45%', catalyst: 'M2 Liquidity Inflow' },
@@ -13,16 +14,13 @@ function MarketOverviewWidget() {
   ];
 
   useEffect(() => {
-    let scriptElement: HTMLScriptElement | null = null;
     const currentContainer = container.current;
 
-    if (currentContainer) {
-      currentContainer.innerHTML = '';
-      scriptElement = document.createElement("script");
+    if (currentContainer && !currentContainer.querySelector('script')) {
+      const scriptElement = document.createElement("script");
       scriptElement.src = "https://s3.tradingview.com/external-embedding/embed-widget-market-overview.js";
       scriptElement.type = "text/javascript";
       scriptElement.async = true;
-      scriptElement.crossOrigin = "anonymous";
       scriptElement.innerHTML = JSON.stringify({
         "colorTheme": "dark",
         "dateRange": "12M",
@@ -42,7 +40,11 @@ function MarketOverviewWidget() {
               { "s": "STI", "d": "Straits Times" },
               { "s": "OANDA:XAUUSD", "d": "Gold" },
               { "s": "FOREXCOM:SPX500", "d": "S&P 500" },
-              { "s": "NASDAQ:IXIC", "d": "Nasdaq" }
+              { "s": "NASDAQ:IXIC", "d": "Nasdaq" },
+              { "s": "TSE:NI225", "d": "Nikkei 225" },
+              { "s": "HSI:HSI", "d": "Hang Seng" },
+              { "s": "FX:UK100", "d": "FTSE 100" },
+              { "s": "FX:GER40", "d": "DAX 40" }
             ],
             "originalTitle": "Indices"
           },
@@ -51,9 +53,12 @@ function MarketOverviewWidget() {
             "symbols": [
               { "s": "FX_IDC:USDIDR", "d": "USD/IDR" },
               { "s": "FX_IDC:EURIDR", "d": "EUR/IDR" },
+              { "s": "FX_IDC:GBPIDR", "d": "GBP/IDR" },
               { "s": "FX:EURUSD", "d": "EUR/USD" },
               { "s": "FX:USDJPY", "d": "USD/JPY" },
-              { "s": "FX:GBPUSD", "d": "GBP/USD" }
+              { "s": "FX:GBPUSD", "d": "GBP/USD" },
+              { "s": "FX:AUDUSD", "d": "AUD/USD" },
+              { "s": "FX:USDCAD", "d": "USD/CAD" }
             ],
             "originalTitle": "Forex"
           }
@@ -63,16 +68,7 @@ function MarketOverviewWidget() {
     }
 
     return () => {
-      if (scriptElement && scriptElement.parentNode) {
-        try {
-          scriptElement.parentNode.removeChild(scriptElement);
-        } catch (e) {
-          // Ignore if already removed
-        }
-      }
-      if (currentContainer) {
-        currentContainer.innerHTML = '';
-      }
+      // Safe cleanup - let React handle DOM removal to avoid TV script crashes
     };
   }, []);
 
@@ -127,8 +123,8 @@ function MarketOverviewWidget() {
       </div>
 
       {/* Main TradingView Widget */}
-      <div className="tradingview-widget-container rounded-xl overflow-hidden border border-zinc-800/50 bg-zinc-950/20" ref={container}>
-        <div className="tradingview-widget-container__widget"></div>
+      <div className="tradingview-widget-container rounded-xl overflow-hidden border border-zinc-800/50 bg-zinc-950/20 min-h-[400px]" ref={container}>
+         <div className="tradingview-widget-container__widget"></div>
       </div>
     </div>
   );

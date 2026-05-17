@@ -34,7 +34,11 @@ import {
   Scale,
   PenTool,
   Calculator,
-  ListTodo
+  ListTodo,
+  AlertTriangle,
+  Info,
+  CheckCircle2,
+  BrainCircuit
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { Decimal } from 'decimal.js';
@@ -52,7 +56,7 @@ import TradingViewWidget from './components/TradingViewWidget';
 import PortfolioChart from './components/PortfolioChart';
 import { useTransactionManager } from './hooks/useTransactionManager';
 import { TransactionTable } from './components/TransactionTable';
-import { Settings2, Filter, Target, ArrowLeft, Info } from 'lucide-react';
+import { Settings2, Filter, Target, ArrowLeft } from 'lucide-react';
 import { Sparkline } from './components/Sparkline';
 import { AssetDetail } from './components/AssetDetail';
 import VamSmartScanner from './components/VamSmartScanner';
@@ -71,6 +75,7 @@ import { InternationalGatewayDashboard } from './components/InternationalGateway
 import { NewsFeed } from './components/NewsFeed';
 import { fetchMarketNews } from './services/marketService';
 import { StockExplorer } from './components/StockExplorer';
+import { FundamentalAnalyst } from './components/FundamentalAnalyst';
 
 const ASSETS = [
   {
@@ -158,6 +163,7 @@ const HOLDINGS = [
 
 const SIDEBAR_MENU = [
   { id: 0, label: "Dashboard Utama", icon: Home, path: "home", color: "#deff9a" },
+  { id: 13, label: "Fundamental Analyst", icon: BrainCircuit, path: "fundamental", color: "#DFFF00" },
   { id: 8, label: "Monitor Pasar", icon: Search, path: "market", color: "#deff9a" },
   { id: 1, label: "Analisis Portofolio", icon: BarChart3, path: "portfolio", color: "#deff9a" },
   { id: 10, label: "Permintaan Dokumen", icon: PenTool, path: "legal", color: "#deff9a" },
@@ -188,7 +194,7 @@ const SIDEBAR_MENU = [
       },
       {
         id: 'global',
-        label: 'Global Market',
+        label: 'Market International',
         modules: [
           'Volatility Scanner',
           'FX Momentum Feed',
@@ -293,6 +299,24 @@ interface PortfolioAsset {
   unrealized: number;
 }
 
+export interface PriceAlert {
+  id: string;
+  symbol: string;
+  targetPrice: number;
+  condition: 'gt' | 'lt';
+  active: boolean;
+  createdAt: number;
+}
+
+export interface AlertNotification {
+  id: string;
+  symbol: string;
+  price: number;
+  targetPrice: number;
+  condition: 'gt' | 'lt';
+  timestamp: number;
+}
+
 export default function App() {
   const [selectedSymbol, setSelectedSymbol] = useState('IDX:COMPOSITE');
   const [assetsData, setAssetsData] = useState(ASSETS);
@@ -313,7 +337,8 @@ export default function App() {
   const [showIntradayScanner, setShowIntradayScanner] = useState(false);
   const [userRole, setUserRole] = useState('President_Director'); // Added role state
   const [selectedAssetId, setSelectedAssetId] = useState<string | null>(null);
-  const [marketSubTab, setMarketSubTab] = useState<'overview' | 'explorer'>('overview');
+  const [marketSubTab, setMarketSubTab] = useState<'overview' | 'explorer' | 'fundamental'>('overview');
+  const [fundamentalSymbol, setFundamentalSymbol] = useState<string | undefined>(undefined);
   const [insights, setInsights] = useState<MarketInsight[]>([]);
   const [showAllInsights, setShowAllInsights] = useState(false);
   const [stocks, setStocks] = useState<StockRecommendation[]>([]);
@@ -331,6 +356,29 @@ export default function App() {
   });
   const [logSortBy, setLogSortBy] = useState<'timestamp' | 'symbol'>('timestamp');
   const [logSortOrder, setLogSortOrder] = useState<'asc' | 'desc'>('desc');
+
+  // Price Alerts State
+  const [alerts, setAlerts] = useState<PriceAlert[]>([]);
+  const [notifications, setNotifications] = useState<AlertNotification[]>([]);
+
+  // Alert Actions
+  const addAlert = useCallback((alert: Omit<PriceAlert, 'id' | 'createdAt' | 'active'>) => {
+    const newAlert: PriceAlert = {
+      ...alert,
+      id: Math.random().toString(36).substring(7),
+      createdAt: Date.now(),
+      active: true
+    };
+    setAlerts(prev => [newAlert, ...prev]);
+  }, []);
+
+  const removeAlert = useCallback((id: string) => {
+    setAlerts(prev => prev.filter(a => a.id !== id));
+  }, []);
+
+  const clearNotification = useCallback((id: string) => {
+    setNotifications(prev => prev.filter(n => n.id !== id));
+  }, []);
 
   // Aggregated loading state for global indicator
   const isAnySyncing = useMemo(() => 
@@ -541,7 +589,7 @@ export default function App() {
           if (live) {
             return {
               ...stock,
-              price: live.price.toLocaleString('id-ID'),
+              price: typeof live.price === 'number' ? live.price.toLocaleString('id-ID') : (live.price || 'N/A'),
               change: (live.changePercent >= 0 ? '+' : '') + live.changePercent.toFixed(2) + '%'
             };
           }
@@ -554,7 +602,7 @@ export default function App() {
           if (live) {
             return {
               ...log,
-              price: live.price.toLocaleString('id-ID'),
+              price: typeof live.price === 'number' ? live.price.toLocaleString('id-ID') : (live.price || 'N/A'),
               change: (live.changePercent >= 0 ? '+' : '') + live.changePercent.toFixed(2) + '%'
             };
           }
@@ -618,6 +666,7 @@ export default function App() {
 
     socket.on('market-init', (data: Record<string, any>) => {
       console.log('[VAM PROTOCOL] Received Initial Market State');
+      
       // Update Portfolio Data with initial state
       setPortfolioData(prev => prev.map(asset => {
         const cleanTicker = asset.ticker.replace('.JK', '');
@@ -632,7 +681,7 @@ export default function App() {
           const unrealized = marketValue - (avgPrice * lots * multiplier);
           const change = ((currentPrice - avgPrice) / avgPrice) * 100;
 
-          const updatedAsset = { 
+          return { 
             ...asset, 
             marketPrice: currentPrice,
             currentPrice: currentPrice,
@@ -640,9 +689,36 @@ export default function App() {
             marketValue: marketValue,
             unrealized: unrealized
           };
-          return updatedAsset;
         }
         return asset;
+      }));
+
+      // Update Assets Data with initial state
+      setAssetsData(prev => prev.map(asset => {
+        const match = data[asset.symbol];
+        if (match) {
+          return {
+            ...asset,
+            value: `Rp ${(match.price / 1000).toFixed(1)}k`,
+            percentage: (match.changePercent >= 0 ? '+' : '') + match.changePercent.toFixed(1) + '%',
+            status: match.changePercent > 0.5 ? 'Bullish' : match.changePercent < -0.5 ? 'Bearish' : 'Stable'
+          };
+        }
+        return asset;
+      }));
+
+      // Update Stocks Data with initial state
+      setStocks(prev => prev.map(stock => {
+        const match = data[stock.symbol];
+        if (match) {
+          return {
+            ...stock,
+            price: match.price.toLocaleString('id-ID'),
+            currentPrice: match.price,
+            change: (match.changePercent >= 0 ? '+' : '') + match.changePercent.toFixed(2) + '%'
+          };
+        }
+        return stock;
       }));
     });
 
@@ -677,7 +753,7 @@ export default function App() {
         if (stock.symbol === symbol) {
           return {
             ...stock,
-            price: price.toLocaleString('id-ID'),
+            price: typeof price === 'number' ? price.toLocaleString('id-ID') : (price || 'N/A'),
             currentPrice: price,
             change: (changePercent >= 0 ? '+' : '') + changePercent.toFixed(2) + '%'
           };
@@ -723,12 +799,44 @@ export default function App() {
           const newVal = lastVal + (Math.random() - 0.5 + bias) * 2;
           return { 
             ...log, 
-            price: price.toLocaleString('id-ID'),
+            price: typeof price === 'number' ? price.toLocaleString('id-ID') : (price || 'N/A'),
             performance: [...currentPerf.slice(1), newVal]
           };
         }
         return log;
       }));
+
+      // Check Alerts Logic
+      setAlerts(currentAlerts => {
+        const triggeredAlerts = currentAlerts.filter(alert => {
+          if (!alert.active || alert.symbol !== symbol) return false;
+          
+          if (alert.condition === 'gt' && price >= alert.targetPrice) return true;
+          if (alert.condition === 'lt' && price <= alert.targetPrice) return true;
+          return false;
+        });
+
+        if (triggeredAlerts.length > 0) {
+          setNotifications(prev => [
+            ...triggeredAlerts.map(a => ({
+              id: Math.random().toString(36).substring(7),
+              symbol: a.symbol,
+              price: price,
+              targetPrice: a.targetPrice,
+              condition: a.condition,
+              timestamp: Date.now()
+            })),
+            ...prev
+          ].slice(0, 5)); // Keep last 5 notifications
+
+          // Deactivate triggered alerts
+          return currentAlerts.map(a => {
+            const isTriggered = triggeredAlerts.some(ta => ta.id === a.id);
+            return isTriggered ? { ...a, active: false } : a;
+          });
+        }
+        return currentAlerts;
+      });
 
       // Direct DOM Update (Fast Path) for sub-second visual feedback
       const tickerElements = document.querySelectorAll(`[id^="price-${symbol}"]`);
@@ -1099,6 +1207,12 @@ export default function App() {
                   >
                     Deep Explorer
                   </button>
+                  <button 
+                    onClick={() => setMarketSubTab('fundamental')}
+                    className={`px-3 py-1 rounded-lg text-[9px] font-black uppercase tracking-widest transition-all ${marketSubTab === 'fundamental' ? 'bg-[#deff9a] text-black' : 'text-zinc-500 hover:text-zinc-300'}`}
+                  >
+                    Fundamental Engine
+                  </button>
                 </div>
               </div>
               <div className="flex items-center gap-2">
@@ -1107,7 +1221,48 @@ export default function App() {
             </div>
 
             {marketSubTab === 'explorer' ? (
-              <StockExplorer />
+              <StockExplorer 
+                alerts={alerts} 
+                onAddAlert={addAlert} 
+                onRemoveAlert={removeAlert} 
+                onFundamentalAudit={(symbol) => {
+                  setFundamentalSymbol(symbol);
+                  setMarketSubTab('fundamental');
+                }}
+                onViewAsset={(symbol) => {
+                  const asset = assetsData.find(a => a.symbol === symbol);
+                  if (asset) {
+                    setSelectedAssetId(asset.id);
+                    setActiveTab('asset-detail');
+                  } else {
+                    // Create a temporary asset entry if not found in list
+                    const tempId = `temp-${symbol}`;
+                    const newAsset = {
+                      id: tempId,
+                      name: symbol,
+                      symbol: symbol,
+                      category: 'Search Result',
+                      value: 'Calculating...',
+                      status: 'Stable',
+                      type: 'Equities',
+                      percentage: '0.0%',
+                      liquidity: 'Medium',
+                      performance: generateSimulatedPerformance()
+                    };
+                    setAssetsData(prev => [newAsset, ...prev]);
+                    setSelectedAssetId(tempId);
+                    setActiveTab('asset-detail');
+                  }
+                }}
+              />
+            ) : marketSubTab === 'fundamental' ? (
+              <FundamentalAnalyst 
+                initialSymbol={fundamentalSymbol || selectedSymbol.replace('IDX:', '')}
+                onSelectSymbol={(sym) => {
+                  setMarketSubTab('explorer');
+                  // The explorer will pick it up or require auto-search logic
+                }} 
+              />
             ) : (
               <>
                 <GlobalIndicesFeed />
@@ -1507,6 +1662,36 @@ export default function App() {
               <div onClick={() => setSelectedSymbol('STI')} className="cursor-pointer transition-transform active:scale-95">
                 <MarketMetricCard symbol="STI" label="STI Index" proName="STI" />
               </div>
+              <div onClick={() => setSelectedSymbol('TSE:NI225')} className="cursor-pointer transition-transform active:scale-95">
+                <MarketMetricCard symbol="NIKKEI" label="NIKKEI 225" proName="TSE:NI225" />
+              </div>
+              <div onClick={() => setSelectedSymbol('HSI:HSI')} className="cursor-pointer transition-transform active:scale-95">
+                <MarketMetricCard symbol="HSI" label="Hang Seng" proName="HSI:HSI" />
+              </div>
+              <div onClick={() => setSelectedSymbol('FTSE:UKX')} className="cursor-pointer transition-transform active:scale-95">
+                <MarketMetricCard symbol="FTSE" label="FTSE 100" proName="FTSE:UKX" />
+              </div>
+              <div onClick={() => setSelectedSymbol('XETR:DAX')} className="cursor-pointer transition-transform active:scale-95">
+                <MarketMetricCard symbol="DAX" label="DAX 40" proName="XETR:DAX" />
+              </div>
+              <div onClick={() => setSelectedSymbol('NASDAQ:IXIC')} className="cursor-pointer transition-transform active:scale-95">
+                <MarketMetricCard symbol="NASDAQ" label="NASDAQ" proName="NASDAQ:IXIC" />
+              </div>
+              <div onClick={() => setSelectedSymbol('FX:EURUSD')} className="cursor-pointer transition-transform active:scale-95">
+                <MarketMetricCard symbol="EURUSD" label="EUR/USD" proName="FX:EURUSD" />
+              </div>
+              <div onClick={() => setSelectedSymbol('FX:USDJPY')} className="cursor-pointer transition-transform active:scale-95">
+                <MarketMetricCard symbol="USDJPY" label="USD/JPY" proName="FX:USDJPY" />
+              </div>
+              <div onClick={() => setSelectedSymbol('FX_IDC:GBPIDR')} className="cursor-pointer transition-transform active:scale-95">
+                <MarketMetricCard symbol="GBPIDR" label="GBP/IDR" proName="FX_IDC:GBPIDR" />
+              </div>
+              <div onClick={() => setSelectedSymbol('FX:AUDUSD')} className="cursor-pointer transition-transform active:scale-95">
+                <MarketMetricCard symbol="AUDUSD" label="AUD/USD" proName="FX:AUDUSD" />
+              </div>
+              <div onClick={() => setSelectedSymbol('FX:USDCAD')} className="cursor-pointer transition-transform active:scale-95">
+                <MarketMetricCard symbol="USDCAD" label="USD/CAD" proName="FX:USDCAD" />
+              </div>
             </div>
 
             <div className="space-y-2 mb-6">
@@ -1687,10 +1872,16 @@ export default function App() {
                       <p className="text-[8px] text-slate-500 font-bold uppercase tracking-widest mt-0.5">Last Synced: {lastMarketSync}</p>
                     </div>
                   </div>
-                  <div className="text-right">
+                  <div className="text-right flex flex-col items-end gap-1">
                     <span className="text-[8px] font-mono text-slate-500 bg-slate-800 px-2 py-1 rounded block uppercase tracking-tighter">
                       {isMarketSyncing ? 'Active Sync' : 'V2.4 SYNC'}
                     </span>
+                    <div className="flex items-center gap-1">
+                      <span className="text-[8px] font-black text-slate-600 uppercase tracking-tighter">LATENCY</span>
+                      <span className={`text-[9px] font-mono font-black ${parseFloat(networkStats.latency) < 100 ? 'text-green-400' : 'text-orange-400'}`}>
+                        {networkStats.latency}
+                      </span>
+                    </div>
                   </div>
                 </motion.div>
 
@@ -1750,7 +1941,7 @@ export default function App() {
                         </div>
                         <div className="flex items-center gap-6">
                           <div className="text-right">
-                            <p className="text-xs font-mono font-bold text-slate-200">Rp {asset.marketValue.toLocaleString('id-ID')}</p>
+                            <p className="text-xs font-mono font-bold text-slate-200">Rp {typeof asset.marketValue === 'number' ? asset.marketValue.toLocaleString('id-ID') : (asset.marketValue || 'N/A')}</p>
                             <p className={`text-[10px] font-medium ${asset.change >= 0 ? 'text-green-400' : 'text-red-400'}`}>
                               {asset.change >= 0 ? '+' : ''}{asset.change.toFixed(2)}%
                             </p>
@@ -1769,6 +1960,10 @@ export default function App() {
                       setSelectedSymbol(s);
                       setActiveTab('home');
                     }}
+                    onFundamentalAudit={(symbol) => {
+                      setFundamentalSymbol(symbol);
+                      setActiveTab('fundamental');
+                    }}
                   />
                 </div>
 
@@ -1778,7 +1973,7 @@ export default function App() {
                   <div className="relative z-10">
                     <p className="text-[10px] text-slate-500 font-black uppercase tracking-[0.3em] mb-2">Total Combined Market Value</p>
                     <h2 className="text-3xl lg:text-5xl font-black text-white tracking-tighter font-mono">
-                      Rp {totalPortfolioValue.toLocaleString('id-ID')}
+                      Rp {typeof totalPortfolioValue === 'number' ? totalPortfolioValue.toLocaleString('id-ID') : (totalPortfolioValue || 'N/A')}
                     </h2>
                     <div className="mt-4 flex flex-wrap items-center gap-4">
                       {(() => {
@@ -1798,7 +1993,7 @@ export default function App() {
                       })()}
                       <div className="flex items-center gap-2 px-3 py-1 bg-slate-900/80 rounded-full border border-slate-800">
                         <span className="text-[9px] text-slate-500 font-black uppercase">RDN Cash:</span>
-                        <span className="text-[10px] text-[#DFFF00] font-mono font-bold">Rp {myCGSPortfolio.cashBalance.toLocaleString('id-ID')}</span>
+                        <span className="text-[10px] text-[#DFFF00] font-mono font-bold">Rp {typeof myCGSPortfolio.cashBalance === 'number' ? myCGSPortfolio.cashBalance.toLocaleString('id-ID') : (myCGSPortfolio.cashBalance || 'N/A')}</span>
                       </div>
                     </div>
                   </div>
@@ -2007,6 +2202,10 @@ export default function App() {
                     setSelectedSymbol(s);
                     setActiveTab('home');
                   }}
+                  onFundamentalAudit={(symbol) => {
+                    setFundamentalSymbol(symbol);
+                    setActiveTab('fundamental');
+                  }}
                 />
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   {portfolioData.map((asset) => (
@@ -2028,7 +2227,7 @@ export default function App() {
                         </div>
                       </div>
                       <div className="text-right">
-                        <p className="text-xs font-mono font-bold text-slate-200">Rp {asset.marketValue.toLocaleString('id-ID')}</p>
+                        <p className="text-xs font-mono font-bold text-slate-200">Rp {typeof asset.marketValue === 'number' ? asset.marketValue.toLocaleString('id-ID') : (asset.marketValue || 'N/A')}</p>
                         <p className={`text-[10px] font-medium ${asset.change >= 0 ? 'text-green-400' : 'text-red-400'}`}>
                           {asset.change >= 0 ? '+' : ''}{asset.change.toFixed(2)}%
                         </p>
@@ -2052,6 +2251,25 @@ export default function App() {
             <RebalanceTool 
               portfolioData={portfolioData} 
               cashBalance={myCGSPortfolio.cashBalance} 
+            />
+          </div>
+        );
+      case 'fundamental':
+        return (
+          <div className="space-y-6">
+             <div className="flex items-center justify-between px-1">
+                <div className="flex items-center gap-4">
+                  <h3 className="text-sm font-black text-white uppercase tracking-widest flex items-center gap-2">
+                    <BrainCircuit className="w-4 h-4 text-[#DFFF00]" />
+                    Fundamental Engine
+                  </h3>
+                </div>
+             </div>
+            <FundamentalAnalyst 
+              initialSymbol={fundamentalSymbol}
+              onSelectSymbol={(sym) => {
+                setFundamentalSymbol(sym);
+              }}
             />
           </div>
         );
@@ -2345,52 +2563,39 @@ export default function App() {
           </AnimatePresence>
 
           {/* Header */}
-          <header className="px-4 py-4 lg:px-8 lg:py-6 border-b border-zinc-900 flex justify-between items-center sticky top-0 bg-black z-20">
+          <header className="px-4 py-4 lg:px-6 lg:py-4 border-b border-zinc-800 flex justify-between items-center sticky top-0 bg-black z-20">
             <div className="flex items-center gap-4">
               <button 
                 onClick={() => setIsSidebarOpen(true)}
-                className="p-3 bg-zinc-900/50 text-[#DFFF00] rounded-2xl border border-zinc-800/50 shadow-xl active:scale-95 transition-all hover:bg-zinc-800"
+                className="lg:hidden p-2.5 bg-zinc-900 border border-zinc-800 text-[#DFFF00] rounded-xl shadow-lg active:scale-95 transition-all hover:bg-zinc-800"
               >
-                <Menu className="w-6 h-6" />
+                <Menu className="w-5 h-5" />
               </button>
               
-              <div className="flex items-center gap-3">
-                <div className="flex flex-col">
-                  <h1 className="text-xl font-bold text-[#DFFF00] leading-none tracking-tight">VentureAM</h1>
-                  <span className="text-[10px] text-zinc-400 mt-1 uppercase tracking-widest font-bold">Institutional System</span>
-                </div>
+              <div className="flex flex-col">
+                <h1 className="text-xl font-bold text-[#DFFF00] leading-none tracking-tight">VentureAM</h1>
+                <span className="text-[10px] text-zinc-400 mt-1 uppercase tracking-widest font-black">Institutional System</span>
               </div>
             </div>
             
-            <div className="flex items-center gap-6">
-              <div className="text-right hidden sm:block">
-                <p className="text-[8px] text-zinc-500 font-bold uppercase tracking-[0.2em] leading-none mb-1">SYSTEM HEALTH</p>
-                <div className="flex items-center justify-end gap-2">
-                  <span className="text-[10px] font-black text-emerald-400 uppercase tracking-tight">OPTIMIZED</span>
-                  <div className="flex gap-0.5">
-                    {[1, 2, 3, 4, 5].map(i => (
-                      <div key={i} className={`w-1 h-3 rounded-full ${i <= 4 ? 'bg-emerald-500' : 'bg-emerald-500/30'}`} />
-                    ))}
-                  </div>
-                </div>
+            <div className="text-right">
+              <p className="text-[9px] text-zinc-500 font-black uppercase tracking-[0.2em] leading-none mb-1">INTERNATIONAL GATEWAY</p>
+              <div className="flex items-center justify-end gap-2" onClick={() => setActiveTab('gateway')}>
+                <div className={`w-1.5 h-1.5 rounded-full ${
+                  networkStats.operational
+                  ? 'bg-[#DFFF00] shadow-[0_0_8px_#DFFF00] animate-pulse'
+                  : 'bg-red-500'
+                }`} />
+                <p className="text-[11px] font-black text-white uppercase tracking-tight cursor-pointer">
+                  {networkStats.operational ? 'CONNECTED' : 'OFFLINE'}
+                </p>
               </div>
-
-              <div className="text-right border-l border-zinc-800 pl-6 cursor-pointer group" onClick={() => setActiveTab('gateway')}>
-                <p className="text-[9px] text-zinc-500 font-bold uppercase tracking-[0.2em] leading-none mb-1">VAM DIRECT LINK</p>
-                <div className="flex items-center justify-end gap-2">
-                  <div className={`w-2 h-2 rounded-full ${
-                    networkStats.operational
-                    ? 'bg-[#DFFF00] shadow-[0_0_12px_#DFFF00] animate-pulse'
-                    : 'bg-red-500'
-                  }`} />
-                  <p className="text-[11px] font-black text-white uppercase tracking-tight group-hover:text-[#DFFF00] transition-colors">
-                    {networkStats.operational ? 'CONNECTED' : 'DISCONNECTED'}
-                  </p>
+              <div className="flex items-center justify-end gap-3 mt-1.5 pt-1.5 border-t border-white/5">
+                <div className="flex flex-col">
+                  <p className="text-[8px] text-zinc-600 font-bold uppercase tracking-tighter text-right">Resource Tracks</p>
+                  <p className="text-[9px] text-zinc-400 font-bold uppercase tracking-widest">IDX • TV • IBKR</p>
                 </div>
-                <div className="flex items-center justify-end gap-1.5 mt-0.5">
-                   <p className="text-[8px] text-zinc-500 font-bold uppercase tracking-widest">PROTOCOL: SECURE V2</p>
-                   <span className="text-[8px] font-mono text-[#DFFF00]/80">{networkStats.ping}ms</span>
-                </div>
+                <Database className="w-3 h-3 text-[#DFFF00] opacity-40" />
               </div>
             </div>
           </header>
@@ -2535,6 +2740,48 @@ export default function App() {
             </>
           )}
         </AnimatePresence>
+        {/* PRICE ALERTS OVERLAY */}
+        <div className="fixed top-24 right-6 z-[999] w-80 space-y-3 pointer-events-none">
+          <AnimatePresence mode="popLayout">
+            {notifications.map((notif) => (
+              <motion.div
+                key={notif.id}
+                initial={{ opacity: 0, x: 50, scale: 0.9 }}
+                animate={{ opacity: 1, x: 0, scale: 1 }}
+                exit={{ opacity: 0, scale: 0.8, x: 50 }}
+                className="pointer-events-auto bg-black/90 backdrop-blur-2xl border-l-[4px] border-l-[#DFFF00] border border-zinc-800 p-4 rounded-xl shadow-2xl relative overflow-hidden group"
+              >
+                <div className="absolute top-0 right-0 p-4 bg-[#DFFF00]/5 blur-2xl rounded-full" />
+                
+                <div className="flex items-start gap-3">
+                  <div className="p-2 bg-[#DFFF00]/10 rounded-lg">
+                    <Bell className="w-4 h-4 text-[#DFFF00] animate-bounce" />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center justify-between mb-1">
+                      <span className="text-[10px] font-black text-white uppercase tracking-widest">{notif.symbol} ALERT</span>
+                      <button 
+                        onClick={() => clearNotification(notif.id)}
+                        className="p-1 hover:bg-zinc-800 rounded-md transition-colors"
+                      >
+                        <X className="w-3 h-3 text-zinc-500" />
+                      </button>
+                    </div>
+                    <p className="text-[11px] text-zinc-400 font-bold leading-tight">
+                      Price reached <span className="text-white">Rp {typeof notif.price === 'number' ? notif.price.toLocaleString('id-ID') : (notif.price || 'N/A')}</span>
+                    </p>
+                    <p className="text-[9px] text-[#DFFF00] font-black uppercase tracking-tighter mt-1">
+                      Target: {notif.condition === 'gt' ? '>' : '<'} Rp {typeof notif.targetPrice === 'number' ? notif.targetPrice.toLocaleString('id-ID') : (notif.targetPrice || 'N/A')}
+                    </p>
+                  </div>
+                </div>
+                
+                {/* Visual pulse indicator */}
+                <div className="absolute bottom-0 left-0 h-0.5 bg-[#DFFF00]/30 w-full animate-pulse" />
+              </motion.div>
+            ))}
+          </AnimatePresence>
+        </div>
       </div>
     </div>
   );

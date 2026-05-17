@@ -63,6 +63,7 @@ export default function TaskCenter() {
   const formatDate = (dateStr: string) => {
     if (!dateStr) return 'No Date';
     const date = new Date(dateStr);
+    if (isNaN(date.getTime())) return dateStr;
     return date.toLocaleString('id-ID', { 
       day: 'numeric', 
       month: 'short', 

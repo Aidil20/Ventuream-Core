@@ -7,17 +7,16 @@ interface TradingViewWidgetProps {
 
 function TradingViewWidget({ symbol = "IDX:BBCA", studies = ["MASimple@tv-basicstudies", "MAExp@tv-basicstudies"] }: TradingViewWidgetProps) {
   const container = useRef<HTMLDivElement>(null);
+  const widgetId = useRef(`tv-widget-${Math.random().toString(36).substr(2, 9)}`).current;
 
   useEffect(() => {
-    let scriptElement: HTMLScriptElement | null = null;
     const currentContainer = container.current;
-    if (currentContainer) {
-      currentContainer.innerHTML = '';
-      scriptElement = document.createElement("script");
+
+    if (currentContainer && !currentContainer.querySelector('script')) {
+      const scriptElement = document.createElement("script");
       scriptElement.src = "https://s3.tradingview.com/external-embedding/embed-widget-advanced-chart.js";
       scriptElement.type = "text/javascript";
       scriptElement.async = true;
-      scriptElement.crossOrigin = "anonymous";
       scriptElement.innerHTML = JSON.stringify({
         "autosize": true,
         "symbol": symbol,
@@ -28,6 +27,7 @@ function TradingViewWidget({ symbol = "IDX:BBCA", studies = ["MASimple@tv-basics
         "locale": "id",
         "enable_publishing": false,
         "allow_symbol_change": true,
+        "container_id": widgetId,
         "calendar": false,
         "studies": studies,
         "support_host": "https://www.tradingview.com"
@@ -35,16 +35,13 @@ function TradingViewWidget({ symbol = "IDX:BBCA", studies = ["MASimple@tv-basics
       currentContainer.appendChild(scriptElement);
     }
     return () => {
-      // Guard against querySelector errors by ensuring we only clear if still mounted correctly
-      if (currentContainer) {
-        currentContainer.innerHTML = '';
-      }
+      // Safe cleanup
     };
   }, [symbol, studies]);
 
   return (
     <div className="tradingview-widget-container h-[400px] w-full rounded-2xl overflow-hidden border border-slate-800" ref={container}>
-      <div className="tradingview-widget-container__widget h-full w-full"></div>
+      <div id={widgetId} className="h-full w-full"></div>
     </div>
   );
 }

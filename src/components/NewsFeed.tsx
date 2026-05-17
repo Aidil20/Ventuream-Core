@@ -1,6 +1,6 @@
 import React from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { Newspaper, Clock, ExternalLink, TrendingUp, TrendingDown, Minus } from 'lucide-react';
+import { Newspaper, Clock, ExternalLink, TrendingUp, TrendingDown, Minus, BrainCircuit } from 'lucide-react';
 import type { MarketNews } from '../services/marketService';
 
 interface NewsFeedProps {
@@ -63,17 +63,27 @@ export const NewsFeed: React.FC<NewsFeedProps> = ({ news, isLoading }) => {
               }`} />
 
               <div className="space-y-3">
-                <div className="flex justify-between items-start gap-4">
-                  <h4 className="text-[11px] font-bold text-slate-100 leading-relaxed group-hover:text-white transition-colors">
-                    {item.headline}
-                  </h4>
-                  <div className="flex items-center gap-1.5 shrink-0">
-                    {getSentimentIcon(item.sentiment)}
-                    <span className={`text-[8px] font-black uppercase tracking-widest ${getSentimentColor(item.sentiment)}`}>
-                      {item.sentiment}
-                    </span>
+                  <div className="flex-1">
+                    <div className="flex items-center gap-2 mb-1.5 flex-wrap">
+                      <h4 className="text-[11px] font-black text-slate-100 leading-relaxed group-hover:text-white transition-colors">
+                        {item.headline}
+                      </h4>
+                      <div className={`px-2 py-0.5 rounded-lg border text-[8px] font-black uppercase tracking-widest flex items-center gap-1 shrink-0 ${
+                        item.sentiment === 'bullish' ? 'bg-emerald-500/10 border-emerald-500/20 text-emerald-400' :
+                        item.sentiment === 'bearish' ? 'bg-rose-500/10 border-rose-500/20 text-rose-400' :
+                        'bg-zinc-800 border-zinc-700 text-zinc-400'
+                      }`}>
+                        {getSentimentIcon(item.sentiment)}
+                        {item.sentiment}
+                      </div>
+                      
+                      {item.score !== undefined && (
+                        <div className="px-2 py-0.5 bg-[#DFFF00]/10 rounded-lg border border-[#DFFF00]/20 text-[#DFFF00] text-[8px] font-black uppercase tracking-widest shrink-0">
+                          AI: {item.score}%
+                        </div>
+                      )}
+                    </div>
                   </div>
-                </div>
 
                 <p className="text-[10px] text-slate-400 leading-relaxed line-clamp-2 italic">
                   "{item.summary}"

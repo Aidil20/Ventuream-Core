@@ -4,6 +4,9 @@ export interface MarketNews {
   timestamp: string;
   source: string;
   sentiment: 'bullish' | 'bearish' | 'neutral';
+  score?: number;
+  confidence?: number;
+  url?: string;
 }
 
 async function fetchWithTimeout(resource: string, options: any = {}) {
@@ -262,6 +265,196 @@ export async function fetchLivePrices(symbols: string[]): Promise<LivePrice[]> {
       changePercent: (Math.random() - 0.5) * 2
     };
   });
+}
+
+export interface AssetSearchInfo {
+  symbol: string;
+  name: string;
+  price: number;
+  changePercent: number;
+  volume: string;
+  marketCap: string;
+  summary: string;
+}
+
+export async function searchAsset(query: string): Promise<AssetSearchInfo[]> {
+  try {
+    const response = await fetch(`/api/market/search?query=${encodeURIComponent(query)}`);
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({ error: "Search failed" }));
+      if (response.status === 429 || errorData.code === 'RESOURCE_EXHAUSTED') {
+        throw new Error(JSON.stringify({ 
+          code: 'RESOURCE_EXHAUSTED', 
+          message: errorData.message || "Institutional Search Quota Exceeded" 
+        }));
+      }
+      throw new Error(JSON.stringify(errorData));
+    }
+    const data = await response.json();
+    return Array.isArray(data) ? data : [data];
+  } catch (error) {
+    console.error("Asset search error:", error);
+    throw error;
+  }
+}
+
+export interface NewsSentimentAnalysis {
+  summary: string;
+  score: number;
+  confidence: number;
+  items?: {
+    headline: string;
+    score: number;
+    confidence: number;
+  }[];
+}
+
+export async function fetchNewsSentimentSummary(news: MarketNews[], symbol: string): Promise<NewsSentimentAnalysis | null> {
+  try {
+    const response = await fetch('/api/market/news-sentiment', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ news, symbol })
+    });
+    if (!response.ok) throw new Error("Sentiment analysis failed");
+    return await response.json();
+  } catch (error) {
+    console.error("News sentiment error:", error);
+    return null;
+  }
+}
+
+export interface FundamentalAudit {
+  ticker: string;
+  companyName: string;
+  lastPrice: number;
+  changeAbsolute: number;
+  changePercent: number;
+  sector: string;
+  score: number;
+  tradingViewIntelligence?: {
+    technicalSummary: string;
+    keyStats: {
+      peRatio: string;
+      eps: string;
+      dividendYield: string;
+      roe: string;
+      der: string;
+      pbv: string;
+    };
+  };
+  keyRatios: {
+    peRatio: string;
+    eps: string;
+    roe: string;
+    roa: string;
+    der: string;
+    pbv: string;
+    dividendYield: string;
+  };
+  earningsPower: {
+    revenueGrowth: string;
+    profitMargin: string;
+    roe_roa: string;
+    summary: string;
+  };
+  balanceSheet: {
+    der: string;
+    currentRatio: string;
+    capitalStructure: string;
+    summary: string;
+  };
+  economicAnalysis: {
+    gdpGrowth: string;
+    inflationRate: string;
+    interestRates: string;
+    summary: string;
+  };
+  industryAnalysis: {
+    growthPotential: string;
+    competition: string;
+    regulation: string;
+    summary: string;
+  };
+  companyAnalysis: {
+    financialHealth: string;
+    managementQuality: string;
+    businessModel: string;
+    summary: string;
+  };
+  maScanner: {
+    potential: string;
+    strategicValue: string;
+    dealSize: string;
+    dealSizeRange: { min: string, max: string };
+    sectorFocus: string;
+    sectorFocusFilters: string[];
+    potentialAcquirerAnalysis: string;
+    potentialAcquirerFinancialHealth: string;
+    potentialAcquirerStrategicAlignment: string;
+    divestmentRumors: string;
+    score: number;
+  };
+  intrinsicValue: {
+    fairValue: number;
+    model: string;
+    dcfValue: string;
+    grahamNumber: string;
+    relativeValue: string;
+    currentPrice: number;
+    upside_downside: number;
+  };
+  peerComparison: {
+    ranking: number;
+    totalInSector: number;
+    sectorAverageROE: string;
+    sectorAveragePE: string;
+    topCompetitors: { symbol: string, strength: string }[];
+    summary: string;
+  };
+  technicalResearch: {
+    supportResistance: string[];
+    rsi: string;
+    macd: string;
+    movingAverages: string;
+    volumeProfile: string;
+    indicators: {
+      name: string;
+      value: string;
+      signal: string;
+    }[];
+  };
+  overallAuditSummary: string;
+  riskFactors: string[];
+}
+
+export async function fetchFundamentalAudit(symbol: string, retries = 2): Promise<FundamentalAudit | null> {
+  try {
+    const response = await fetch(`/api/market/fundamental-audit?symbol=${encodeURIComponent(symbol)}`);
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({ error: "Audit failed" }));
+      if (response.status === 429 || errorData.code === 'RESOURCE_EXHAUSTED') {
+        if (retries > 0) {
+          console.warn(`[VAM GATEWAY] Quota reached, retrying... (${retries} left)`);
+          await new Promise(resolve => setTimeout(resolve, 2000));
+          return fetchFundamentalAudit(symbol, retries - 1);
+        }
+        throw new Error(JSON.stringify({ 
+          code: 'RESOURCE_EXHAUSTED', 
+          message: errorData.message || "Institutional Quota Exceeded" 
+        }));
+      }
+      throw new Error(JSON.stringify(errorData));
+    }
+    return await response.json();
+  } catch (error) {
+    console.error("Fundamental audit error:", error);
+    if (retries > 0 && !(error instanceof Error && error.message.includes('RESOURCE_EXHAUSTED'))) {
+       await new Promise(resolve => setTimeout(resolve, 1000));
+       return fetchFundamentalAudit(symbol, retries - 1);
+    }
+    throw error;
+  }
 }
 
 export async function fetchStockRecommendations(options?: ScanOptions): Promise<StockRecommendation[]> {

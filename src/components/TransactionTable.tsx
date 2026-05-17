@@ -59,9 +59,11 @@ export const TransactionTable = ({ data }: { data: Transaction[] }) => {
                       {tx.side}
                     </span>
                   </td>
-                  <td className="p-3 text-right text-slate-300 font-mono">{tx.quantity.toLocaleString()}</td>
+                  <td className="p-3 text-right text-slate-300 font-mono">
+                    {typeof tx.quantity === 'number' ? tx.quantity.toLocaleString() : tx.quantity}
+                  </td>
                   <td className="p-3 text-right text-slate-100 font-mono">
-                    {tx.price.toLocaleString()}
+                    {typeof tx.price === 'number' ? tx.price.toLocaleString() : tx.price}
                   </td>
                 </tr>
                 <AnimatePresence>
