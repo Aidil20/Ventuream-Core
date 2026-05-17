@@ -43,11 +43,6 @@ async function startServer() {
     const statusText = error.statusText || "";
     const errString = (message + details + statusText + String(error)).toLowerCase();
     
-    if (errString.includes("429") || errString.includes("quota") || errString.includes("exhausted")) {
-      console.warn("[VAM GATEWAY] Quota Error Detected:", errString.substring(0, 500));
-      return true;
-    }
-    
     return (
       errString.includes("429") || 
       errString.includes("res_exhausted") || 
@@ -66,12 +61,6 @@ async function startServer() {
     const msg = String(error.message || "").toLowerCase();
     const details = typeof error.details === 'string' ? error.details : JSON.stringify(error.details || "");
     const errStr = (msg + details + String(error)).toLowerCase();
-    
-    if (errStr.includes("404") || errStr.includes("not found")) {
-      console.warn("[VAM GATEWAY] Not Found / Invalid Model Error:", errStr.substring(0, 500));
-      return true;
-    }
-    
     return statusCode === 404 || errStr.includes("not_found") || errStr.includes("404") || errStr.includes("not found");
   }
 
@@ -271,9 +260,9 @@ async function startServer() {
         Return as JSON array of objects with: headline, summary, timestamp, source, sentiment (bullish, bearish, or neutral), score (0-100), confidence (0-100), and url (the direct link to the news article).`;
       }
 
-      const PRIMARY_MODEL = "gemini-1.5-flash";
-      const SECONDARY_MODEL = "gemini-1.5-pro";
-      const FALLBACK_MODEL = "gemini-1.5-flash-latest";
+      const PRIMARY_MODEL = "gemini-2.0-flash";
+      const SECONDARY_MODEL = "gemini-3-flash-preview";
+      const FALLBACK_MODEL = "gemini-3.1-flash-lite";
 
       let result;
       const attemptGenerate = async (model: string, useTools: boolean) => {
@@ -326,7 +315,7 @@ async function startServer() {
       res.status(500).json({ 
         error: "Failed to fetch news", 
         details: error?.message,
-        model: "gemini-1.5-flash"
+        model: "gemini-3-flash-preview"
       });
     }
   });
@@ -350,9 +339,9 @@ async function startServer() {
       ${SOURCE_URLS.join("\n")}
       Return as a JSON array of objects.`;
 
-      const PRIMARY_MODEL = "gemini-1.5-flash";
-      const SECONDARY_MODEL = "gemini-1.5-pro";
-      const FALLBACK_MODEL = "gemini-1.5-flash-latest";
+      const PRIMARY_MODEL = "gemini-2.0-flash";
+      const SECONDARY_MODEL = "gemini-3-flash-preview";
+      const FALLBACK_MODEL = "gemini-3.1-flash-lite";
 
       let result;
       try {
@@ -448,9 +437,9 @@ async function startServer() {
       ${SOURCE_URLS.join("\n")}
       Include Symbol, Full Name, signal (BUY/SELL/HOLD), score (0-100), and metrics relevant to the scanner type (e.g. Price, Volume, RSI, MACD, etc.). Return JSON.`;
       
-      const PRIMARY_MODEL = "gemini-1.5-flash";
-      const SECONDARY_MODEL = "gemini-1.5-pro";
-      const FALLBACK_MODEL = "gemini-1.5-flash-latest";
+      const PRIMARY_MODEL = "gemini-2.0-flash";
+      const SECONDARY_MODEL = "gemini-3-flash-preview";
+      const FALLBACK_MODEL = "gemini-3.1-flash-lite";
 
       let result;
       try {
@@ -544,9 +533,9 @@ async function startServer() {
       Also use Bloomberg Technoz, Kontan, and CNBC Indonesia.
       Focus on major symbols like BBCA, BBRI, TLKM, ADRO. Return JSON with details.`;
 
-      const PRIMARY_MODEL = "gemini-1.5-flash";
-      const SECONDARY_MODEL = "gemini-1.5-pro";
-      const FALLBACK_MODEL = "gemini-1.5-flash-latest";
+      const PRIMARY_MODEL = "gemini-2.0-flash";
+      const SECONDARY_MODEL = "gemini-3-flash-preview";
+      const FALLBACK_MODEL = "gemini-3.1-flash-lite";
 
       let result;
       try {
@@ -620,9 +609,9 @@ async function startServer() {
       If it's an Indonesian stock, prioritize IDX and TradingView results.
       Return JSON as an array of objects with fields: symbol, name, price, changePercent, volume, marketCap, summary.`;
 
-      const PRIMARY_MODEL = "gemini-1.5-flash";
-      const SECONDARY_MODEL = "gemini-1.5-pro";
-      const FALLBACK_MODEL = "gemini-1.5-flash-latest";
+      const PRIMARY_MODEL = "gemini-2.0-flash";
+      const SECONDARY_MODEL = "gemini-3-flash-preview";
+      const FALLBACK_MODEL = "gemini-3.1-flash-lite";
 
       let result;
       try {
@@ -740,9 +729,9 @@ async function startServer() {
       
       Return JSON with fields: summary, score, confidence, items (array of { headline, score, confidence }).`;
 
-      const PRIMARY_MODEL = "gemini-1.5-flash";
-      const SECONDARY_MODEL = "gemini-1.5-pro";
-      const FALLBACK_MODEL = "gemini-1.5-flash-latest";
+      const PRIMARY_MODEL = "gemini-2.0-flash";
+      const SECONDARY_MODEL = "gemini-3-flash-preview";
+      const FALLBACK_MODEL = "gemini-3.1-flash-lite";
 
       let result;
       try {
@@ -819,11 +808,10 @@ async function startServer() {
       
       Return a detailed JSON report. Use Indonesian for text summaries.`;
 
-    const PRIMARY_MODEL = "gemini-1.5-flash";
-    const SECONDARY_MODEL = "gemini-1.5-pro";
-    const FALLBACK_MODEL = "gemini-1.5-flash-latest";
+    const PRIMARY_MODEL = "gemini-2.0-flash";
+    const SECONDARY_MODEL = "gemini-3-flash-preview";
+    const FALLBACK_MODEL = "gemini-3.1-flash-lite";
 
-    // Optimized schema to prevent token overflow and timeouts
     const config: any = {
       responseMimeType: "application/json",
       responseSchema: {
@@ -849,9 +837,11 @@ async function startServer() {
                   roe: { type: Type.STRING },
                   der: { type: Type.STRING },
                   pbv: { type: Type.STRING }
-                }
+                },
+                required: ["peRatio", "eps", "dividendYield", "roe", "der", "pbv"]
               }
-            }
+            },
+            required: ["technicalSummary", "keyStats"]
           },
           keyRatios: {
             type: Type.OBJECT,
@@ -863,7 +853,8 @@ async function startServer() {
               der: { type: Type.STRING },
               pbv: { type: Type.STRING },
               dividendYield: { type: Type.STRING }
-            }
+            },
+            required: ["peRatio", "eps", "roe", "roa", "der", "pbv", "dividendYield"]
           },
           earningsPower: {
             type: Type.OBJECT,
@@ -872,7 +863,8 @@ async function startServer() {
               profitMargin: { type: Type.STRING },
               roe_roa: { type: Type.STRING },
               summary: { type: Type.STRING }
-            }
+            },
+            required: ["revenueGrowth", "profitMargin", "roe_roa", "summary"]
           },
           balanceSheet: {
             type: Type.OBJECT,
@@ -881,7 +873,8 @@ async function startServer() {
               currentRatio: { type: Type.STRING },
               capitalStructure: { type: Type.STRING },
               summary: { type: Type.STRING }
-            }
+            },
+            required: ["der", "currentRatio", "capitalStructure", "summary"]
           },
           economicAnalysis: {
             type: Type.OBJECT,
@@ -890,7 +883,8 @@ async function startServer() {
               inflationRate: { type: Type.STRING },
               interestRates: { type: Type.STRING },
               summary: { type: Type.STRING }
-            }
+            },
+            required: ["gdpGrowth", "inflationRate", "interestRates", "summary"]
           },
           industryAnalysis: {
             type: Type.OBJECT,
@@ -899,7 +893,8 @@ async function startServer() {
               competition: { type: Type.STRING },
               regulation: { type: Type.STRING },
               summary: { type: Type.STRING }
-            }
+            },
+            required: ["growthPotential", "competition", "regulation", "summary"]
           },
           companyAnalysis: {
             type: Type.OBJECT,
@@ -908,7 +903,8 @@ async function startServer() {
               managementQuality: { type: Type.STRING },
               businessModel: { type: Type.STRING },
               summary: { type: Type.STRING }
-            }
+            },
+            required: ["financialHealth", "managementQuality", "businessModel", "summary"]
           },
           maScanner: {
             type: Type.OBJECT,
@@ -916,42 +912,95 @@ async function startServer() {
               potential: { type: Type.STRING },
               strategicValue: { type: Type.STRING },
               dealSize: { type: Type.STRING },
+              dealSizeRange: { 
+                type: Type.OBJECT,
+                properties: {
+                  min: { type: Type.STRING },
+                  max: { type: Type.STRING }
+                },
+                required: ["min", "max"]
+              },
+              sectorFocus: { type: Type.STRING },
+              sectorFocusFilters: { type: Type.ARRAY, items: { type: Type.STRING } },
               potentialAcquirerAnalysis: { type: Type.STRING },
+              potentialAcquirerFinancialHealth: { type: Type.STRING },
+              potentialAcquirerStrategicAlignment: { type: Type.STRING },
               divestmentRumors: { type: Type.STRING },
               score: { type: Type.NUMBER }
-            }
+            },
+            required: [
+              "potential", "strategicValue", "dealSize", "dealSizeRange", 
+              "sectorFocus", "sectorFocusFilters", "potentialAcquirerAnalysis", 
+              "potentialAcquirerFinancialHealth", "potentialAcquirerStrategicAlignment", 
+              "divestmentRumors", "score"
+            ]
           },
           intrinsicValue: {
             type: Type.OBJECT,
             properties: {
               fairValue: { type: Type.NUMBER },
               model: { type: Type.STRING },
+              dcfValue: { type: Type.STRING },
+              grahamNumber: { type: Type.STRING },
+              relativeValue: { type: Type.STRING },
+              currentPrice: { type: Type.NUMBER },
               upside_downside: { type: Type.NUMBER }
-            }
+            },
+            required: ["fairValue", "model", "dcfValue", "grahamNumber", "relativeValue", "currentPrice", "upside_downside"]
           },
           peerComparison: {
             type: Type.OBJECT,
             properties: {
               ranking: { type: Type.NUMBER },
               totalInSector: { type: Type.NUMBER },
+              sectorAverageROE: { type: Type.STRING },
+              sectorAveragePE: { type: Type.STRING },
+              topCompetitors: { 
+                type: Type.ARRAY, 
+                items: { 
+                  type: Type.OBJECT,
+                  properties: {
+                    symbol: { type: Type.STRING },
+                    strength: { type: Type.STRING }
+                  },
+                  required: ["symbol", "strength"]
+                } 
+              },
               summary: { type: Type.STRING }
-            }
+            },
+            required: ["ranking", "totalInSector", "sectorAverageROE", "sectorAveragePE", "topCompetitors", "summary"]
           },
           technicalResearch: {
             type: Type.OBJECT,
             properties: {
+              supportResistance: { type: Type.ARRAY, items: { type: Type.STRING } },
               rsi: { type: Type.STRING },
               macd: { type: Type.STRING },
               movingAverages: { type: Type.STRING },
-              volumeProfile: { type: Type.STRING }
-            }
+              volumeProfile: { type: Type.STRING },
+              indicators: { 
+                type: Type.ARRAY, 
+                items: {
+                  type: Type.OBJECT,
+                  properties: {
+                    name: { type: Type.STRING },
+                    value: { type: Type.STRING },
+                    signal: { type: Type.STRING }
+                  },
+                  required: ["name", "value", "signal"]
+                }
+              }
+            },
+            required: ["supportResistance", "rsi", "macd", "movingAverages", "volumeProfile", "indicators"]
           },
           overallAuditSummary: { type: Type.STRING },
           riskFactors: { type: Type.ARRAY, items: { type: Type.STRING } }
         },
         required: [
           "ticker", "companyName", "lastPrice", "changeAbsolute", "changePercent", "sector", "score",
-          "overallAuditSummary"
+          "tradingViewIntelligence", "keyRatios", "earningsPower", "balanceSheet", "economicAnalysis", "industryAnalysis",
+          "companyAnalysis", "maScanner", "intrinsicValue", "peerComparison", "technicalResearch",
+          "overallAuditSummary", "riskFactors"
         ]
       }
     };
@@ -1215,21 +1264,11 @@ async function startServer() {
     });
   }
 
-  if (process.env.NODE_ENV !== "production" || !process.env.VERCEL) {
-    httpServer.listen(PORT, "0.0.0.0", () => {
-      console.log(`VAM Real-time Gateway running on http://localhost:${PORT}`);
-    });
-  }
-  
-  return app;
+  httpServer.listen(PORT, "0.0.0.0", () => {
+    console.log(`VAM Real-time Gateway running on http://localhost:${PORT}`);
+  });
 }
 
-const appPromise = startServer().catch(err => {
+startServer().catch(err => {
   console.error("CRITICAL SERVER STARTUP ERROR:", err);
 });
-
-export default async (req: any, res: any) => {
-  const app = await appPromise;
-  if (app) return app(req, res);
-  res.status(500).send("Server failed to initialize");
-};

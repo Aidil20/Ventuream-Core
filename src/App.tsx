@@ -951,11 +951,6 @@ export default function App() {
       case 'home':
         return (
           <div className="space-y-6">
-            {/* Restricted Access Banner */}
-            <div className="bg-green-600 text-white p-4 rounded-xl text-center font-bold shadow-lg shadow-green-600/20 uppercase tracking-widest text-xs">
-              INSTITUTIONAL ACCESS RESTRICTED
-            </div>
-
             {/* PERFORMANCE HISTORY CHART */}
             <PortfolioChart />
 
@@ -2650,24 +2645,30 @@ export default function App() {
               </button>
               
               <div className="flex flex-col">
-                <h1 className="text-xl font-bold text-[#DFFF00] leading-none">VentureAM</h1>
-                <span className="text-[10px] text-zinc-400 mt-1 uppercase tracking-widest">Institutional System</span>
+                <h1 className="text-xl font-bold text-[#DFFF00] leading-none tracking-tight">VentureAM</h1>
+                <span className="text-[10px] text-zinc-400 mt-1 uppercase tracking-widest font-black">Institutional System</span>
               </div>
             </div>
             
             <div className="text-right">
-              <p className="text-[9px] text-zinc-500 font-medium tracking-[0.1em]">INTERNATIONAL GATEWAY</p>
+              <p className="text-[9px] text-zinc-500 font-black uppercase tracking-[0.2em] leading-none mb-1">INTERNATIONAL GATEWAY</p>
               <div className="flex items-center justify-end gap-2" onClick={() => setActiveTab('gateway')}>
                 <div className={`w-1.5 h-1.5 rounded-full ${
                   networkStats.operational
                   ? 'bg-[#DFFF00] shadow-[0_0_8px_#DFFF00] animate-pulse'
                   : 'bg-red-500'
                 }`} />
-                <p className="text-[11px] font-bold text-white uppercase tracking-tight cursor-pointer">
+                <p className="text-[11px] font-black text-white uppercase tracking-tight cursor-pointer">
                   {networkStats.operational ? 'CONNECTED' : 'OFFLINE'}
                 </p>
               </div>
-              <p className="text-[9px] text-zinc-400 mt-0.5">Gateway (IBKR/CGS)</p>
+              <div className="flex items-center justify-end gap-3 mt-1.5 pt-1.5 border-t border-white/5">
+                <div className="flex flex-col">
+                  <p className="text-[8px] text-zinc-600 font-bold uppercase tracking-tighter text-right">Resource Tracks</p>
+                  <p className="text-[9px] text-zinc-400 font-bold uppercase tracking-widest">IDX • TV • IBKR</p>
+                </div>
+                <Database className="w-3 h-3 text-[#DFFF00] opacity-40" />
+              </div>
             </div>
           </header>
 

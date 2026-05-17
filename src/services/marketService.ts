@@ -429,9 +429,8 @@ export interface FundamentalAudit {
 }
 
 export async function fetchFundamentalAudit(symbol: string, retries = 2): Promise<FundamentalAudit | null> {
-  const timeout = 60000; // Increased to 60s for deep institutional audit
   try {
-    const response = await fetchWithTimeout(`/api/market/fundamental-audit?symbol=${encodeURIComponent(symbol)}`, { timeout });
+    const response = await fetch(`/api/market/fundamental-audit?symbol=${encodeURIComponent(symbol)}`);
     if (!response.ok) {
       const errorData = await response.json().catch(() => ({ error: "Audit failed" }));
       if (response.status === 429 || errorData.code === 'RESOURCE_EXHAUSTED') {
