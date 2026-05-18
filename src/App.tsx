@@ -67,6 +67,8 @@ import LegalDocumentCenter from './components/LegalDocumentCenter';
 import FinancialReportingCenter from './components/FinancialReportingCenter';
 import RegulatoryArchive from './components/RegulatoryArchive';
 import TaskCenter from './components/TaskCenter';
+import IdxPriceList from './components/IdxPriceList';
+import GlobalIntelFeed from './components/GlobalIntelFeed';
 import TradingViewMarketWidget from './components/TradingViewMarketWidget';
 import TradingViewScreenerWidget from './components/TradingViewScreenerWidget';
 import { MarketMetricCard } from './components/MarketMetricCard';
@@ -341,7 +343,7 @@ export default function App() {
   const [showIntradayScanner, setShowIntradayScanner] = useState(false);
   const [userRole, setUserRole] = useState('President_Director'); // Added role state
   const [selectedAssetId, setSelectedAssetId] = useState<string | null>(null);
-  const [marketSubTab, setMarketSubTab] = useState<'overview' | 'explorer' | 'fundamental'>('overview');
+  const [marketSubTab, setMarketSubTab] = useState<'overview' | 'explorer' | 'fundamental' | 'screener'>('overview');
   const [fundamentalSymbol, setFundamentalSymbol] = useState<string | undefined>(undefined);
   const [insights, setInsights] = useState<MarketInsight[]>([]);
   const [showAllInsights, setShowAllInsights] = useState(false);
@@ -884,6 +886,11 @@ export default function App() {
       });
     });
 
+    socket.on('news-update', (news: any) => {
+      console.log('[VAM PROTOCOL] Live Intelligence Received:', news.headline);
+      // We could add this to a live news state if added in the future
+    });
+
     socket.on('disconnect', () => {
       console.log('[VAM PROTOCOL] Gateway Tunnel Interrupted');
     });
@@ -1248,6 +1255,12 @@ export default function App() {
                   >
                     Fundamental Engine
                   </button>
+                  <button 
+                    onClick={() => setMarketSubTab('screener')}
+                    className={`px-3 py-1 rounded-lg text-[9px] font-black uppercase tracking-widest transition-all ${marketSubTab === 'screener' ? 'bg-[#deff9a] text-black' : 'text-zinc-500 hover:text-zinc-300'}`}
+                  >
+                    Asset Screener
+                  </button>
                 </div>
               </div>
               <div className="flex items-center gap-2">
@@ -1298,8 +1311,27 @@ export default function App() {
                   // The explorer will pick it up or require auto-search logic
                 }} 
               />
+            ) : marketSubTab === 'screener' ? (
+              <div className="space-y-6">
+                <div className="bg-zinc-950/40 rounded-3xl border border-zinc-800/50 overflow-hidden backdrop-blur-md">
+                  <div className="p-4 border-b border-zinc-900 flex justify-between items-center bg-zinc-900/20">
+                    <div>
+                      <h3 className="text-xs font-black text-white uppercase tracking-widest flex items-center gap-2">
+                        <Radar className="w-4 h-4 text-[#deff9a]" />
+                        Strategic Asset Screener
+                      </h3>
+                      <p className="text-[8px] text-zinc-500 font-bold uppercase tracking-widest mt-1">Advanced Technical Filtering Protocol</p>
+                    </div>
+                  </div>
+                  <div className="p-1">
+                    <TradingViewScreenerWidget />
+                  </div>
+                </div>
+              </div>
             ) : (
-              <>
+              <div className="space-y-6">
+                <GlobalIntelFeed />
+                <IdxPriceList />
                 <GlobalIndicesFeed />
                 <MarketOverviewWidget />
                 
@@ -1538,8 +1570,8 @@ export default function App() {
 
                         <div className="text-right pl-4 border-l border-slate-800/50 ml-2">
                           <p className="text-sm font-mono font-black text-slate-200">Rp {stock.price}</p>
-                          <p className={`text-[10px] font-black ${stock.change.startsWith('+') ? 'text-green-400' : 'text-red-400'}`}>
-                            {stock.change}
+                          <p className={`text-[10px] font-black ${(stock.change && typeof stock.change === 'string' && stock.change.startsWith('+')) ? 'text-green-400' : 'text-red-400'}`}>
+                            {stock.change || '0%'}
                           </p>
                           <div className="mt-2 text-[7px] text-slate-600 font-black uppercase tracking-tighter shadow-sm">Verified</div>
                         </div>
@@ -1819,7 +1851,7 @@ export default function App() {
                 </AnimatePresence>
               </div>
             </motion.div>
-          </>
+          </div>
         )}
       </div>
     );
@@ -2635,40 +2667,27 @@ export default function App() {
           </AnimatePresence>
 
           {/* Header */}
-          <header className="px-4 py-4 lg:px-6 lg:py-4 border-b border-zinc-800 flex justify-between items-center sticky top-0 bg-black z-20">
+          <header className="flex justify-between items-center p-4 border-b border-zinc-800 sticky top-0 bg-black z-30">
             <div className="flex items-center gap-4">
               <button 
                 onClick={() => setIsSidebarOpen(true)}
-                className="lg:hidden p-2.5 bg-zinc-900 border border-zinc-800 text-[#DFFF00] rounded-xl shadow-lg active:scale-95 transition-all hover:bg-zinc-800"
+                className="lg:hidden p-2 bg-zinc-900 border border-zinc-800 text-[#DFFF00] rounded-xl hover:bg-zinc-800 transition-colors"
               >
                 <Menu className="w-5 h-5" />
               </button>
               
               <div className="flex flex-col">
-                <h1 className="text-xl font-bold text-[#DFFF00] leading-none tracking-tight">VentureAM</h1>
+                <h1 className="text-xl font-bold text-[#DFFF00] leading-none">VentureAM</h1>
                 <span className="text-[10px] text-zinc-400 mt-1 uppercase tracking-widest font-black">Institutional System</span>
               </div>
             </div>
             
             <div className="text-right">
-              <p className="text-[9px] text-zinc-500 font-black uppercase tracking-[0.2em] leading-none mb-1">INTERNATIONAL GATEWAY</p>
-              <div className="flex items-center justify-end gap-2" onClick={() => setActiveTab('gateway')}>
-                <div className={`w-1.5 h-1.5 rounded-full ${
-                  networkStats.operational
-                  ? 'bg-[#DFFF00] shadow-[0_0_8px_#DFFF00] animate-pulse'
-                  : 'bg-red-500'
-                }`} />
-                <p className="text-[11px] font-black text-white uppercase tracking-tight cursor-pointer">
-                  {networkStats.operational ? 'CONNECTED' : 'OFFLINE'}
-                </p>
-              </div>
-              <div className="flex items-center justify-end gap-3 mt-1.5 pt-1.5 border-t border-white/5">
-                <div className="flex flex-col">
-                  <p className="text-[8px] text-zinc-600 font-bold uppercase tracking-tighter text-right">Resource Tracks</p>
-                  <p className="text-[9px] text-zinc-400 font-bold uppercase tracking-widest">IDX • TV • IBKR</p>
-                </div>
-                <Database className="w-3 h-3 text-[#DFFF00] opacity-40" />
-              </div>
+              <p className="text-[9px] text-zinc-500 font-medium uppercase tracking-widest">INTERNATIONAL GATEWAY</p>
+              <p className="text-[11px] font-bold text-white uppercase tracking-tight">
+                {networkStats.operational ? 'CONNECTED' : 'OFFLINE'}
+              </p>
+              <p className="text-[9px] text-zinc-400 uppercase tracking-tighter">Gateway (IBKR/CGS)</p>
             </div>
           </header>
 
@@ -2685,6 +2704,7 @@ export default function App() {
                 {renderContent()}
               </motion.div>
             </AnimatePresence>
+            <SpeedInsights />
           </main>
         </div>
 

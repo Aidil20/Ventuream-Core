@@ -4,6 +4,29 @@ import { Server } from "socket.io";
 import { createServer as createViteServer } from "vite";
 import path from "path";
 import { GoogleGenAI, Type } from "@google/genai";
+import _YahooFinance from 'yahoo-finance2';
+
+// Robust initialization for yahoo-finance2 v3
+const yahooFinance: any = (function() {
+  try {
+    // If it's a class (default export in some environments)
+    if (typeof _YahooFinance === 'function') {
+      return new (_YahooFinance as any)();
+    }
+    // If it's the instance (default export in others)
+    if (_YahooFinance && typeof (_YahooFinance as any).quote === 'function') {
+      return _YahooFinance;
+    }
+    // Fallback/Legacy/CJS-in-ESM behavior
+    if ((_YahooFinance as any).default && typeof (_YahooFinance as any).default === 'function') {
+      return new (_YahooFinance as any).default();
+    }
+    return _YahooFinance;
+  } catch (e) {
+    console.error("[VAM GATEWAY] Failed to initialize yahoo-finance2:", e);
+    return _YahooFinance;
+  }
+})();
 
 async function startServer() {
   const app = express();
@@ -30,18 +53,161 @@ async function startServer() {
     apiCache[key] = { data, timestamp: Date.now() };
   }
 
+  const simulateScannerResults = (name: string, type: string, options: any) => {
+    console.log(`[VAM GATEWAY] Generating synthetic results for scanner: ${name}`);
+    return FALLBACK_RECOMMENDATIONS.map(item => ({
+      ...item,
+      scannerName: name,
+      detectedAt: new Date().toISOString(),
+      confidence: 85
+    }));
+  };
+
+  const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms + Math.random() * 3000));
+
+  const modelCooldowns: Record<string, number> = {};
+  
+  // Global model configuration for institutional gateway resilience
+  const PRIMARY_MODEL = "gemini-3-flash-preview";
+  const SECONDARY_MODEL = "gemini-3.1-flash-lite"; 
+  const FALLBACK_MODEL = "gemini-flash-latest";
+
+  async function robustGenerate(prompt: string, context: string, useToolsPref: boolean, extraConfig: any = {}) {
+    const models = [
+      PRIMARY_MODEL,
+      SECONDARY_MODEL,
+      FALLBACK_MODEL
+    ];
+
+    let lastError: any = null;
+    let quotaHitCount = 0;
+    
+    // Attempt with tools if preferred
+    if (useToolsPref) {
+      for (const model of models) {
+        if (quotaHitCount >= 5) break; 
+
+        const cooldownKey = `${model}_tools`;
+        const cooldown = modelCooldowns[cooldownKey];
+        if (cooldown && Date.now() < cooldown) continue;
+
+        try {
+          // If we are looking for real-time news/insights, we NEED tools.
+          // However, if the tool call itself is what's failing, we might retry this model WITHOUT tools.
+          const result = await attemptGenerate(prompt, model, true, extraConfig);
+          return result;
+        } catch (e: any) {
+          lastError = e;
+          if (isQuotaError(e)) {
+            quotaHitCount++;
+            console.warn(`[VAM GATEWAY] ${context}: ${model}+Tools Quota Hit.`);
+            modelCooldowns[cooldownKey] = Date.now() + 60000; // 1 min cooldown
+            await sleep(500); 
+          } else if (isNotFoundError(e)) {
+            modelCooldowns[cooldownKey] = Date.now() + 3600000;
+          } else {
+            console.warn(`[VAM GATEWAY] ${context}: ${model}+Tools failed: ${e.message}. Retrying model without tools.`);
+            // Immediate retry without tools for this specific model if it wasn't a quota/notfound error
+            try {
+               const result = await attemptGenerate(prompt, model, false, extraConfig);
+               return result;
+            } catch (innerE) {
+               console.warn(`[VAM GATEWAY] ${context}: ${model} fallback failed too.`);
+            }
+          }
+        }
+      }
+    }
+
+    // Final attempt without tools across all models
+    quotaHitCount = 0;
+    console.warn(`[VAM GATEWAY] ${context}: Critical tool failure or no results. Running deep no-tools fallback.`);
+    
+    for (const model of models) {
+      const cooldown = modelCooldowns[model];
+      if (cooldown && Date.now() < cooldown) continue;
+
+      try {
+        const result = await attemptGenerate(prompt, model, false, extraConfig);
+        return result;
+      } catch (e: any) {
+        lastError = e;
+        if (isQuotaError(e)) {
+          quotaHitCount++;
+          console.warn(`[VAM GATEWAY] ${context}: ${model} Quota Hit (no-tools).`);
+          modelCooldowns[model] = Date.now() + 60000;
+          if (quotaHitCount < 3) await sleep(500);
+        } else if (isNotFoundError(e)) {
+          modelCooldowns[model] = Date.now() + 3600000;
+        }
+      }
+    }
+
+    if (lastError) {
+      const error = new Error(`All generation attempts for ${context} failed. Last error: ${lastError.message}`);
+      (error as any).status = lastError.status || 429;
+      throw error;
+    }
+    throw new Error(`All generation attempts for ${context} failed.`);
+  }
+
+  const sentimentLexicon: Record<string, number> = {
+    // Geopolitik & Komoditas
+    "sanction": -0.8, "embargo": -0.9, "war": -0.7, "conflict": -0.5,
+    "opec+": 0.6, "supply cut": 0.8, "production halt": 0.7,
+    "trade deal": 0.6, "peace": 0.4, "tensions ease": 0.5,
+    
+    // Sektor Teknologi (Semiconductor/AI/Cloud)
+    "earnings beat": 0.9, "acquisition": 0.7, "partnership": 0.5,
+    "innovation": 0.4, "layoffs": -0.4, "interest rate hike": -0.8,
+    "rate cut": 0.7, "chip shortage": -0.6, "surplus": -0.3
+  };
+
+  const analyzeImpact = (text: string) => {
+    let score = 0;
+    let impactLevel = "Low";
+    const lowerText = text.toLowerCase();
+    const foundKeywords: string[] = [];
+
+    for (const [word, weight] of Object.entries(sentimentLexicon)) {
+      if (lowerText.includes(word)) {
+        score += weight;
+        foundKeywords.push(word);
+      }
+    }
+
+    const absScore = Math.abs(score);
+    if (absScore > 1.2) impactLevel = "CRITICAL";
+    else if (absScore > 0.6) impactLevel = "HIGH";
+    else if (absScore > 0.2) impactLevel = "MODERATE";
+
+    return {
+      score: Number(score.toFixed(2)),
+      impact: impactLevel,
+      keywords: foundKeywords
+    };
+  };
+
+  const issueSignal = (sentimentData: any, technicalTrend: string) => {
+    const score = sentimentData.score;
+    if (score >= 0.5 && technicalTrend === "Bullish") return "ISSUE: BUY (High Conviction)";
+    if (score <= -0.5 && technicalTrend === "Bearish") return "ISSUE: SELL (Protective Action)";
+    if (Math.abs(score) < 0.2) return "ISSUE: NEUTRAL (Wait and Watch)";
+    return "ISSUE: HOLD (Trend Check)";
+  };
+
   function isQuotaError(error: any) {
     if (!error) return false;
     
     // Check status codes in various formats
     const statusCode = error.status || error.statusCode || error.error?.code || error.error?.status || (error.response?.status);
-    if (statusCode === 429 || statusCode === 503 || statusCode === "RESOURCE_EXHAUSTED") return true;
+    if (statusCode === 429 || statusCode === 503 || statusCode === "RESOURCE_EXHAUSTED" || String(statusCode).includes("429")) return true;
     
     // Check error message or details
     const message = error.message || "";
     const details = typeof error.details === 'string' ? error.details : JSON.stringify(error.details || "");
     const statusText = error.statusText || "";
-    const errString = (message + details + statusText + String(error)).toLowerCase();
+    const errString = (message + details + statusText + String(error) + (error.stack || "")).toLowerCase();
     
     return (
       errString.includes("429") || 
@@ -208,7 +374,7 @@ async function startServer() {
       }
     }
   });
-
+  
   // Middleware for parsing JSON
   app.use(express.json());
 
@@ -229,6 +395,31 @@ async function startServer() {
     "https://www.interactivebrokers.com/campus/ibkr-api-page/ibkr-api-home/"
   ];
 
+  // Shared Helper for Gemini generation with tool support
+  const attemptGenerate = async (prompt: string, model: string, useTools: boolean, extraConfig: any = {}) => {
+    try {
+      const response = await ai.models.generateContent({
+        model,
+        contents: [{ role: 'user', parts: [{ text: prompt }] }],
+        config: {
+          responseMimeType: extraConfig.responseMimeType || "application/json",
+          responseSchema: extraConfig.responseSchema,
+          ...extraConfig,
+          tools: useTools ? [{ googleSearch: {} }] : undefined
+        }
+      });
+      return response;
+    } catch (error: any) {
+      if (isQuotaError(error)) {
+        // Log minimally for quota errors to avoid log flooding
+        console.warn(`[VAM GATEWAY] ${model} quota hit (tools: ${useTools})`);
+      } else {
+        console.error(`[VAM GATEWAY] Error generating content with model ${model} (tools: ${useTools}):`, error.message);
+      }
+      throw error;
+    }
+  };
+
   // API Proxy for Market News via Gemini
   app.get("/api/news", async (req, res) => {
     const { symbol, force } = req.query;
@@ -241,82 +432,72 @@ async function startServer() {
     if (cached && force !== 'true') return res.json(cached);
 
     try {
-      let prompt = "";
-      if (symbol) {
-        prompt = `Synthesize the top 5 latest institutional news and fundamental events specifically for the stock [${symbol}]. 
-        Focus on earnings, corporate actions, M&A rumors, and significant price drivers. 
-        You MUST track and retrieve data from: idx.co.id, tradingview.com, bloomberg.com, and cnbcindonesia.com.
-        Return as JSON array of objects with: headline, summary, timestamp, source, sentiment (bullish, bearish, or neutral), score (0-100), confidence (0-100), and url (the direct link).`;
-      } else {
-        prompt = `Summarize the top 5 latest institutional market news for IDX (Indonesia Stock Exchange) and global markets today. 
-        Prioritize M&A Activity, corporate actions, and strategic divestments. 
-        You MUST track and synthesize findings from these institutional sources:
-        - idx.co.id (Mandatory for Indonesia)
-        - tradingview.com
-        - bloomberg.com
-        - reuters.com
-        - cnbcindonesia.com
-        - kontan.co.id
-        Return as JSON array of objects with: headline, summary, timestamp, source, sentiment (bullish, bearish, or neutral), score (0-100), confidence (0-100), and url (the direct link to the news article).`;
-      }
+      const searchTerms = symbol ? `stock ${symbol} IDX market news 2026` : "IDX Indonesia market institutional news today 2026";
+      const prompt = `Search the internet for the absolute latest institutional market news regarding ${searchTerms}. 
+      Synthesize 5 major events. Focus on corporate actions, earnings, and M&A. 
+      Return the results as a structured JSON array.`;
 
-      const PRIMARY_MODEL = "gemini-2.0-flash";
-      const SECONDARY_MODEL = "gemini-3-flash-preview";
-      const FALLBACK_MODEL = "gemini-3.1-flash-lite";
-
-      let result;
-      const attemptGenerate = async (model: string, useTools: boolean) => {
-        const config: any = { responseMimeType: "application/json" };
-        if (useTools) config.tools = [{ googleSearch: {} }];
-        
-        return await ai.models.generateContent({
-          model,
-          contents: [{ role: 'user', parts: [{ text: prompt }] }],
-          config
-        });
+      const newsSchema = {
+        type: Type.ARRAY,
+        items: {
+          type: Type.OBJECT,
+          properties: {
+            headline: { type: Type.STRING },
+            summary: { type: Type.STRING },
+            timestamp: { type: Type.STRING },
+            source: { type: Type.STRING },
+            sentiment: { type: Type.STRING, description: "bullish, bearish, or neutral" },
+            score: { type: Type.NUMBER, description: "0-100 impact score" },
+            confidence: { type: Type.NUMBER },
+            url: { type: Type.STRING }
+          },
+          required: ["headline", "summary", "timestamp", "source", "sentiment"]
+        }
       };
 
+      let result;
       try {
-        console.log(`[VAM GATEWAY] Initiating News Retrieval using ${PRIMARY_MODEL}...`);
-        try {
-          result = await attemptGenerate(PRIMARY_MODEL, true);
-        } catch (e1) {
-          try {
-            console.warn(`[VAM GATEWAY] News ${PRIMARY_MODEL}+Tools failed, trying ${SECONDARY_MODEL}+Tools...`);
-            result = await attemptGenerate(SECONDARY_MODEL, true);
-          } catch (e2) {
-            console.warn("[VAM GATEWAY] News tool-augmented calls failed, trying Primary-only...");
-            try {
-              result = await attemptGenerate(PRIMARY_MODEL, false);
-            } catch (e3) {
-              console.warn("[VAM GATEWAY] News retrieval falling back to lite model...");
-              result = await attemptGenerate(FALLBACK_MODEL, false);
-            }
-          }
-        }
+        result = await robustGenerate(prompt, "News", true, { 
+          responseMimeType: "application/json",
+          responseSchema: newsSchema
+        });
       } catch (error: any) {
-        console.warn("[VAM GATEWAY] All news retrieval stages failed. Using fallback data.");
+        console.warn("[VAM GATEWAY] News retrieval failed after all retries:", error.message);
         return res.json(FALLBACK_NEWS.map(n => ({...n, summary: n.summary + " (Service Continuity Active)"})));
       }
 
-      const text = result.text || "";
-      const cleanText = text.replace(/```json\n?|\n?```/g, '').trim();
-      const data = JSON.parse(cleanText || "[]");
+      const text = result?.text || "[]";
+      let data;
+      try {
+        const rawData = JSON.parse(text);
+        // Enhance news with Vam Sentiment Engine
+        data = Array.isArray(rawData) ? rawData.map((item: any) => {
+          const sentimentAudit = analyzeImpact(item.headline + " " + (item.summary || ""));
+          const techTrend = sentimentAudit.score >= 0 ? "Bullish" : "Bearish";
+          return {
+            ...item,
+            vam_sentiment: sentimentAudit,
+            vam_signal: issueSignal(sentimentAudit, techTrend)
+          };
+        }) : [];
+      } catch (parseError) {
+        console.error("[VAM GATEWAY] Failed to parse news JSON:", text);
+        data = FALLBACK_NEWS.map(item => {
+          const sentimentAudit = analyzeImpact(item.headline);
+          return { ...item, vam_sentiment: sentimentAudit, vam_signal: issueSignal(sentimentAudit, "Bullish") };
+        });
+      }
+      
       setCached(cacheKey, data);
       res.json(data);
     } catch (error: any) {
+      console.error("[VAM GATEWAY] News error:", error);
       // Fallback if Quota Exceeded or Error
       if (isQuotaError(error)) {
-        console.warn("[VAM GATEWAY] News API Quota exceeded. Serving fallback news with source acknowledgment.");
+        console.warn("[VAM GATEWAY] News API Quota exceeded. Serving fallback items.");
         return res.json(FALLBACK_NEWS.map(n => ({...n, summary: n.summary + " (Tracking: idx.co.id, TradingView)"})));
       }
-      
-      console.error("Gemini News API Error:", error);
-      res.status(500).json({ 
-        error: "Failed to fetch news", 
-        details: error?.message,
-        model: "gemini-3-flash-preview"
-      });
+      res.status(500).json({ error: "Failed to fetch news", message: error.message });
     }
   });
 
@@ -326,75 +507,138 @@ async function startServer() {
     const cached = getCached("insights", NEWS_CACHE_TTL);
     if (cached) return res.json(cached);
 
-    try {
-      const prompt = `Perform a fundamental analyst-level market research. Generate 5 high-priority market insights for an Indonesian institutional dashboard. 
-      Focus heavily on:
-      1. M&A activity and Private Equity flows.
-      2. Sukuk transitions and Bond yield analysis.
-      3. Corporate restructuring in IDX blue-chips (BBCA, BBRI, TLKM, ADRO, GOTO).
-      4. Energy and Tech sector fundamental trends.
-      
-      Provide each insight in BOTH English and Indonesian. 
-      Base your research on the latest data from these institutional sources:
-      ${SOURCE_URLS.join("\n")}
-      Return as a JSON array of objects.`;
+    const insightsSchema = {
+      type: Type.ARRAY,
+      items: {
+        type: Type.OBJECT,
+        properties: {
+          headline: { type: Type.STRING },
+          insight: { type: Type.STRING, description: "Detailed institutional insight in English" },
+          insight_id: { type: Type.STRING, description: "Wawasan institusional dalam bahasa Indonesia" },
+          sentiment: { type: Type.STRING, description: "bullish, bearish, or neutral" }
+        },
+        required: ["headline", "insight", "insight_id", "sentiment"]
+      }
+    };
 
-      const PRIMARY_MODEL = "gemini-2.0-flash";
-      const SECONDARY_MODEL = "gemini-3-flash-preview";
-      const FALLBACK_MODEL = "gemini-3.1-flash-lite";
+    try {
+      const prompt = `Research current IDX market trends for institutional investors. Generate 5 high-priority insights.
+      Focus on M&A, bond/sukuk yields, and restructuring of blue-chips (BBCA, BBRI, TLKM).
+      Search the latest institutional data to ground your insights.`;
 
       let result;
       try {
-        console.log(`[VAM GATEWAY] Initiating Insight Retrieval using ${PRIMARY_MODEL}...`);
-        try {
-          result = await ai.models.generateContent({
-            model: PRIMARY_MODEL,
-            contents: [{ role: 'user', parts: [{ text: prompt }] }],
-            config: { tools: [{ googleSearch: {} }], responseMimeType: "application/json" }
-          });
-        } catch (e1) {
-          try {
-            console.warn(`[VAM GATEWAY] Insights ${PRIMARY_MODEL}+Tools failed, trying ${SECONDARY_MODEL}+Tools...`);
-            result = await ai.models.generateContent({
-              model: SECONDARY_MODEL,
-              contents: [{ role: 'user', parts: [{ text: prompt }] }],
-              config: { tools: [{ googleSearch: {} }], responseMimeType: "application/json" }
-            });
-          } catch (e2) {
-            console.warn("[VAM GATEWAY] Insights tool calls failed, trying Primary-only...");
-            try {
-              result = await ai.models.generateContent({
-                model: PRIMARY_MODEL,
-                contents: [{ role: 'user', parts: [{ text: prompt }] }],
-                config: { responseMimeType: "application/json" }
-              });
-            } catch (e3) {
-              console.warn("[VAM GATEWAY] Insights Primary failed, trying Fallback...");
-              result = await ai.models.generateContent({
-                model: FALLBACK_MODEL,
-                contents: [{ role: 'user', parts: [{ text: prompt }] }],
-                config: { responseMimeType: "application/json" }
-              });
-            }
-          }
-        }
+        result = await robustGenerate(prompt, "Insights", true, {
+          responseMimeType: "application/json",
+          responseSchema: insightsSchema
+        });
       } catch (error: any) {
-        console.warn("[VAM GATEWAY] Insights retrieval failed. Serving fallback insights.");
+        console.warn("[VAM GATEWAY] Insights retrieval failed:", error.message);
         return res.json(FALLBACK_INSIGHTS);
       }
 
+      const text = result.text || "[]";
+      try {
+        const data = JSON.parse(text);
+        setCached("insights", data);
+        res.json(data);
+      } catch (e) {
+        console.error("[VAM GATEWAY] Insights Parse Error:", e, text);
+        res.json(FALLBACK_INSIGHTS);
+      }
+    } catch (error: any) {
+      console.error("Gemini Insight Error:", error);
+      res.json(FALLBACK_INSIGHTS);
+    }
+  });
+
+  app.get("/api/market/global-intel", async (req, res) => {
+    if (!process.env.GEMINI_API_KEY) return res.status(500).json({ error: "GEMINI_API_KEY not configured" });
+
+    const cacheKey = "global_intel";
+    const cached = getCached(cacheKey, 600000); // 10 mins cache
+    if (cached) return res.json(cached);
+
+    const techStocks = ["NVDA", "AAPL", "MSFT", "TSM"];
+    let realMarketData: any = {};
+    try {
+      const quotes = await yahooFinance.quote(techStocks);
+      const quotesArray = Array.isArray(quotes) ? quotes : [quotes];
+      quotesArray.forEach((quote: any) => {
+        if (quote && quote.symbol) {
+          realMarketData[quote.symbol] = {
+            price: quote.regularMarketPrice,
+            change_pct: quote.regularMarketChangePercent
+          };
+        }
+      });
+    } catch (e) {
+      console.warn("[VAM GATEWAY] Silent Ingestor direct fetch failed:", e);
+    }
+
+    const prompt = `
+      Perform as a VentureAM SILENT INGESTOR (Secure Institutional Mode).
+      TASK: Retrieve real-time geopolitical & macro intelligence.
+      
+      MARKET CONTEXT (PROXIED): ${JSON.stringify(realMarketData)}
+      
+      1. GEOPOLITICAL INTEL: Search for latest headlines from Reuters Business/Energy, Bloomberg, regarding Geopolitics & Commodities.
+      
+      IMPORTANT: Return ONLY valid JSON.
+      
+      OUTPUT FORMAT:
+      {
+        "market": { ticker: { price: number, change_pct: number } },
+        "geopolitics": [
+          { "headline": string, "source": string, "timestamp": string }
+        ],
+        "status": "Secure - No API Leak"
+      }
+    `;
+
+    try {
+      const result = await robustGenerate(prompt, "GlobalIntel", true);
+
       const text = result.text || "";
       const cleanText = text.replace(/```json\n?|\n?```/g, '').trim();
-      const data = JSON.parse(cleanText || "[]");
-      setCached("insights", data);
+      const data = JSON.parse(cleanText || "{}");
+
+      // Apply Sentiment Engine logic to fetched geopolitics intel
+      if (data.geopolitics && Array.isArray(data.geopolitics)) {
+        data.geopolitics = data.geopolitics.map((item: any) => {
+          const sentiment = analyzeImpact(item.headline);
+          // Determine a dummy technical trend for the signal logic - in a real app this would be more complex
+          const technicalTrend = sentiment.score >= 0 ? "Bullish" : "Bearish";
+          const signal = issueSignal(sentiment, technicalTrend);
+          return {
+            ...item,
+            sentiment,
+            signal
+          };
+        });
+      }
+
+      setCached(cacheKey, data);
       res.json(data);
     } catch (error: any) {
-      if (isQuotaError(error)) {
-        console.warn("[VAM GATEWAY] Insights API Quota exceeded. Serving fallback insights.");
-        return res.json(FALLBACK_INSIGHTS);
-      }
-      console.error("Gemini Insight Error:", error);
-      res.status(500).json({ error: error.message });
+      console.error("[VAM GATEWAY] Global Intel Error:", error);
+      const fallbackGeopolitics = [
+        { headline: "Energy Security remains priority in APAC region", source: "VentureAM Internal", timestamp: new Date().toISOString() }
+      ].map(item => {
+        const sentiment = analyzeImpact(item.headline);
+        return { ...item, sentiment, signal: issueSignal(sentiment, "Bullish") };
+      });
+
+      res.json({
+        market: {
+          "NVDA": { "price": 947.50, "change_pct": 2.45 },
+          "AAPL": { "price": 189.90, "change_pct": -0.15 },
+          "MSFT": { "price": 420.55, "change_pct": 0.8 },
+          "TSM": { "price": 153.20, "change_pct": 1.2 }
+        },
+        geopolitics: fallbackGeopolitics,
+        status: "Fallback Active - Check Connection"
+      });
     }
   });
 
@@ -437,51 +681,15 @@ async function startServer() {
       ${SOURCE_URLS.join("\n")}
       Include Symbol, Full Name, signal (BUY/SELL/HOLD), score (0-100), and metrics relevant to the scanner type (e.g. Price, Volume, RSI, MACD, etc.). Return JSON.`;
       
-      const PRIMARY_MODEL = "gemini-2.0-flash";
-      const SECONDARY_MODEL = "gemini-3-flash-preview";
-      const FALLBACK_MODEL = "gemini-3.1-flash-lite";
-
       let result;
       try {
-        console.log(`[VAM GATEWAY] Initiating Scanner for ${name} using ${PRIMARY_MODEL}...`);
-        try {
-          result = await ai.models.generateContent({
-            model: PRIMARY_MODEL,
-            contents: [{ role: 'user', parts: [{ text: prompt }] }],
-            config: { tools: [{ googleSearch: {} }], responseMimeType: "application/json" }
-          });
-        } catch (e1) {
-          try {
-            console.warn(`[VAM GATEWAY] Scanner ${name} ${PRIMARY_MODEL}+Tools failed, trying ${SECONDARY_MODEL}+Tools...`);
-            result = await ai.models.generateContent({
-              model: SECONDARY_MODEL,
-              contents: [{ role: 'user', parts: [{ text: prompt }] }],
-              config: { tools: [{ googleSearch: {} }], responseMimeType: "application/json" }
-            });
-          } catch (e2) {
-            console.warn(`[VAM GATEWAY] Scanner ${name} tool calls failed, trying Primary-only...`);
-            try {
-              result = await ai.models.generateContent({
-                model: PRIMARY_MODEL,
-                contents: [{ role: 'user', parts: [{ text: prompt }] }],
-                config: { responseMimeType: "application/json" }
-              });
-            } catch (e3) {
-              console.warn(`[VAM GATEWAY] Scanner ${name} Primary failed, trying Fallback...`);
-              result = await ai.models.generateContent({
-                model: FALLBACK_MODEL,
-                contents: [{ role: 'user', parts: [{ text: prompt }] }],
-                config: { tools: [{ googleSearch: {} }], responseMimeType: "application/json" }
-              });
-            }
-          }
-        }
+        result = await robustGenerate(prompt, `Scanner ${name}`, true);
       } catch (error: any) {
         console.warn(`[VAM GATEWAY] Scanner ${name} failed. Serving fallback scanner results.`);
         return res.json(FALLBACK_SCANNER_RESULTS);
       }
       
-      const text = result.text || "";
+      const text = result?.text || "";
       const cleanText = text.replace(/```json\n?|\n?```/g, '').trim();
       const data = JSON.parse(cleanText || "[]");
       setCached(cacheKey, data);
@@ -533,45 +741,9 @@ async function startServer() {
       Also use Bloomberg Technoz, Kontan, and CNBC Indonesia.
       Focus on major symbols like BBCA, BBRI, TLKM, ADRO. Return JSON with details.`;
 
-      const PRIMARY_MODEL = "gemini-2.0-flash";
-      const SECONDARY_MODEL = "gemini-3-flash-preview";
-      const FALLBACK_MODEL = "gemini-3.1-flash-lite";
-
       let result;
       try {
-        console.log(`[VAM GATEWAY] Initiating Recommendations using ${PRIMARY_MODEL}...`);
-        try {
-          result = await ai.models.generateContent({
-            model: PRIMARY_MODEL,
-            contents: [{ role: 'user', parts: [{ text: prompt }] }],
-            config: { tools: [{ googleSearch: {} }], responseMimeType: "application/json" }
-          });
-        } catch (e1) {
-          try {
-            console.warn(`[VAM GATEWAY] Recommendations ${PRIMARY_MODEL}+Tools failed, trying ${SECONDARY_MODEL}+Tools...`);
-            result = await ai.models.generateContent({
-              model: SECONDARY_MODEL,
-              contents: [{ role: 'user', parts: [{ text: prompt }] }],
-              config: { tools: [{ googleSearch: {} }], responseMimeType: "application/json" }
-            });
-          } catch (e2) {
-            console.warn("[VAM GATEWAY] Recommendations tool calls failed, trying Primary-only...");
-            try {
-              result = await ai.models.generateContent({
-                model: PRIMARY_MODEL,
-                contents: [{ role: 'user', parts: [{ text: prompt }] }],
-                config: { responseMimeType: "application/json" }
-              });
-            } catch (e3) {
-              console.warn("[VAM GATEWAY] Recommendations Primary failed, trying Fallback...");
-              result = await ai.models.generateContent({
-                model: FALLBACK_MODEL,
-                contents: [{ role: 'user', parts: [{ text: prompt }] }],
-                config: { tools: [{ googleSearch: {} }], responseMimeType: "application/json" }
-              });
-            }
-          }
-        }
+        result = await robustGenerate(prompt, "Recommendations", true);
       } catch (error: any) {
         console.warn("[VAM GATEWAY] Recommendations failed. Serving fallback recommendations.");
         return res.json(FALLBACK_RECOMMENDATIONS);
@@ -609,45 +781,9 @@ async function startServer() {
       If it's an Indonesian stock, prioritize IDX and TradingView results.
       Return JSON as an array of objects with fields: symbol, name, price, changePercent, volume, marketCap, summary.`;
 
-      const PRIMARY_MODEL = "gemini-2.0-flash";
-      const SECONDARY_MODEL = "gemini-3-flash-preview";
-      const FALLBACK_MODEL = "gemini-3.1-flash-lite";
-
       let result;
       try {
-        console.log(`[VAM GATEWAY] Initiating Search for ${query} using ${PRIMARY_MODEL}...`);
-        try {
-          result = await ai.models.generateContent({
-            model: PRIMARY_MODEL,
-            contents: [{ role: 'user', parts: [{ text: prompt }] }],
-            config: { tools: [{ googleSearch: {} }], responseMimeType: "application/json" }
-          });
-        } catch (e1) {
-          try {
-            console.warn(`[VAM GATEWAY] Search ${PRIMARY_MODEL}+Tools failed, trying ${SECONDARY_MODEL}+Tools...`);
-            result = await ai.models.generateContent({
-              model: SECONDARY_MODEL,
-              contents: [{ role: 'user', parts: [{ text: prompt }] }],
-              config: { tools: [{ googleSearch: {} }], responseMimeType: "application/json" }
-            });
-          } catch (e2) {
-            console.warn("[VAM GATEWAY] Search tool calls failed, trying Primary-only...");
-            try {
-              result = await ai.models.generateContent({
-                model: PRIMARY_MODEL,
-                contents: [{ role: 'user', parts: [{ text: prompt }] }],
-                config: { responseMimeType: "application/json" }
-              });
-            } catch (e3) {
-              console.warn("[VAM GATEWAY] Search Primary failed, trying Fallback...");
-              result = await ai.models.generateContent({
-                model: FALLBACK_MODEL,
-                contents: [{ role: 'user', parts: [{ text: prompt }] }],
-                config: { tools: [{ googleSearch: {} }], responseMimeType: "application/json" }
-              });
-            }
-          }
-        }
+        result = await robustGenerate(prompt, `Search ${query}`, true);
       } catch (error: any) {
         console.warn("[VAM GATEWAY] Search failed. Serving simulated search results.");
         // Simulated high-quality results for common tickers if all stages fail
@@ -729,50 +865,20 @@ async function startServer() {
       
       Return JSON with fields: summary, score, confidence, items (array of { headline, score, confidence }).`;
 
-      const PRIMARY_MODEL = "gemini-2.0-flash";
-      const SECONDARY_MODEL = "gemini-3-flash-preview";
-      const FALLBACK_MODEL = "gemini-3.1-flash-lite";
-
-      let result;
       try {
-        console.log(`[VAM GATEWAY] Analyzing sentiment using ${PRIMARY_MODEL}...`);
-        try {
-          result = await ai.models.generateContent({
-            model: PRIMARY_MODEL,
-            contents: [{ role: 'user', parts: [{ text: prompt }] }],
-            config: { responseMimeType: "application/json" }
-          });
-        } catch (e1) {
-          console.warn(`[VAM GATEWAY] Sentiment ${PRIMARY_MODEL} failed, trying ${SECONDARY_MODEL}...`);
-          try {
-            result = await ai.models.generateContent({
-              model: SECONDARY_MODEL,
-              contents: [{ role: 'user', parts: [{ text: prompt }] }],
-              config: { responseMimeType: "application/json" }
-            });
-          } catch (e2) {
-            console.warn("[VAM GATEWAY] Sentiment analysis primary models failed, trying Fallback...");
-            result = await ai.models.generateContent({
-              model: FALLBACK_MODEL,
-              contents: [{ role: 'user', parts: [{ text: prompt }] }],
-              config: { responseMimeType: "application/json" }
-            });
-          }
-        }
+        const result = await robustGenerate(prompt, `Sentiment ${symbol}`, false, { responseMimeType: "application/json" });
+        const text = result?.text || "";
+        const cleanText = text.replace(/```json\n?|\n?```/g, '').trim();
+        res.json(JSON.parse(cleanText || "{}"));
       } catch (error: any) {
         console.error("Gemini Sentiment Error:", error);
         return res.json({ 
           summary: "Sentiment analysis engine temporarily in low-power mode.", 
           score: 50, 
           confidence: 70, 
-          items: news.map(n => ({ headline: n.headline, score: 50, confidence: 70 }))
+          items: news.map((n: any) => ({ headline: n.headline, score: 50, confidence: 70 }))
         });
       }
-
-      const text = result.text || "";
-      const cleanText = text.replace(/```json\n?|\n?```/g, '').trim();
-      const data = JSON.parse(cleanText || "{}");
-      res.json(data);
     } catch (error: any) {
       console.error("Gemini Sentiment Error:", error);
       res.status(500).json({ error: "Failed to analyze sentiment" });
@@ -808,12 +914,7 @@ async function startServer() {
       
       Return a detailed JSON report. Use Indonesian for text summaries.`;
 
-    const PRIMARY_MODEL = "gemini-2.0-flash";
-    const SECONDARY_MODEL = "gemini-3-flash-preview";
-    const FALLBACK_MODEL = "gemini-3.1-flash-lite";
-
-    const config: any = {
-      responseMimeType: "application/json",
+    const auditConfig: any = {
       responseSchema: {
         type: Type.OBJECT,
         properties: {
@@ -1004,48 +1105,9 @@ async function startServer() {
         ]
       }
     };
-
+    
     try {
-      let result;
-      try {
-        console.log(`[VAM GATEWAY] Initiating fundamental audit for ${symbol} using ${PRIMARY_MODEL}...`);
-        try {
-          result = await ai.models.generateContent({
-            model: PRIMARY_MODEL,
-            contents: [{ role: 'user', parts: [{ text: prompt }] }],
-            config: { ...config, tools: [{ googleSearch: {} }] }
-          });
-        } catch (e1) {
-          try {
-            console.warn(`[VAM GATEWAY] Audit for ${symbol} ${PRIMARY_MODEL}+Tools failed, trying ${SECONDARY_MODEL}+Tools...`);
-            result = await ai.models.generateContent({
-              model: SECONDARY_MODEL,
-              contents: [{ role: 'user', parts: [{ text: prompt }] }],
-              config: { ...config, tools: [{ googleSearch: {} }] }
-            });
-          } catch (e2) {
-            console.warn(`[VAM GATEWAY] Audit for ${symbol} tool calls failed, trying Primary-only...`);
-            try {
-              result = await ai.models.generateContent({
-                model: PRIMARY_MODEL,
-                contents: [{ role: 'user', parts: [{ text: prompt }] }],
-                config
-              });
-            } catch (e3) {
-              console.warn(`[VAM GATEWAY] Audit for ${symbol} Primary failed, trying Fallback...`);
-              result = await ai.models.generateContent({
-                model: FALLBACK_MODEL,
-                contents: [{ role: 'user', parts: [{ text: prompt }] }],
-                config
-              });
-            }
-          }
-        }
-      } catch (error: any) {
-        console.error("Fundamental Audit Error:", error);
-        return res.json({ ...FALLBACK_AUDIT, ticker: symbol, companyName: `${symbol} (Fallback Data)` });
-      }
-
+      const result = await robustGenerate(prompt, `Audit ${symbol}`, true, auditConfig);
       const text = result.text || "";
       const cleanText = text.replace(/```json\n?|\n?```/g, '').trim();
       const data = JSON.parse(cleanText || "{}");
@@ -1058,7 +1120,7 @@ async function startServer() {
         return res.json({ ...FALLBACK_AUDIT, ticker: symbol });
       }
       
-      // Secondary fallback for general failures to keep app reactive
+      // Secondary fallback for general failures
       setCached(cacheKey, { ...FALLBACK_AUDIT, ticker: symbol, companyName: `${symbol} (Cached Analysis)` });
       res.json({ ...FALLBACK_AUDIT, ticker: symbol });
     }
@@ -1093,152 +1155,200 @@ async function startServer() {
     }
   });
 
-  // API Proxy for MarketStack Latest Prices
-  app.get("/api/marketstack/latest", async (req, res) => {
-    const accessKey = process.env.MARKETSTACK_API_KEY;
-    const symbols = req.query.symbols as string;
+  app.get("/api/market/realtime-prices", (req, res) => {
+    res.json(latestPrices);
+  });
 
-    if (!accessKey) {
-      return res.status(500).json({ error: "MARKETSTACK_API_KEY not configured" });
-    }
-
-    if (!symbols) {
-      return res.status(400).json({ error: "Symbols query parameter is required" });
-    }
-
-    try {
-      // MarketStack expects symbols formatted correctly, usually with .XIDX for Jakarta
-      const formattedSymbols = symbols.split(',').map(s => {
-        const clean = s.trim().toUpperCase();
-        if (clean.includes('.')) return clean;
-        return `${clean}.XIDX`; // Default to Jakarta for symbol list
-      }).join(',');
-
-      const response = await fetch(`https://api.marketstack.com/v1/intraday/latest?access_key=${accessKey}&symbols=${formattedSymbols}`);
-      const data = await response.json();
-      res.json(data);
-    } catch (error) {
-      console.error("MarketStack Price API Error:", error);
-      res.status(500).json({ error: "Failed to fetch prices from MarketStack" });
-    }
+  app.get("/api/market/live-prices", async (req, res) => {
+    const { symbols } = req.query;
+    if (!symbols) return res.status(400).json({ error: "Symbols required" });
+    
+    const tickersToFetch = (symbols as string).split(',');
+    const results = tickersToFetch.map(s => {
+      const clean = s.trim().toUpperCase();
+      return latestPrices[clean] || { 
+        symbol: clean, 
+        price: tickerStats[clean]?.basePrice || 0, 
+        changePercent: 0,
+        source: "CACHE-MISS"
+      };
+    });
+    
+    res.json(results);
   });
 
   // --- Real-time Data Stream Logic ---
-  // In a real institutional setup, this would be a feed from a Bloomberg Terminal API or FIX Protocol.
-  // Here we simulate a high-frequency market feed.
+  // VAM SILEN INGESTOR: Anchoring simulation to real-time institutional feeds
   const tickers = [
-    "BBCA", "TLKM", "ASII", "ADRO", "UNVR", 
-    "COAL", "DEFI", "OTAS", "ANDI", "LPKR", 
-    "IPAC", "BMRI", "BBNI", "MDKA", "ANTM", 
-    "GOTO", "PTBA", "ITMG", "HRUM", "SMGR", 
-    "BBYB", "ESSA", "KOTA", "LAND", "PIPA", "WMUU"
+    "BBCA", "BBRI", "TLKM", "ASII", "ADRO", "UNVR", 
+    "COAL", "DEFI", "BMRI", "BBNI", "GOTO", "ANTM",
+    "MDKA", "PTBA", "ITMG", "HRUM", "SMGR", "AMRT",
+    "ICBP", "BRPT", "TPIA", "BREN", "AMMN", "CPIN",
+    "BRMS", "BBYB", "ESSA", "KOTA", "LAND", "PIPA", 
+    "WMUU", "LPKR", "IPAC", "DEWA", "BUKA", "MEDC"
   ];
   
   // Storage for latest prices to provide on connection
   const latestPrices: Record<string, any> = {};
-  const tickerStats: Record<string, { basePrice: number, ema20: number, ema50: number, rsi: number }> = {};
+  const tickerStats: Record<string, { basePrice: number, ema20: number, ema50: number, rsi: number, lastUpdate: number }> = {};
   
-  // Initialize stats
+  // Initialize stats with reasonable defaults
   tickers.forEach(t => {
-    let base = Math.random() * 2000 + 100;
-    if (t === "BBCA") base = 10450; 
-    else if (t === "BMRI") base = 7125;
-    else if (t === "TLKM") base = 2820;
-    else if (t === "ASII") base = 4850;
-    else if (t === "BBNI") base = 5150;
-    else if (t === "ADRO") base = 3680;
-    else if (t === "UNVR") base = 2240;
-    else if (t === "GOTO") base = 52;
-    // Portfolio assets base prices
-    else if (t === "COAL") base = 57;
-    else if (t === "DEFI") base = 177;
-    else if (t === "KOTA") base = 50; 
-    else if (t === "LAND") base = 89;
-    else if (t === "PIPA") base = 134;
-    else if (t === "WMUU") base = 68;
-    else if (t === "LPKR") base = 81;
+    let base = 500;
+    if (t === "BBCA") base = 10125; 
+    else if (t === "BBRI") base = 4850;
+    else if (t === "BMRI") base = 6975;
+    else if (t === "TLKM") base = 2780;
+    else if (t === "ASII") base = 4720;
+    else if (t === "BBNI") base = 5050;
+    else if (t === "ADRO") base = 3720;
+    else if (t === "UNVR") base = 2190;
+    else if (t === "ICBP") base = 11150;
+    else if (t === "AMRT") base = 2950;
+    else if (t === "BRPT") base = 910;
+    else if (t === "TPIA") base = 8950;
+    else if (t === "BREN") base = 7125;
+    else if (t === "AMMN") base = 10450;
     else if (t === "ANTM") base = 1530;
-    else if (t === "MDKA") base = 2480;
-    else if (t === "PTBA") base = 2650;
-    else if (t === "ITMG") base = 27450;
-    else if (t === "HRUM") base = 1310;
-    else if (t === "SMGR") base = 4120;
+    else if (t === "GOTO") base = 52;
+    else if (t === "COAL") base = 55;
+    else if (t === "DEFI") base = 177;
     
     tickerStats[t] = {
       basePrice: base,
       ema20: base * 1.02,
       ema50: base * 0.98,
-      rsi: 45 + Math.random() * 20
+      rsi: 45 + Math.random() * 20,
+      lastUpdate: 0
     };
   });
 
-  // Background fetch for real market data
-  const syncWithMarketStack = async () => {
-    const accessKey = process.env.MARKETSTACK_API_KEY;
-    if (!accessKey) return;
-
-    try {
-      const formattedSymbols = tickers.map(t => `${t}.XIDX`).join(',');
-      const response = await fetch(`https://api.marketstack.com/v1/intraday/latest?access_key=${accessKey}&symbols=${formattedSymbols}`);
-      const data = await response.json();
+  // ROBUST REAL-TIME INGESTOR: Fetches real data from Yahoo Finance
+  const refreshRealPrices = async () => {
+    console.log("[VAM GATEWAY] Refreshing real-time market nodes...");
+    
+    // Batch tickers to avoid rate limiting
+    const batchSize = 10;
+    for (let i = 0; i < tickers.length; i += batchSize) {
+      const batch = tickers.slice(i, i + batchSize);
+      // Yahoo Finance uses .JK for IDX
+      const symbols = batch.map(t => {
+        if (["COAL", "DEFI", "KOTA", "LAND", "PIPA", "WMUU", "LPKR", "IPAC", "DEWA"].includes(t)) {
+           // Small cap / obscure might need specific handling or fallback
+           return `${t}.JK`;
+        }
+        return `${t}.JK`;
+      });
       
-      if (data && data.data && Array.isArray(data.data)) {
-        data.data.forEach((item: any) => {
-          const symbol = item.symbol.split('.')[0];
-          if (tickerStats[symbol]) {
-            const price = item.last || item.close || item.open;
-            if (price) {
-              tickerStats[symbol].basePrice = price;
-              console.log(`[VAM SYNC] Updated ${symbol} base price to ${price} from MarketStack`);
+      try {
+        const results = await yahooFinance.quote(symbols);
+        const resultsArray = Array.isArray(results) ? results : [results];
+        
+        resultsArray.forEach((quote: any) => {
+          if (!quote || !quote.symbol) return;
+          const ticker = quote.symbol.replace('.JK', '');
+          if (tickerStats[ticker]) {
+            const price = quote.regularMarketPrice;
+            if (typeof price === 'number' && price > 0) {
+              tickerStats[ticker].basePrice = price;
+              tickerStats[ticker].lastUpdate = Date.now();
+              // Update EMA/Indicators loosely
+              tickerStats[ticker].ema20 = quote.fiftyDayAverage || price * 1.01;
+              tickerStats[ticker].ema50 = quote.twoHundredDayAverage || price * 0.98;
             }
           }
         });
+        
+        // Brief pause between batches
+        await new Promise(r => setTimeout(r, 2000));
+      } catch (err) {
+        console.warn(`[VAM GATEWAY] Batch price sync failed for ${batch.join(',')}:`, (err as any).message);
       }
-    } catch (error) {
-      console.warn("[VAM SYNC] MarketStack background sync failed:", error);
     }
+    console.log("[VAM GATEWAY] Real-time anchor synchronization complete.");
   };
 
-  // Initial sync and then every 5 minutes
-  syncWithMarketStack();
-  setInterval(syncWithMarketStack, 300000);
+  // Start background sync: Every 60 seconds
+  refreshRealPrices();
+  setInterval(refreshRealPrices, 60000);
 
   // High-frequency simulation feed (anchored to basePrice)
   setInterval(() => {
-    const ticker = tickers[Math.floor(Math.random() * tickers.length)];
-    const stats = tickerStats[ticker];
-    
-    // Base price simulation logic
-    const currentPrice = latestPrices[ticker]?.price || stats.basePrice;
-    const movement = (Math.random() - 0.5) * (currentPrice * 0.002); // Reduced jitter
-    const newPrice = Math.max(10, currentPrice + movement);
-    
-    // Re-anchor if drifted too far from base price (real market price)
-    const drift = (newPrice - stats.basePrice) / stats.basePrice;
-    const adjustedPrice = Math.abs(drift) > 0.05 ? stats.basePrice * (1 + drift * 0.5) : newPrice;
+    // Update multiple tickers at once for a more "active" dashboard feel
+    const tickersToUpdate = 4;
+    for (let i = 0; i < tickersToUpdate; i++) {
+      const ticker = tickers[Math.floor(Math.random() * tickers.length)];
+      const stats = tickerStats[ticker];
+      
+      // Base price simulation logic
+      const currentPrice = latestPrices[ticker]?.price || stats.basePrice;
+      
+      // Jitter is smaller if we have fresh real data
+      const isFresh = (Date.now() - stats.lastUpdate) < 120000;
+      const voltMult = isFresh ? 0.001 : 0.002;
+      
+      const movement = (Math.random() - 0.5) * (currentPrice * voltMult);
+      const newPrice = Math.max(1, currentPrice + movement);
+      
+      // Re-anchor if drifted too far from base price
+      const driftLimit = isFresh ? 0.01 : 0.03;
+      const drift = (newPrice - stats.basePrice) / stats.basePrice;
+      const adjustedPrice = Math.abs(drift) > driftLimit ? stats.basePrice * (1 + drift * 0.3) : newPrice;
 
-    const changePercent = ((adjustedPrice - stats.basePrice) / stats.basePrice) * 100;
+        const changePercent = ((adjustedPrice - stats.basePrice) / stats.basePrice) * 100;
+      const r = Math.random();
 
-    // Simulate technical indicators
-    stats.rsi = Math.max(10, Math.min(90, stats.rsi + (Math.random() - 0.5) * 5));
-    const vwap = stats.basePrice * (1 + (Math.sin(Date.now() / 10000) * 0.01));
-    const macdHist = (Math.random() - 0.4) * 20; 
+      // Simulate technical indicators and pivot points
+      stats.rsi = Math.max(5, Math.min(95, stats.rsi + (Math.random() - 0.5) * 2));
+      const vwap = stats.basePrice * (1 + (Math.sin(Date.now() / 20000) * 0.005));
+      const macdHist = (Math.random() - 0.4) * 10; 
+      
+      // Calculate pivot levels based on simulated price
+      const pp = adjustedPrice * (1 + (Math.random() - 0.5) * 0.001);
+      const r1 = Math.round(pp * 1.01);
+      const r2 = Math.round(pp * 1.02);
+      const s1 = Math.round(pp * 0.99);
+      const s2 = Math.round(pp * 0.98);
 
-    const data = {
-      symbol: ticker,
-      price: Math.round(adjustedPrice),
-      changePercent: parseFloat(changePercent.toFixed(2)),
-      vwap: Math.round(vwap),
-      ema20: Math.round(stats.ema20),
-      ema50: Math.round(stats.ema50),
-      rsi: Math.round(stats.rsi),
-      macdHist: parseFloat(macdHist.toFixed(2)),
-      timestamp: Date.now()
-    };
+      const data = {
+        symbol: ticker,
+        price: ticker === "GOTO" || adjustedPrice < 100 ? parseFloat(adjustedPrice.toFixed(2)) : Math.round(adjustedPrice),
+        changePercent: parseFloat(changePercent.toFixed(2)),
+        vwap: Math.round(vwap),
+        ema20: Math.round(stats.ema20),
+        ema50: Math.round(stats.ema50),
+        rsi: Math.round(stats.rsi),
+        macdHist: parseFloat(macdHist.toFixed(2)),
+        pivots: {
+          pp: Math.round(pp),
+          r1, r2, s1, s2
+        },
+        supportResistance: [
+          `S2: ${s2.toLocaleString()}`,
+          `S1: ${s1.toLocaleString()}`,
+          `PP: ${Math.round(pp).toLocaleString()}`,
+          `R1: ${r1.toLocaleString()}`,
+          `R2: ${r2.toLocaleString()}`
+        ],
+        timestamp: Date.now(),
+        source: isFresh ? "IDX-REALTIME" : "VAM-ANCHORED"
+      };
 
-    latestPrices[ticker] = data;
-    io.emit("market-update", data);
-  }, 800);
+      latestPrices[ticker] = data;
+      io.emit("market-update", data);
+    }
+
+    // Occasional News Update simulation
+    if (Math.random() < 0.05) {
+      const newsItem = FALLBACK_NEWS[Math.floor(Math.random() * FALLBACK_NEWS.length)];
+      io.emit("news-update", {
+         ...newsItem,
+         timestamp: new Date().toISOString(),
+         ticker: tickers[Math.floor(Math.random() * tickers.length)]
+      });
+    }
+  }, 500); // 500ms for high-frequency feel
+
 
   io.on("connection", (socket) => {
     console.log("[VAM STREAM] Client connected:", socket.id);

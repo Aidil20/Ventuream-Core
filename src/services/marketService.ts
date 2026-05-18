@@ -7,6 +7,12 @@ export interface MarketNews {
   score?: number;
   confidence?: number;
   url?: string;
+  vam_sentiment?: {
+    score: number;
+    impact: string;
+    keywords: string[];
+  };
+  vam_signal?: string;
 }
 
 async function fetchWithTimeout(resource: string, options: any = {}) {
@@ -236,14 +242,14 @@ export interface LivePrice {
 export async function fetchLivePrices(symbols: string[]): Promise<LivePrice[]> {
   try {
     const tickersString = symbols.map(s => s.replace('.JK', '')).join(',');
-    const response = await fetch(`/api/marketstack/latest?symbols=${tickersString}`);
+    const response = await fetch(`/api/market/live-prices?symbols=${tickersString}`);
     if (response.ok) {
       const data = await response.json();
-      if (data && data.data && Array.isArray(data.data)) {
-        return data.data.map((item: any) => ({
-          symbol: item.symbol.split('.')[0],
-          price: item.last || item.close || item.open,
-          changePercent: item.change_percent || 0
+      if (Array.isArray(data)) {
+        return data.map((item: any) => ({
+          symbol: item.symbol,
+          price: item.price,
+          changePercent: item.changePercent || 0
         }));
       }
     }

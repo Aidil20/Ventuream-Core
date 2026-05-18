@@ -54,10 +54,18 @@ export async function fetchMarketNewsSummary(forceRefresh = false, symbol?: stri
     if (forceRefresh) params.append('force', 'true');
     
     const url = params.toString() ? `${baseUrl}?${params.toString()}` : baseUrl;
-    const response = await fetch(url).catch(err => {
-      console.error("Network error fetching news:", err);
+    
+    // Use an AbortController for institutional-grade timeout
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 20000); // 20s timeout
+
+    const response = await fetch(url, { signal: controller.signal }).catch(err => {
+      clearTimeout(timeoutId);
+      console.warn("VAM News fetch soft-fail:", err.message);
       throw new Error(`Network failure: ${err.message || 'Check connection'}`);
     });
+    
+    clearTimeout(timeoutId);
     
     if (!response.ok) {
       const errText = await response.text().catch(() => "Unknown error");
@@ -66,10 +74,21 @@ export async function fetchMarketNewsSummary(forceRefresh = false, symbol?: stri
     }
 
     const news = await response.json();
+    
+    // Stricter validation of institutional data
+    if (!news || !Array.isArray(news) || news.length === 0) {
+       console.warn("[VAM GATEWAY] Received empty news payload, using fallback.");
+       return cached || getFallbackNews();
+    }
+
     setCachedNews(cacheKey, news);
     return news;
   } catch (error: any) {
-    console.error("Error fetching market news summary:", error);
+    if (error.name === 'AbortError') {
+      console.warn("[VAM GATEWAY] News fetch timed out. Using cached/fallback data.");
+    } else {
+      console.error("Error fetching market news summary:", error);
+    }
     // Return cached (even if stale) or fallback news
     return cached || getFallbackNews();
   }

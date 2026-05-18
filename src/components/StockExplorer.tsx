@@ -52,21 +52,22 @@ export const StockExplorer: React.FC<StockExplorerProps> = ({
   const [alertCondition, setAlertCondition] = useState<'gt' | 'lt'>('gt');
   const [showAddAlert, setShowAddAlert] = useState(false);
 
-  const handleSearch = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (searchQuery.trim()) {
+  const handleSearch = async (e?: React.FormEvent, overrideQuery?: string) => {
+    if (e) e.preventDefault();
+    const query = (overrideQuery || searchQuery).trim();
+    if (query) {
       setIsSearching(true);
       setSearchResults([]);
       setError(null);
       try {
-        const results = await searchAsset(searchQuery);
+        const results = await searchAsset(query);
         setSearchResults(results);
         
         if (results.length === 1) {
           setStockInfo(results[0]);
           setSelectedStock(results[0].symbol);
         } else if (results.length > 0) {
-          const exactMatch = results.find(r => r.symbol.toUpperCase() === searchQuery.trim().toUpperCase());
+          const exactMatch = results.find(r => r.symbol.toUpperCase() === query.toUpperCase());
           if (exactMatch) {
             setStockInfo(exactMatch);
             setSelectedStock(exactMatch.symbol);
@@ -83,7 +84,7 @@ export const StockExplorer: React.FC<StockExplorerProps> = ({
             });
           } else if (parsed.code === 'NOT_FOUND') {
             setError({ 
-              message: parsed.message || `No assets matching "${searchQuery}" were found in our institutional database.`, 
+              message: parsed.message || `No assets matching "${query}" were found in our institutional database.`, 
               code: 'NOT_FOUND' 
             });
           } else if (parsed.error) {
@@ -930,16 +931,50 @@ export const StockExplorer: React.FC<StockExplorerProps> = ({
             </div>
           </motion.div>
         ) : (
-          <div className="py-20 flex flex-col items-center justify-center text-center space-y-6">
+          <div className="py-20 flex flex-col items-center justify-center text-center space-y-8 max-w-xl mx-auto">
             <div className="w-24 h-24 bg-zinc-900 rounded-[2rem] flex items-center justify-center border border-zinc-800 shadow-2xl relative">
               <Search className="w-10 h-10 text-zinc-700" />
               <div className="absolute -top-1 -right-1 w-4 h-4 bg-[#DFFF00] rounded-full flex items-center justify-center border-4 border-black">
                 <Plus className="w-2 h-2 text-black" />
               </div>
             </div>
-            <div>
+            <div className="space-y-2">
               <p className="text-sm font-black text-zinc-300 uppercase tracking-widest">Market Discovery Hub</p>
-              <p className="text-[10px] text-zinc-600 font-bold uppercase tracking-tighter mt-1">Search for symbols to load deep institutional profiles</p>
+              <p className="text-[10px] text-zinc-600 font-bold uppercase tracking-tighter">Enter a stock symbol to load deep institutional profiles and real-time analytics</p>
+            </div>
+
+            <form onSubmit={handleSearch} className="w-full relative group">
+              <div className="absolute inset-0 bg-[#DFFF00]/5 blur-2xl rounded-full opacity-0 group-hover:opacity-100 transition-opacity" />
+              <input
+                type="text"
+                placeholder="Ex: BBCA, TLKM, AAPL, NVDA..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                autoFocus
+                className="w-full bg-[#05070a] border border-zinc-800 rounded-[1.5rem] py-5 pl-6 pr-16 text-lg font-black text-white focus:border-[#DFFF00]/50 focus:bg-black outline-none transition-all placeholder:text-zinc-800 shadow-2xl relative z-10"
+              />
+              <button 
+                type="submit"
+                disabled={isSearching || !searchQuery.trim()}
+                className="absolute right-3 top-1/2 -translate-y-1/2 p-3 bg-[#DFFF00] text-black rounded-xl hover:scale-110 active:scale-95 transition-all disabled:opacity-50 disabled:scale-100 z-20"
+              >
+                {isSearching ? <Loader2 className="w-5 h-5 animate-spin" /> : <Search className="w-5 h-5" />}
+              </button>
+            </form>
+
+            <div className="flex flex-wrap justify-center gap-3 pt-4">
+               {['BBCA', 'TLKM', 'ADRO', 'GOTO', 'BMRI'].map(symbol => (
+                 <button
+                   key={symbol}
+                   onClick={() => {
+                     setSearchQuery(symbol);
+                     handleSearch(undefined, symbol);
+                   }}
+                   className="px-4 py-2 bg-zinc-900/50 border border-zinc-800 rounded-xl text-[10px] font-black text-zinc-500 hover:text-[#DFFF00] hover:border-[#DFFF00]/30 transition-all uppercase"
+                 >
+                   {symbol}
+                 </button>
+               ))}
             </div>
           </div>
         )}

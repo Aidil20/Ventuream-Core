@@ -172,6 +172,35 @@ export const FundamentalAnalyst: React.FC<FundamentalAnalystProps> = ({ onSelect
     }
   }, [initialSymbol]);
 
+  useEffect(() => {
+    const handleMarketUpdate = (event: CustomEvent) => {
+      const data = event.detail;
+      if (auditData && data.symbol === auditData.ticker) {
+        setAuditData(prev => prev ? {
+          ...prev,
+          lastPrice: data.price,
+          changePercent: data.changePercent,
+          // Re-calculate change absolute if possible, otherwise rely on server
+          changeAbsolute: typeof prev.lastPrice === 'number' && typeof data.price === 'number' 
+            ? data.price - (prev.lastPrice / (1 + prev.changePercent/100))
+            : prev.changeAbsolute,
+          technicalResearch: {
+            ...prev.technicalResearch,
+            rsi: data.rsi ? `${data.rsi} (Live)` : prev.technicalResearch.rsi,
+            macd: data.macdHist ? `${data.macdHist > 0 ? '+' : ''}${data.macdHist} (Live)` : prev.technicalResearch.macd,
+            supportResistance: data.supportResistance || prev.technicalResearch.supportResistance,
+            movingAverages: data.ema20 && data.ema50 
+              ? `EMA20: ${data.ema20} | EMA50: ${data.ema50} (${data.ema20 > data.ema50 ? 'Bullish' : 'Bearish'})` 
+              : prev.technicalResearch.movingAverages
+          }
+        } : null);
+      }
+    };
+
+    window.addEventListener('vam-market-update' as any, handleMarketUpdate);
+    return () => window.removeEventListener('vam-market-update' as any, handleMarketUpdate);
+  }, [auditData]);
+
   const handleAudit = async (symbol: string) => {
     setSearchQuery(symbol);
     setShowSuggestions(false);
@@ -482,60 +511,85 @@ export const FundamentalAnalyst: React.FC<FundamentalAnalystProps> = ({ onSelect
                
                <div className="lg:col-span-1 space-y-6">
                  {/* Technical Intelligence Block */}
-                 <div className="bg-[#020407] rounded-[2.5rem] border border-zinc-800 p-6 shadow-2xl relative overflow-hidden h-full">
-                    <div className="flex items-center gap-2 mb-6">
-                       <BrainCircuit className="w-4 h-4 text-[#DFFF00]" />
-                       <h4 className="text-[10px] font-black text-zinc-400 uppercase tracking-widest">Institutional Technical Intelligence</h4>
+                 <div className="bg-[#020407] rounded-[2.5rem] border border-zinc-800 p-6 shadow-2xl relative overflow-hidden h-full group">
+                    <div className="flex items-center justify-between mb-6">
+                      <div className="flex items-center gap-2">
+                         <BrainCircuit className="w-4 h-4 text-[#DFFF00]" />
+                         <h4 className="text-[10px] font-black text-zinc-400 uppercase tracking-widest">Institutional Technical Intelligence</h4>
+                      </div>
+                      <div className="flex items-center gap-1.5 px-2 py-0.5 bg-[#DFFF00]/10 border border-[#DFFF00]/20 rounded-lg">
+                        <div className="w-1 h-1 bg-[#DFFF00] rounded-full animate-pulse shadow-[0_0_5px_#DFFF00]" />
+                        <span className="text-[7px] text-[#DFFF00] font-black uppercase">Live</span>
+                      </div>
                     </div>
                     
                     <div className="space-y-6">
                       <div className="space-y-3">
-                         <span className="text-[8px] font-black text-zinc-600 uppercase tracking-[0.2em]">Key Price Pivot Points</span>
-                         <div className="flex flex-wrap gap-2">
-                            {auditData.technicalResearch.supportResistance?.map((level, i) => (
-                              <div key={i} className="px-3 py-1.5 bg-zinc-900 border border-zinc-800 rounded-xl text-[10px] font-black text-white">
-                                {level}
-                              </div>
-                            ))}
+                         <span className="text-[8px] font-black text-zinc-600 uppercase tracking-[0.2em]">Strategic Pivot Levels</span>
+                         <div className="grid grid-cols-5 gap-1.5">
+                            {auditData.technicalResearch.supportResistance?.map((level, i) => {
+                              const isPP = level.includes('PP');
+                              const isS = level.includes('S');
+                              return (
+                                <div key={i} className={`flex flex-col items-center justify-center p-2 rounded-xl border transition-all ${
+                                  isPP ? 'bg-[#DFFF00]/10 border-[#DFFF00]/30 text-[#DFFF00]' :
+                                  isS ? 'bg-emerald-500/5 border-emerald-500/10 text-emerald-400' :
+                                  'bg-rose-500/5 border-rose-500/10 text-rose-400'
+                                }`}>
+                                  <span className="text-[7px] font-black uppercase mb-0.5">{level.split(':')[0]}</span>
+                                  <span className="text-[10px] font-mono font-bold leading-none">{level.split(':')[1]}</span>
+                                </div>
+                              );
+                            })}
                          </div>
                       </div>
 
                       <div className="pt-6 border-t border-zinc-800 space-y-4">
                         <div className="grid grid-cols-2 gap-4">
-                          <div className="space-y-1">
-                             <span className="text-[8px] font-black text-zinc-600 uppercase">RSI Intelligence</span>
-                             <p className="text-xs font-black text-white">{auditData.technicalResearch.rsi}</p>
+                          <div className="bg-zinc-900/40 p-3 rounded-2xl border border-zinc-800/50">
+                             <span className="text-[8px] font-black text-zinc-600 uppercase mb-1 block">RSI (14)</span>
+                             <div className="flex items-end justify-between">
+                               <p className="text-xl font-mono font-black text-white leading-none">{auditData.technicalResearch.rsi.split(' ')[0]}</p>
+                               <span className={`text-[7px] font-black px-1 rounded uppercase ${parseInt(auditData.technicalResearch.rsi) > 70 ? 'text-rose-400' : parseInt(auditData.technicalResearch.rsi) < 30 ? 'text-emerald-400' : 'text-zinc-500'}`}>
+                                 {parseInt(auditData.technicalResearch.rsi) > 70 ? 'OB' : parseInt(auditData.technicalResearch.rsi) < 30 ? 'OS' : 'Neu'}
+                               </span>
+                             </div>
                           </div>
-                          <div className="space-y-1">
-                             <span className="text-[8px] font-black text-zinc-600 uppercase">MACD Signal</span>
-                             <p className="text-xs font-black text-white">{auditData.technicalResearch.macd}</p>
+                          <div className="bg-zinc-900/40 p-3 rounded-2xl border border-zinc-800/50">
+                             <span className="text-[8px] font-black text-zinc-600 uppercase mb-1 block">MACD Hist</span>
+                             <div className="flex items-end justify-between">
+                               <p className="text-xl font-mono font-black text-white leading-none">{auditData.technicalResearch.macd.split(' ')[0]}</p>
+                               <TrendingUp className={`w-3.5 h-3.5 ${auditData.technicalResearch.macd.includes('+') ? 'text-emerald-400' : 'text-rose-400'}`} />
+                             </div>
                           </div>
                         </div>
 
-                        <div className="space-y-1">
-                           <span className="text-[8px] font-black text-zinc-600 uppercase">Moving Average Status</span>
-                           <p className="text-xs font-black text-white">{auditData.technicalResearch.movingAverages}</p>
+                        <div className="space-y-1 bg-zinc-900/40 p-3 rounded-2xl border border-zinc-800/50">
+                           <span className="text-[8px] font-black text-zinc-600 uppercase block mb-1">MA Trend Profile</span>
+                           <p className="text-[10px] font-bold text-zinc-300 leading-tight italic">"{auditData.technicalResearch.movingAverages}"</p>
                         </div>
 
-                        <div className="space-y-1">
-                           <span className="text-[8px] font-black text-zinc-600 uppercase">Institutional Volume Profile</span>
-                           <p className="text-xs font-black text-white">{auditData.technicalResearch.volumeProfile}</p>
+                        <div className="space-y-1 bg-zinc-900/40 p-3 rounded-2xl border border-zinc-800/50">
+                           <span className="text-[8px] font-black text-zinc-600 uppercase block mb-1">Vol Profile Signal</span>
+                           <p className="text-[10px] font-bold text-white uppercase tracking-tight">{auditData.technicalResearch.volumeProfile}</p>
                         </div>
                       </div>
 
-                      <div className="pt-4 space-y-3">
-                        <p className="text-[8px] font-black text-zinc-600 uppercase">Proprietary Indicators</p>
-                        {auditData.technicalResearch.indicators?.map((ind, i) => (
-                          <div key={i} className="flex justify-between items-center p-3 bg-zinc-900 rounded-xl border border-zinc-800">
-                             <span className="text-[9px] font-black text-zinc-500 uppercase">{ind.name}</span>
-                             <div className="text-right">
-                               <p className="text-[10px] font-black text-white">{ind.value}</p>
-                               <p className={`text-[8px] font-black uppercase ${ind.signal === 'BUY' || ind.signal.includes('Bullish') || ind.signal.includes('Positive') ? 'text-emerald-400' : 'text-red-400'}`}>
-                                 {ind.signal}
-                               </p>
-                             </div>
-                          </div>
-                        ))}
+                      <div className="pt-4 space-y-2">
+                        <p className="text-[8px] font-black text-zinc-600 uppercase tracking-widest mb-2">Alpha Generators</p>
+                        <div className="grid grid-cols-1 gap-2">
+                          {auditData.technicalResearch.indicators?.slice(0, 3).map((ind, i) => (
+                            <div key={i} className="flex justify-between items-center p-2.5 bg-zinc-900/60 rounded-xl border border-zinc-800 hover:border-[#DFFF00]/20 transition-all">
+                               <span className="text-[9px] font-black text-zinc-500 uppercase">{ind.name}</span>
+                               <div className="text-right">
+                                 <p className="text-[9px] font-black text-white leading-tight">{ind.value}</p>
+                                 <p className={`text-[7px] font-black uppercase ${ind.signal === 'BUY' || ind.signal.includes('Bullish') || ind.signal.includes('Positive') ? 'text-emerald-400' : 'text-rose-400'}`}>
+                                   {ind.signal}
+                                 </p>
+                               </div>
+                            </div>
+                          ))}
+                        </div>
                       </div>
                     </div>
                  </div>

@@ -82,6 +82,30 @@ export const NewsFeed: React.FC<NewsFeedProps> = ({ news, isLoading }) => {
                           AI: {item.score}%
                         </div>
                       )}
+
+                      {item.vam_sentiment && (
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                          <span className={`text-[8px] font-black px-1.5 py-0.5 rounded border flex items-center gap-1 ${
+                            item.vam_sentiment.impact === 'CRITICAL' ? 'bg-rose-500/20 border-rose-500/50 text-rose-400' :
+                            item.vam_sentiment.impact === 'HIGH' ? 'bg-orange-500/20 border-orange-500/50 text-orange-400' :
+                            item.vam_sentiment.impact === 'MODERATE' ? 'bg-yellow-500/20 border-yellow-500/50 text-yellow-400' :
+                            'bg-zinc-800 border-zinc-700 text-zinc-500'
+                          }`}>
+                            <BrainCircuit className="w-2.5 h-2.5" />
+                            {item.vam_sentiment.impact}
+                          </span>
+                          
+                          {item.vam_signal && (
+                            <span className={`text-[8px] font-black px-1.5 py-0.5 rounded border ${
+                              item.vam_signal.includes('BUY') ? 'bg-emerald-500/20 border-emerald-500/50 text-emerald-400' :
+                              item.vam_signal.includes('SELL') ? 'bg-rose-500/20 border-rose-500/50 text-rose-400' :
+                              'bg-zinc-800 border-zinc-700 text-zinc-400'
+                            }`}>
+                              {item.vam_signal}
+                            </span>
+                          )}
+                        </div>
+                      )}
                     </div>
                   </div>
 

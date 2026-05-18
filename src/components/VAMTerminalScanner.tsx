@@ -152,24 +152,10 @@ const VAMTerminalScanner: React.FC<VAMTerminalScannerProps> = ({
         setResults([]);
     };
 
+    // Removed manual jitter simulation to prioritize real-time feed
     useEffect(() => {
         if (!results.length) return;
-        const interval = setInterval(() => {
-            setResults(prev => prev.map(res => {
-                const newMetrics = { ...res.metrics };
-                Object.keys(newMetrics).forEach(key => {
-                    const val = newMetrics[key];
-                    if (typeof val === 'number') {
-                        newMetrics[key] = +(val + (Math.random() - 0.5) * (val * 0.001)).toFixed(2);
-                    } else if (typeof val === 'string' && !isNaN(parseFloat(val.replace(/,/g, '')))) {
-                        const num = parseFloat(val.replace(/,/g, ''));
-                        newMetrics[key] = (num + (Math.random() - 0.5) * (num * 0.001)).toLocaleString('id-ID', { maximumFractionDigits: 0 });
-                    }
-                });
-                return { ...res, metrics: newMetrics };
-            }));
-        }, 2000);
-        return () => clearInterval(interval);
+        // No longer using internal interval for simulation
     }, [results.length]);
 
     useEffect(() => {
