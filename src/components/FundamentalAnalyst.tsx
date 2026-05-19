@@ -440,9 +440,46 @@ export const FundamentalAnalyst: React.FC<FundamentalAnalystProps> = ({ onSelect
                     </div>
                   </div>
 
-                  <div className="flex items-center gap-4">
+                  <div className="flex items-center gap-4 group relative">
                      <div className="text-right">
-                       <p className="text-[10px] font-black text-zinc-600 uppercase tracking-[0.2em] mb-1">Audit Score</p>
+                       <div className="relative inline-block">
+                         <p className="text-[10px] font-black text-zinc-600 uppercase tracking-[0.2em] mb-1 cursor-help flex items-center justify-end gap-1 group/label">
+                           Audit Score
+                           <Activity className="w-2.5 h-2.5 opacity-40 group-hover/label:opacity-100 transition-opacity" />
+                         </p>
+                         
+                         {/* Tooltip */}
+                         <div className="invisible group-hover:visible absolute right-0 bottom-full mb-3 w-[260px] z-50 pointer-events-none">
+                            <motion.div 
+                              initial={{ opacity: 0, y: 10, scale: 0.95 }}
+                              whileInView={{ opacity: 1, y: 0, scale: 1 }}
+                              className="bg-[#0c0f14] border border-zinc-800 rounded-2xl p-4 shadow-2xl backdrop-blur-xl"
+                            >
+                              <div className="flex items-center gap-2 mb-2">
+                                <BrainCircuit className="w-3 h-3 text-[#DFFF00]" />
+                                <span className="text-[10px] font-black text-[#DFFF00] uppercase tracking-widest">Synthetic Intelligence Score</span>
+                              </div>
+                              <p className="text-[10px] text-zinc-400 font-bold leading-relaxed">
+                                The <span className="text-white">AI Audit Score</span> is a proprietary metric (0-100) evaluating institutional durability.
+                              </p>
+                              <div className="mt-3 pt-3 border-t border-zinc-800">
+                                <span className="text-[8px] font-black text-zinc-600 uppercase block mb-1">Weighted Calculation:</span>
+                                <div className="grid grid-cols-2 gap-2 mt-1">
+                                  <div className="flex flex-col gap-0.5">
+                                    <span className="text-[7px] text-zinc-500 uppercase font-black">Fundamental: 40%</span>
+                                    <span className="text-[7px] text-zinc-500 uppercase font-black">Technical: 30%</span>
+                                  </div>
+                                  <div className="flex flex-col gap-0.5">
+                                    <span className="text-[7px] text-zinc-500 uppercase font-black">Management: 20%</span>
+                                    <span className="text-[7px] text-zinc-500 uppercase font-black">Macro: 10%</span>
+                                  </div>
+                                </div>
+                              </div>
+                              <div className="absolute -bottom-1 right-8 w-2 h-2 bg-[#0c0f14] border-r border-b border-zinc-800 rotate-45" />
+                            </motion.div>
+                         </div>
+                       </div>
+                       
                        <div className="flex items-center justify-end gap-2">
                          <span className="text-4xl font-black text-[#DFFF00]">{auditData.score}</span>
                          <span className="text-zinc-700 text-sm font-black">/100</span>

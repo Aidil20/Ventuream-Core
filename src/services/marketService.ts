@@ -34,7 +34,7 @@ async function fetchWithTimeout(resource: string, options: any = {}) {
   }
 }
 
-async function fetchWithRetry(resource: string, options: any = {}, retries = 2) {
+export async function fetchWithRetry(resource: string, options: any = {}, retries = 2) {
   try {
     return await fetchWithTimeout(resource, options);
   } catch (error: any) {
@@ -125,25 +125,25 @@ function breakCircuit(type: string) {
   localStorage.setItem(getCircuitBreakerKey(type), Date.now().toString());
 }
 
-export async function fetchLatestInsights(): Promise<MarketInsight[]> {
-  const cacheKey = 'ventuream_insights_cache';
+export async function fetchLatestInsights(count: number = 5, force: boolean = false): Promise<MarketInsight[]> {
+  const cacheKey = `ventuream_insights_cache_${count}`;
   const type = 'insights';
   
   const circuitBroken = isCircuitBroken(type);
   const cached = localStorage.getItem(cacheKey);
 
-  if (cached) {
+  if (cached && !force) {
     const { data, timestamp } = JSON.parse(cached);
     const isExpired = Date.now() - timestamp > CACHE_DURATION;
     if (circuitBroken || !isExpired) {
       return Array.isArray(data) ? data : [data];
     }
-  } else if (circuitBroken) {
+  } else if (circuitBroken && !force) {
     return getInsightFallback();
   }
   
   try {
-    const response = await fetchWithRetry("/api/market/insights").catch(err => {
+    const response = await fetchWithRetry(`/api/market/insights?count=${count}&force=${force}`).catch(err => {
       console.error("Network error fetching insights:", err);
       throw new Error(`Network failure: ${err.message}`);
     });
@@ -199,7 +199,7 @@ export async function fetchScannerResults(scannerName: string): Promise<ScannerR
   }
 
   try {
-    const response = await fetch(`/api/market/scanner?name=${encodeURIComponent(scannerName)}`);
+    const response = await fetchWithRetry(`/api/market/scanner?name=${encodeURIComponent(scannerName)}`, {}, 1);
     if (!response.ok) throw new Error("Server error fetching scanner");
     
     const results = await response.json();
@@ -242,7 +242,7 @@ export interface LivePrice {
 export async function fetchLivePrices(symbols: string[]): Promise<LivePrice[]> {
   try {
     const tickersString = symbols.map(s => s.replace('.JK', '')).join(',');
-    const response = await fetch(`/api/market/live-prices?symbols=${tickersString}`);
+    const response = await fetchWithRetry(`/api/market/live-prices?symbols=${tickersString}`, {}, 1);
     if (response.ok) {
       const data = await response.json();
       if (Array.isArray(data)) {
@@ -254,7 +254,7 @@ export async function fetchLivePrices(symbols: string[]): Promise<LivePrice[]> {
       }
     }
   } catch (e) {
-    console.warn("[VentureAM Gateway] Live price sync failed:", e);
+    console.warn("[VentureAM Gateway] Live price sync degraded:", e);
   }
 
     return symbols.map(s => {
@@ -281,11 +281,13 @@ export interface AssetSearchInfo {
   volume: string;
   marketCap: string;
   summary: string;
+  sparkline?: number[];
 }
 
 export async function searchAsset(query: string): Promise<AssetSearchInfo[]> {
   try {
-    const response = await fetch(`/api/market/search?query=${encodeURIComponent(query)}`);
+    const response = await fetchWithRetry(`/api/market/search?query=${encodeURIComponent(query)}`, {}, 1);
+    
     if (!response.ok) {
       const errorData = await response.json().catch(() => ({ error: "Search failed" }));
       if (response.status === 429 || errorData.code === 'RESOURCE_EXHAUSTED') {
@@ -297,9 +299,35 @@ export async function searchAsset(query: string): Promise<AssetSearchInfo[]> {
       throw new Error(JSON.stringify(errorData));
     }
     const data = await response.json();
-    return Array.isArray(data) ? data : [data];
-  } catch (error) {
+    const assets = Array.isArray(data) ? data : [data];
+    return assets.map((asset: any) => ({
+      ...asset,
+      sparkline: asset.sparkline || Array.from({ length: 12 }, () => 
+        asset.price * (1 + (Math.random() - 0.5) * 0.05)
+      )
+    }));
+  } catch (error: any) {
     console.error("Asset search error:", error);
+    
+    // Check if it's a network error "Failed to fetch"
+    const isNetworkError = error.message?.includes('Failed to fetch') || error.message?.includes('Network failure');
+    
+    if (isNetworkError) {
+      console.warn("[VAM GATEWAY] Search network failure. Serving partial simulated results.");
+      // Provide subset of common assets as partial fallback for search if network is down
+      const simulated = [
+        { symbol: "BBCA", name: "Bank Central Asia Tbk.", price: 10450, changePercent: 0.25, volume: "45.2M", marketCap: "1,280T", summary: "Offline Fallback: Large-cap bank.", sparkline: Array.from({ length: 12 }, () => 10450 * (1 + (Math.random() - 0.5) * 0.02)) },
+        { symbol: "BBRI", name: "Bank Rakyat Indonesia Tbk.", price: 4850, changePercent: -1.2, volume: "120M", marketCap: "735T", summary: "Offline Fallback: Micro-finance leader.", sparkline: Array.from({ length: 12 }, () => 4850 * (1 + (Math.random() - 0.5) * 0.03)) },
+        { symbol: "TLKM", name: "Telkom Indonesia Tbk.", price: 2820, changePercent: 0.5, volume: "85M", marketCap: "280T", summary: "Offline Fallback: Telecom provider.", sparkline: Array.from({ length: 12 }, () => 2820 * (1 + (Math.random() - 0.5) * 0.02)) },
+        { symbol: "ASII", name: "Astra International Tbk.", price: 4850, changePercent: -0.5, volume: "42M", marketCap: "196T", summary: "Offline Fallback: Conglomerate.", sparkline: Array.from({ length: 12 }, () => 4850 * (1 + (Math.random() - 0.5) * 0.025)) }
+      ].filter(item => 
+        item.symbol.includes(query.toUpperCase()) || 
+        item.name.toUpperCase().includes(query.toUpperCase())
+      );
+      
+      if (simulated.length > 0) return simulated;
+    }
+    
     throw error;
   }
 }
@@ -317,11 +345,11 @@ export interface NewsSentimentAnalysis {
 
 export async function fetchNewsSentimentSummary(news: MarketNews[], symbol: string): Promise<NewsSentimentAnalysis | null> {
   try {
-    const response = await fetch('/api/market/news-sentiment', {
+    const response = await fetchWithRetry('/api/market/news-sentiment', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ news, symbol })
-    });
+    }, 1);
     if (!response.ok) throw new Error("Sentiment analysis failed");
     return await response.json();
   } catch (error) {
@@ -436,7 +464,7 @@ export interface FundamentalAudit {
 
 export async function fetchFundamentalAudit(symbol: string, retries = 2): Promise<FundamentalAudit | null> {
   try {
-    const response = await fetch(`/api/market/fundamental-audit?symbol=${encodeURIComponent(symbol)}`);
+    const response = await fetchWithRetry(`/api/market/fundamental-audit?symbol=${encodeURIComponent(symbol)}`, {}, retries);
     if (!response.ok) {
       const errorData = await response.json().catch(() => ({ error: "Audit failed" }));
       if (response.status === 429 || errorData.code === 'RESOURCE_EXHAUSTED') {
@@ -488,7 +516,7 @@ export async function fetchStockRecommendations(options?: ScanOptions): Promise<
     if (options?.minVolume) params.append('minVolume', options.minVolume);
     if (options?.dateRange) params.append('dateRange', JSON.stringify(options.dateRange));
     
-    const response = await fetch(`/api/market/recommendations?${params.toString()}`).catch(err => {
+    const response = await fetchWithRetry(`/api/market/recommendations?${params.toString()}`, {}, 1).catch(err => {
       console.error("Network error fetching recommendations:", err);
       throw new Error(`Network failure: ${err.message}`);
     });

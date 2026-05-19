@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { Globe, Shield, TrendingUp, TrendingDown, Cpu, Zap, Activity } from 'lucide-react';
+import { fetchWithRetry } from '../services/marketService';
 
 interface GlobalIntel {
   market: Record<string, { price: number, change_pct: number }>;
@@ -24,11 +25,12 @@ export const GlobalIntelFeed = () => {
 
   const fetchIntel = async () => {
     try {
-      const response = await fetch('/api/market/global-intel');
+      const response = await fetchWithRetry('/api/market/global-intel', {}, 1);
+      if (!response.ok) throw new Error(`Gateway Error: ${response.status}`);
       const json = await response.json();
       setData(json);
-    } catch (err) {
-      console.error("Intel fetch error:", err);
+    } catch (err: any) {
+      console.warn("[VAM GATEWAY] Tactical Intel sync degraded:", err.message || err);
     } finally {
       setLoading(false);
     }

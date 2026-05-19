@@ -164,9 +164,10 @@ async function startServer() {
   };
 
   const analyzeImpact = (text: string) => {
+    if (!text) return { score: 0, impact: "Low", keywords: [] };
     let score = 0;
     let impactLevel = "Low";
-    const lowerText = text.toLowerCase();
+    const lowerText = String(text).toLowerCase();
     const foundKeywords: string[] = [];
 
     for (const [word, weight] of Object.entries(sentimentLexicon)) {
@@ -504,8 +505,12 @@ async function startServer() {
   app.get("/api/market/insights", async (req, res) => {
     if (!process.env.GEMINI_API_KEY) return res.status(500).json({ error: "GEMINI_API_KEY not configured" });
     
-    const cached = getCached("insights", NEWS_CACHE_TTL);
-    if (cached) return res.json(cached);
+    const force = req.query.force === 'true';
+    const count = parseInt(req.query.count as string) || 5;
+
+    const cacheKey = `insights_${count}`;
+    const cached = getCached(cacheKey, NEWS_CACHE_TTL);
+    if (cached && !force) return res.json(cached);
 
     const insightsSchema = {
       type: Type.ARRAY,
@@ -522,7 +527,7 @@ async function startServer() {
     };
 
     try {
-      const prompt = `Research current IDX market trends for institutional investors. Generate 5 high-priority insights.
+      const prompt = `Research current IDX market trends for institutional investors. Generate ${count} high-priority insights.
       Focus on M&A, bond/sukuk yields, and restructuring of blue-chips (BBCA, BBRI, TLKM).
       Search the latest institutional data to ground your insights.`;
 
@@ -540,7 +545,7 @@ async function startServer() {
       const text = result.text || "[]";
       try {
         const data = JSON.parse(text);
-        setCached("insights", data);
+        if (!force) setCached(cacheKey, data);
         res.json(data);
       } catch (e) {
         console.error("[VAM GATEWAY] Insights Parse Error:", e, text);
@@ -1347,7 +1352,7 @@ async function startServer() {
          ticker: tickers[Math.floor(Math.random() * tickers.length)]
       });
     }
-  }, 500); // 500ms for high-frequency feel
+  }, 200); // 200ms for high-frequency sub-second precision
 
 
   io.on("connection", (socket) => {

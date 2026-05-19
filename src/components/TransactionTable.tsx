@@ -55,8 +55,12 @@ export const TransactionTable = ({ data }: { data: Transaction[] }) => {
                     </span>
                   </td>
                   <td className="p-3">
-                    <span className={`font-bold ${tx.side === 'BUY' ? 'text-green-400' : 'text-red-400'}`}>
-                      {tx.side}
+                    <span className={`font-bold ${
+                      tx.side === 'BUY' ? 'text-green-400' : 
+                      tx.side === 'SELL' ? 'text-red-400' : 
+                      'text-amber-500'
+                    }`}>
+                      {tx.side.replace('_', ' ')}
                     </span>
                   </td>
                   <td className="p-3 text-right text-slate-300 font-mono">

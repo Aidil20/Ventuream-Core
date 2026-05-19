@@ -3,6 +3,7 @@ import { motion, AnimatePresence } from 'motion/react';
 import { Search, Plus, TrendingUp, TrendingDown, Clock, Newspaper, BarChart2, Star, X, Zap, Bell, Trash2, ChevronDown, ExternalLink, Activity, Info, Loader2, BrainCircuit, RefreshCw, ShieldAlert } from 'lucide-react';
 import TradingViewWidget from './TradingViewWidget';
 import TradingViewTechnicalAnalysisWidget from './TradingViewTechnicalAnalysisWidget';
+import Sparkline from './Sparkline';
 import { fetchMarketNewsSummary } from '../services/geminiService';
 import { PriceAlert } from '../App';
 import { searchAsset, AssetSearchInfo, fetchNewsSentimentSummary, NewsSentimentAnalysis } from '../services/marketService';
@@ -46,6 +47,8 @@ export const StockExplorer: React.FC<StockExplorerProps> = ({
   const [macdSignal, setMacdSignal] = useState<'any' | 'bullish' | 'bearish'>('any');
   const [macdPosition, setMacdPosition] = useState<'any' | 'above' | 'below'>('any');
   const [isChartExpanded, setIsChartExpanded] = useState(false);
+  const [tickHistory, setTickHistory] = useState<{ price: number, changePercent: number, timestamp: number }[]>([]);
+  const [activeTab, setActiveTab] = useState<'DISCOVERY' | 'WATCHLIST'>('DISCOVERY');
 
   // Alert Form State
   const [alertPrice, setAlertPrice] = useState<string>('');
@@ -59,6 +62,7 @@ export const StockExplorer: React.FC<StockExplorerProps> = ({
       setIsSearching(true);
       setSearchResults([]);
       setError(null);
+      setActiveTab('DISCOVERY');
       try {
         const results = await searchAsset(query);
         setSearchResults(results);
@@ -160,6 +164,16 @@ export const StockExplorer: React.FC<StockExplorerProps> = ({
             volume: data.volume || prev.volume // Use server volume if available
           };
         });
+        
+        // Add to tick history
+        setTickHistory(prev => [
+          { 
+            price: data.price, 
+            changePercent: data.changePercent, 
+            timestamp: Date.now() 
+          }, 
+          ...prev
+        ].slice(0, 50)); // Keep last 50 ticks
       }
     };
 
@@ -169,6 +183,7 @@ export const StockExplorer: React.FC<StockExplorerProps> = ({
 
   useEffect(() => {
     if (selectedStock) {
+      setTickHistory([]); // Clear history for new stock
       // If we don't have stockInfo but have a selectedStock (e.g. from watchlist), fetch info
       if (!stockInfo || stockInfo.symbol !== selectedStock) {
         const loadInfo = async () => {
@@ -211,6 +226,25 @@ export const StockExplorer: React.FC<StockExplorerProps> = ({
     <div className="space-y-6">
       {/* Search Bar & Watchlist Bar */}
       <div className="flex flex-col md:flex-row gap-4 items-center">
+        <div className="flex items-center gap-1 bg-[#11141b] p-1 rounded-2xl border border-white/5 mr-2">
+          <button
+            onClick={() => setActiveTab('DISCOVERY')}
+            className={`px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${
+              activeTab === 'DISCOVERY' ? 'bg-[#DFFF00] text-black shadow-[0_0_15px_rgba(223,255,0,0.2)]' : 'text-zinc-500 hover:text-zinc-300'
+            }`}
+          >
+            Hub
+          </button>
+          <button
+            onClick={() => setActiveTab('WATCHLIST')}
+            className={`px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${
+              activeTab === 'WATCHLIST' ? 'bg-[#DFFF00] text-black shadow-[0_0_15px_rgba(223,255,0,0.2)]' : 'text-zinc-500 hover:text-zinc-300'
+            }`}
+          >
+            Watchlist
+          </button>
+        </div>
+
         <form onSubmit={handleSearch} className="relative flex-1 w-full">
           {isSearching ? (
             <Loader2 className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-[#DFFF00] animate-spin" />
@@ -437,7 +471,7 @@ export const StockExplorer: React.FC<StockExplorerProps> = ({
           </motion.div>
         )}
 
-        {searchResults.length > 1 && !selectedStock && !isSearching && !error && (
+        {searchResults.length > 1 && !selectedStock && !isSearching && !error && activeTab === 'DISCOVERY' && (
           <motion.div
             initial={{ opacity: 0, y: -10 }}
             animate={{ opacity: 1, y: 0 }}
@@ -450,9 +484,11 @@ export const StockExplorer: React.FC<StockExplorerProps> = ({
             </div>
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
               {searchResults.map((result) => (
-                <div 
+                  <div 
                   key={result.symbol}
-                  className="flex items-stretch bg-zinc-900 border border-zinc-800 rounded-xl hover:border-[#DFFF00]/30 transition-all group overflow-hidden"
+                  className={`flex items-stretch bg-zinc-900 border rounded-xl hover:border-[#DFFF00]/30 transition-all group overflow-hidden ${
+                    watchlist.includes(result.symbol) ? 'border-[#DFFF00]/40 shadow-[0_0_15px_rgba(223,255,0,0.05)]' : 'border-zinc-800'
+                  }`}
                 >
                   <button
                     onClick={() => {
@@ -460,12 +496,33 @@ export const StockExplorer: React.FC<StockExplorerProps> = ({
                       setSelectedStock(result.symbol);
                       setSearchResults([]);
                     }}
-                    className="flex-1 flex items-center justify-between p-4 text-left"
+                    className="flex-1 flex items-center justify-between p-4 text-left relative"
                   >
+                    {watchlist.includes(result.symbol) && (
+                      <div className="absolute top-0 right-0 p-1">
+                        <Star className="w-2.5 h-2.5 fill-[#DFFF00] text-[#DFFF00]" />
+                      </div>
+                    )}
                     <div>
-                      <h4 className="text-sm font-black text-white">{result.symbol}</h4>
+                      <div className="flex items-center gap-2">
+                        <h4 className="text-sm font-black text-white">{result.symbol}</h4>
+                        {watchlist.includes(result.symbol) && (
+                           <span className="text-[7px] font-black text-[#DFFF00] px-1.5 py-0.5 bg-[#DFFF00]/10 rounded uppercase">Watchlisted</span>
+                        )}
+                      </div>
                       <p className="text-[10px] text-zinc-500 font-bold uppercase truncate max-w-[120px]">{result.name}</p>
                     </div>
+                    
+                    <div className="flex-1 px-4 self-center hidden sm:block">
+                      {result.sparkline && (
+                        <Sparkline 
+                          data={result.sparkline} 
+                          color={result.changePercent >= 0 ? '#10b981' : '#f43f5e'} 
+                          height={24}
+                        />
+                      )}
+                    </div>
+
                     <div className="text-right mr-2">
                       <p className="text-xs font-black text-white">Rp {typeof result.price === 'number' ? result.price.toLocaleString('id-ID') : (result.price || 'N/A')}</p>
                       <p className={`text-[10px] font-black ${result.changePercent >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
@@ -491,6 +548,78 @@ export const StockExplorer: React.FC<StockExplorerProps> = ({
       </AnimatePresence>
 
       <AnimatePresence mode="wait">
+        {activeTab === 'WATCHLIST' && !selectedStock && (
+          <motion.div
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="space-y-4"
+          >
+            <div className="flex items-center justify-between px-2">
+              <div className="flex items-center gap-2">
+                <Star className="w-4 h-4 text-[#DFFF00]" />
+                <h3 className="text-xs font-black text-white uppercase tracking-[0.2em]">Institutional Watchlist</h3>
+              </div>
+              <span className="text-[10px] font-black text-zinc-600 uppercase tracking-widest">{watchlist.length} Assets Tracked</span>
+            </div>
+
+            {watchlist.length === 0 ? (
+              <div className="bg-[#020407] border border-zinc-800 rounded-[2.5rem] p-12 text-center">
+                <Search className="w-12 h-12 text-zinc-800 mx-auto mb-4" />
+                <p className="text-zinc-500 text-[11px] font-bold uppercase tracking-widest">Your watchlist is currently empty</p>
+                <button 
+                  onClick={() => setActiveTab('DISCOVERY')}
+                  className="mt-6 px-6 py-2 bg-[#DFFF00]/10 border border-[#DFFF00]/20 text-[#DFFF00] rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-[#DFFF00]/20 transition-all"
+                >
+                  Discover Emerging Assets
+                </button>
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+                {watchlist.map((symbol) => (
+                  <motion.div
+                    key={symbol}
+                    whileHover={{ scale: 1.02 }}
+                    className="bg-[#020407] border border-zinc-800 rounded-3xl p-5 hover:border-[#DFFF00]/40 transition-all cursor-pointer group relative"
+                    onClick={() => setSelectedStock(symbol)}
+                  >
+                    <div className="flex items-center justify-between mb-4">
+                      <div className="flex items-center gap-3">
+                        <div className="p-2.5 bg-zinc-900 rounded-xl border border-zinc-800 group-hover:border-[#DFFF00]/20 transition-all">
+                          <BarChart2 className="w-5 h-5 text-[#DFFF00]" />
+                        </div>
+                        <div>
+                          <h4 className="text-lg font-black text-white leading-none">{symbol}</h4>
+                          <span className="text-[8px] font-black text-zinc-600 uppercase tracking-widest">Active Terminal</span>
+                        </div>
+                      </div>
+                      <button 
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          toggleWatchlist(symbol);
+                        }}
+                        className="p-2 text-zinc-700 hover:text-red-500 transition-colors"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    </div>
+                    
+                    <div className="mt-6 flex items-center justify-between">
+                       <div className="flex items-center gap-2">
+                          <div className="w-1.5 h-1.5 bg-emerald-500 rounded-full animate-pulse" />
+                          <span className="text-[9px] font-black text-zinc-500 uppercase tracking-widest">Gateway Verified</span>
+                       </div>
+                       <div className="flex items-center gap-1.5 text-[#DFFF00] group-hover:translate-x-1 transition-transform">
+                          <span className="text-[9px] font-black uppercase tracking-widest">Open Terminal</span>
+                          <ChevronDown className="-rotate-90 w-3 h-3" />
+                       </div>
+                    </div>
+                  </motion.div>
+                ))}
+              </div>
+            )}
+          </motion.div>
+        )}
+
         {selectedStock ? (
           <motion.div
             key={selectedStock}
@@ -506,7 +635,12 @@ export const StockExplorer: React.FC<StockExplorerProps> = ({
                   <BarChart2 className="w-6 h-6 text-[#DFFF00]" />
                 </div>
                 <div>
-                  <h2 className="text-2xl font-black text-white tracking-tighter">{selectedStock}</h2>
+                  <div className="flex items-center gap-2">
+                    <h2 className="text-2xl font-black text-white tracking-tighter">{selectedStock}</h2>
+                    {watchlist.includes(selectedStock) && (
+                      <Star className="w-5 h-5 fill-[#DFFF00] text-[#DFFF00]" />
+                    )}
+                  </div>
                   <div className="flex items-center gap-2 mt-1">
                     <span className="text-[10px] font-black text-zinc-500 uppercase tracking-widest">{stockInfo?.name || 'Global Asset ID'}</span>
                     <div className="w-1.5 h-1.5 bg-[#DFFF00] rounded-full animate-pulse" />
@@ -528,16 +662,36 @@ export const StockExplorer: React.FC<StockExplorerProps> = ({
                 <div className="flex flex-wrap items-center gap-8 py-4 xl:py-0 border-y xl:border-none border-zinc-800/50">
                   <div className="space-y-1">
                     <span className="text-[8px] font-black text-zinc-600 uppercase tracking-widest">Current Price</span>
-                    <p className="text-xl font-black text-white tracking-tighter">
-                      Rp {typeof stockInfo.price === 'number' ? stockInfo.price.toLocaleString('id-ID') : (stockInfo.price || 'N/A')}
-                    </p>
+                    <AnimatePresence mode="wait">
+                      <motion.p 
+                        key={stockInfo.price}
+                        initial={{ color: "#fff" }}
+                        animate={{ 
+                          color: ["#DFFF00", "#fff"],
+                        }}
+                        transition={{ duration: 0.5 }}
+                        className="text-xl font-black text-white tracking-tighter"
+                      >
+                        Rp {typeof stockInfo.price === 'number' ? stockInfo.price.toLocaleString('id-ID') : (stockInfo.price || 'N/A')}
+                      </motion.p>
+                    </AnimatePresence>
                   </div>
                   <div className="space-y-1">
                     <span className="text-[8px] font-black text-zinc-600 uppercase tracking-widest">Day Change</span>
-                    <p className={`text-xl font-black tracking-tighter flex items-center gap-1 ${stockInfo.changePercent >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
-                      {stockInfo.changePercent >= 0 ? <TrendingUp className="w-4 h-4" /> : <TrendingDown className="w-4 h-4" />}
-                      {typeof stockInfo.changePercent === 'number' ? stockInfo.changePercent.toFixed(2) : '0.00'}%
-                    </p>
+                    <AnimatePresence mode="wait">
+                      <motion.p 
+                        key={stockInfo.changePercent}
+                        initial={{ opacity: 1 }}
+                        animate={{ 
+                          opacity: [0.5, 1],
+                        }}
+                        transition={{ duration: 0.3 }}
+                        className={`text-xl font-black tracking-tighter flex items-center gap-1 ${stockInfo.changePercent >= 0 ? 'text-emerald-400' : 'text-red-400'}`}
+                      >
+                        {stockInfo.changePercent >= 0 ? <TrendingUp className="w-4 h-4" /> : <TrendingDown className="w-4 h-4" />}
+                        {typeof stockInfo.changePercent === 'number' ? stockInfo.changePercent.toFixed(2) : '0.00'}%
+                      </motion.p>
+                    </AnimatePresence>
                   </div>
                   <div className="space-y-1">
                     <span className="text-[8px] font-black text-zinc-600 uppercase tracking-widest">Volume</span>
@@ -793,7 +947,16 @@ export const StockExplorer: React.FC<StockExplorerProps> = ({
                               <span className="text-[9px] font-black text-zinc-600 uppercase tracking-widest flex items-center gap-1">
                                 <Clock className="w-3 h-3" /> {item.timestamp}
                               </span>
-                              <span className="text-[9px] font-black text-zinc-700 uppercase tracking-widest border-l border-zinc-800 pl-3">Source: {item.url ? new URL(item.url).hostname : 'VAM Intelligence'}</span>
+                              <span className="text-[9px] font-black text-zinc-700 uppercase tracking-widest border-l border-zinc-800 pl-3">
+                                Source: {(() => {
+                                  if (!item.url) return 'VAM Intelligence';
+                                  try {
+                                    return new URL(item.url).hostname;
+                                  } catch {
+                                    return item.source || 'VAM Intelligence';
+                                  }
+                                })()}
+                              </span>
                               {item.url && (
                                 <a 
                                   href={item.url} 
@@ -817,6 +980,60 @@ export const StockExplorer: React.FC<StockExplorerProps> = ({
 
               {/* Sidebar Info */}
               <div className="space-y-6">
+                {/* Live Tick Feed Console */}
+                <div className="bg-[#020407] rounded-[2.5rem] border border-zinc-800 p-6 shadow-2xl relative overflow-hidden flex flex-col min-h-[350px]">
+                  <div className="absolute top-0 right-0 p-4 bg-emerald-500/5 blur-2xl rounded-full" />
+                  <div className="flex items-center justify-between mb-4 relative z-10">
+                    <h4 className="text-[10px] font-black text-zinc-500 uppercase tracking-widest flex items-center gap-2">
+                       <Activity className="w-3 h-3 text-emerald-400" />
+                       Live WebSocket Feed
+                    </h4>
+                    <div className="flex items-center gap-2">
+                      <div className="flex items-center gap-1.5 px-2 py-0.5 bg-blue-500/10 rounded-lg border border-blue-500/20">
+                        <span className="text-[7px] font-black text-blue-400 uppercase tracking-widest">WS</span>
+                      </div>
+                      <div className="flex items-center gap-1.5 px-2 py-0.5 bg-emerald-500/10 rounded-lg">
+                        <div className="w-1 h-1 bg-emerald-500 rounded-full animate-pulse" />
+                        <span className="text-[8px] font-black text-emerald-400 uppercase tracking-widest">Live</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="flex-1 overflow-y-auto space-y-2 pr-2 scrollbar-thin scrollbar-thumb-zinc-800 scrollbar-track-transparent custom-scrollbar max-h-[300px]">
+                    <AnimatePresence initial={false}>
+                      {tickHistory.length > 0 ? (
+                        tickHistory.map((tick) => (
+                          <motion.div 
+                            key={tick.timestamp + Math.random()}
+                            initial={{ opacity: 0, x: -10, height: 0 }}
+                            animate={{ opacity: 1, x: 0, height: 'auto' }}
+                            exit={{ opacity: 0, x: 20 }}
+                            className="flex items-center justify-between p-2.5 bg-zinc-900/50 rounded-xl border border-zinc-800/50 hover:border-zinc-700/50 transition-all"
+                          >
+                            <div className="flex items-center gap-3">
+                              <span className="text-[9px] font-mono text-zinc-600">
+                                {new Date(tick.timestamp).toLocaleTimeString([], { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' })}
+                                <span className="text-[7px] opacity-40 ml-0.5">.{String(tick.timestamp % 1000).padStart(3, '0')}</span>
+                              </span>
+                              <span className="text-[11px] font-black text-white tracking-tighter">
+                                Rp {tick.price.toLocaleString('id-ID')}
+                              </span>
+                            </div>
+                            <div className={`flex items-center gap-1 px-2 py-0.5 rounded-lg text-[9px] font-black ${tick.changePercent >= 0 ? 'bg-emerald-500/10 text-emerald-500' : 'bg-red-500/10 text-red-500'}`}>
+                              {tick.changePercent >= 0 ? '+' : ''}{tick.changePercent.toFixed(2)}%
+                            </div>
+                          </motion.div>
+                        ))
+                      ) : (
+                        <div className="h-full flex flex-col items-center justify-center py-10 opacity-30">
+                           <RefreshCw className="w-6 h-6 animate-spin-slow mb-2" />
+                           <p className="text-[10px] font-black uppercase tracking-widest text-center">Waiting for gateway<br/>burst updates...</p>
+                        </div>
+                      )}
+                    </AnimatePresence>
+                  </div>
+                </div>
+
                 {/* Price Alerts Console */}
                 <div className="bg-[#020407] rounded-[2.5rem] border border-zinc-800 p-6 shadow-2xl relative overflow-hidden">
                   <div className="absolute top-0 right-0 p-4 bg-orange-500/5 blur-2xl rounded-full" />

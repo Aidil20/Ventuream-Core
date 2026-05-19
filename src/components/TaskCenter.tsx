@@ -10,7 +10,7 @@ import {
   ListTodo,
   ChevronRight
 } from 'lucide-react';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion, AnimatePresence } from 'motion/react';
 
 interface Task {
   id: string;
@@ -31,6 +31,8 @@ export default function TaskCenter() {
   const [newTaskTitle, setNewTaskTitle] = useState('');
   const [newTaskDate, setNewTaskDate] = useState('');
   const [newTaskTime, setNewTaskTime] = useState('');
+  const [newTaskPriority, setNewTaskPriority] = useState<Task['priority']>('MEDIUM');
+  const [newTaskCategory, setNewTaskCategory] = useState('GENERAL');
   const [isAdding, setIsAdding] = useState(false);
 
   const addTask = () => {
@@ -41,14 +43,16 @@ export default function TaskCenter() {
       title: newTaskTitle,
       dueDate: `${newTaskDate}T${newTaskTime}`,
       completed: false,
-      priority: 'MEDIUM',
-      category: 'GENERAL'
+      priority: newTaskPriority,
+      category: newTaskCategory
     };
     
     setTasks([newTask, ...tasks]);
     setNewTaskTitle('');
     setNewTaskDate('');
     setNewTaskTime('');
+    setNewTaskPriority('MEDIUM');
+    setNewTaskCategory('GENERAL');
     setIsAdding(false);
   };
 
@@ -106,41 +110,81 @@ export default function TaskCenter() {
             initial={{ opacity: 0, y: -10 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -10 }}
-            className="p-6 rounded-2xl border border-[#deff9a]/20 bg-zinc-900/50 space-y-4"
+            className="p-6 rounded-2xl border border-[#deff9a]/20 bg-zinc-900/50 space-y-4 shadow-[0_20px_50px_rgba(222,255,154,0.05)]"
           >
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <label className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest">Task Description</label>
-                <input 
-                  type="text" 
-                  value={newTaskTitle}
-                  onChange={(e) => setNewTaskTitle(e.target.value)}
-                  placeholder="Enter task description..." 
-                  className="w-full bg-black border border-white/10 rounded-lg px-4 py-2 text-sm text-white focus:outline-none focus:border-[#deff9a]/50"
-                />
-              </div>
-              <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div className="space-y-4">
                 <div className="space-y-2">
-                  <label className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest">Due Date</label>
+                  <label className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest">Task Description</label>
                   <input 
-                    type="date" 
-                    value={newTaskDate}
-                    onChange={(e) => setNewTaskDate(e.target.value)}
-                    className="w-full bg-black border border-white/10 rounded-lg px-4 py-2 text-sm text-white focus:outline-none focus:border-[#deff9a]/50 [color-scheme:dark]"
+                    type="text" 
+                    value={newTaskTitle}
+                    onChange={(e) => setNewTaskTitle(e.target.value)}
+                    placeholder="Enter task description..." 
+                    className="w-full bg-black border border-white/10 rounded-lg px-4 py-2 text-sm text-white focus:outline-none focus:border-[#deff9a]/50"
                   />
                 </div>
                 <div className="space-y-2">
-                  <label className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest">Time</label>
-                  <input 
-                    type="time" 
-                    value={newTaskTime}
-                    onChange={(e) => setNewTaskTime(e.target.value)}
-                    className="w-full bg-black border border-white/10 rounded-lg px-4 py-2 text-sm text-white focus:outline-none focus:border-[#deff9a]/50 [color-scheme:dark]"
-                  />
+                  <label className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest">Category</label>
+                  <select
+                    value={newTaskCategory}
+                    onChange={(e) => setNewTaskCategory(e.target.value)}
+                    className="w-full bg-black border border-white/10 rounded-lg px-4 py-2 text-sm text-white focus:outline-none focus:border-[#deff9a]/50 appearance-none"
+                  >
+                    <option value="GENERAL">GENERAL</option>
+                    <option value="COMPLIANCE">COMPLIANCE</option>
+                    <option value="OPERATIONAL">OPERATIONAL</option>
+                    <option value="ASSET MGMT">ASSET MGMT</option>
+                    <option value="LEGAL">LEGAL</option>
+                  </select>
+                </div>
+              </div>
+              
+              <div className="space-y-4">
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <label className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest">Due Date</label>
+                    <input 
+                      type="date" 
+                      value={newTaskDate}
+                      onChange={(e) => setNewTaskDate(e.target.value)}
+                      className="w-full bg-black border border-white/10 rounded-lg px-4 py-2 text-sm text-white focus:outline-none focus:border-[#deff9a]/50 [color-scheme:dark]"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <label className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest">Time</label>
+                    <input 
+                      type="time" 
+                      value={newTaskTime}
+                      onChange={(e) => setNewTaskTime(e.target.value)}
+                      className="w-full bg-black border border-white/10 rounded-lg px-4 py-2 text-sm text-white focus:outline-none focus:border-[#deff9a]/50 [color-scheme:dark]"
+                    />
+                  </div>
+                </div>
+
+                <div className="space-y-2">
+                  <label className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest">Priority Level</label>
+                  <div className="grid grid-cols-3 gap-2">
+                    {(['LOW', 'MEDIUM', 'HIGH'] as const).map((p) => (
+                      <button
+                        key={p}
+                        onClick={() => setNewTaskPriority(p)}
+                        className={`py-2 rounded-lg text-[10px] font-black uppercase tracking-widest border transition-all ${
+                          newTaskPriority === p 
+                            ? p === 'HIGH' ? 'bg-red-500/20 border-red-500 text-red-500' :
+                              p === 'MEDIUM' ? 'bg-orange-500/20 border-orange-500 text-orange-500' :
+                              'bg-blue-500/20 border-blue-500 text-blue-500'
+                            : 'border-white/5 bg-black text-zinc-600 hover:text-zinc-400'
+                        }`}
+                      >
+                        {p}
+                      </button>
+                    ))}
+                  </div>
                 </div>
               </div>
             </div>
-            <div className="flex justify-end gap-3 pt-2">
+            <div className="flex justify-end gap-3 pt-4 border-t border-white/5">
               <button 
                 onClick={() => setIsAdding(false)}
                 className="px-4 py-2 text-xs font-bold text-zinc-500 hover:text-white"
@@ -163,21 +207,58 @@ export default function TaskCenter() {
           <motion.div 
             key={task.id}
             layout
-            className={`p-4 rounded-2xl border ${task.completed ? 'border-white/5 bg-zinc-950/30' : 'border-white/10 bg-zinc-900/40'} flex items-center justify-between group hover:border-[#deff9a]/20 transition-all`}
+            initial={{ opacity: 0, x: -20 }}
+            animate={{ 
+              opacity: task.completed ? 0.6 : 1, 
+              x: 0,
+              backgroundColor: task.completed ? 'rgba(9, 9, 11, 0.3)' : 'rgba(24, 24, 27, 0.4)',
+              borderColor: task.completed ? 'rgba(255, 255, 255, 0.05)' : 'rgba(255, 255, 255, 0.1)'
+            }}
+            whileHover={{ scale: task.completed ? 0.99 : 1.01, borderColor: 'rgba(222, 255, 154, 0.2)' }}
+            transition={{ type: "spring", stiffness: 300, damping: 30 }}
+            className="p-4 rounded-2xl border flex items-center justify-between group transition-all"
           >
             <div className="flex items-center gap-4">
               <button 
                 onClick={() => toggleTask(task.id)}
-                className={`w-6 h-6 rounded-full border-2 flex items-center justify-center transition-all ${
-                  task.completed ? 'bg-green-500/20 border-green-500 text-green-500' : 'border-zinc-700 hover:border-[#deff9a]'
+                className={`w-8 h-8 rounded-xl border-2 flex items-center justify-center transition-all relative overflow-hidden ${
+                  task.completed ? 'bg-green-500/20 border-green-500 text-green-500 rotate-[360deg]' : 'border-zinc-700 hover:border-[#deff9a]'
                 }`}
               >
-                {task.completed && <CheckCircle2 className="w-4 h-4" />}
+                <AnimatePresence mode="wait">
+                  {task.completed ? (
+                    <motion.div
+                      key="checked"
+                      initial={{ scale: 0, rotate: -45 }}
+                      animate={{ scale: 1, rotate: 0 }}
+                      exit={{ scale: 0, rotate: 45 }}
+                      transition={{ type: "spring", damping: 15 }}
+                    >
+                      <CheckCircle2 className="w-4 h-4" />
+                    </motion.div>
+                  ) : (
+                    <motion.div
+                      key="unchecked"
+                      initial={{ opacity: 0 }}
+                      animate={{ opacity: 1 }}
+                      exit={{ opacity: 0 }}
+                    >
+                      <Circle className="w-4 h-4 opacity-0 group-hover:opacity-40 transition-opacity" />
+                    </motion.div>
+                  )}
+                </AnimatePresence>
               </button>
               
-              <div>
-                <h3 className={`text-sm font-bold ${task.completed ? 'text-zinc-500 line-through' : 'text-white'}`}>
+              <div className="relative">
+                <h3 className={`text-sm font-bold transition-all duration-500 ${task.completed ? 'text-zinc-500' : 'text-white'}`}>
                   {task.title}
+                  {task.completed && (
+                    <motion.div 
+                      initial={{ width: 0 }}
+                      animate={{ width: '100%' }}
+                      className="absolute top-1/2 left-0 h-[1px] bg-zinc-600"
+                    />
+                  )}
                 </h3>
                 <div className="flex items-center gap-3 mt-1">
                   <span className="text-[9px] px-1.5 py-0.5 rounded bg-zinc-800 text-zinc-400 font-bold border border-white/5 uppercase">

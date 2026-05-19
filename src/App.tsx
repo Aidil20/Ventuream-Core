@@ -16,6 +16,7 @@ import {
   Bell,
   Menu,
   ChevronRight,
+  Link,
   RefreshCw,
   Activity,
   Zap,
@@ -38,7 +39,8 @@ import {
   AlertTriangle,
   Info,
   CheckCircle2,
-  BrainCircuit
+  BrainCircuit,
+  Loader2
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { Decimal } from 'decimal.js';
@@ -46,17 +48,20 @@ import {
   fetchLatestInsights, 
   MarketInsight, 
   fetchStockRecommendations, 
-  StockRecommendation, 
+  StockRecommendation,
+  fetchWithRetry,
   ScanOptions, 
   fetchLivePrices 
 } from './services/marketService';
 import { fetchMarketNewsSummary, MarketNewsItem } from './services/geminiService';
-import { SpeedInsights } from "@vercel/speed-insights/react";
 import TradingViewWidget from './components/TradingViewWidget';
 import PortfolioChart from './components/PortfolioChart';
 import { useTransactionManager } from './hooks/useTransactionManager';
 import { TransactionTable } from './components/TransactionTable';
-import { Settings2, Filter, Target, ArrowLeft } from 'lucide-react';
+import { UserManagement } from './components/UserManagement';
+import { ensureUserProfile } from './services/userService';
+import { UserProfile, UserRole } from './types';
+import { Settings2, Filter, Target, ArrowLeft, Users, ShieldAlert } from 'lucide-react';
 import { Sparkline } from './components/Sparkline';
 import { AssetDetail } from './components/AssetDetail';
 import VamSmartScanner from './components/VamSmartScanner';
@@ -81,6 +86,7 @@ import { FundamentalAnalyst } from './components/FundamentalAnalyst';
 import { initAuth, googleSignIn, logout as googleLogout } from './lib/auth';
 import { DriveCenter } from './components/DriveCenter';
 import { User } from 'firebase/auth';
+import { GlobalSearch } from './components/GlobalSearch';
 
 const ASSETS = [
   {
@@ -181,6 +187,7 @@ const SIDEBAR_MENU = [
   { id: 14, label: "VAM Cloud (Drive)", icon: Cloud, path: "drive", color: "#60a5fa" },
   { id: 3, label: "Laporan Regulasi", icon: Gavel, path: "compliance", color: "#94a3b8" },
   { id: 4, label: "Pengaturan Likuiditas", icon: Droplets, path: "liquidity", color: "#94a3b8" },
+  { id: 15, label: "User Governance", icon: Users, path: "users", color: "#DFFF00", restrictedTo: ['President_Director'] },
   { 
     id: 6, 
     label: "Smart Scanner IDX", 
@@ -341,7 +348,6 @@ export default function App() {
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [showVamScanner, setShowVamScanner] = useState(false);
   const [showIntradayScanner, setShowIntradayScanner] = useState(false);
-  const [userRole, setUserRole] = useState('President_Director'); // Added role state
   const [selectedAssetId, setSelectedAssetId] = useState<string | null>(null);
   const [marketSubTab, setMarketSubTab] = useState<'overview' | 'explorer' | 'fundamental' | 'screener'>('overview');
   const [fundamentalSymbol, setFundamentalSymbol] = useState<string | undefined>(undefined);
@@ -366,15 +372,27 @@ export default function App() {
   // Auth State for Google Drive
   const [needsAuth, setNeedsAuth] = useState(false);
   const [googleUser, setGoogleUser] = useState<User | null>(null);
+  const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
   const [isLoggingIn, setIsLoggingIn] = useState(false);
 
   useEffect(() => {
     const unsubscribe = initAuth(
-      (user) => {
+      async (user) => {
         setGoogleUser(user);
         setNeedsAuth(false);
+        if (user) {
+          try {
+            const profile = await ensureUserProfile(user.uid, user.email || '', user.displayName || '');
+            setUserProfile(profile);
+          } catch (err) {
+            console.error('Error ensuring profile:', err);
+          }
+        }
       },
-      () => setNeedsAuth(true)
+      () => {
+        setNeedsAuth(true);
+        setUserProfile(null);
+      }
     );
     return () => unsubscribe();
   }, []);
@@ -463,6 +481,7 @@ export default function App() {
   const [lastMarketSync, setLastMarketSync] = useState(new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }));
   const [liquidityValue, setLiquidityValue] = useState(12.4); // Simulated low liquidity for alert demo
   const [showScanParams, setShowScanParams] = useState(false);
+  const [isDeepAnalysing, setIsDeepAnalysing] = useState(false);
   const [scanOptions, setScanOptions] = useState<ScanOptions>({
     sector: '',
     riskProfile: 'moderate',
@@ -473,6 +492,34 @@ export default function App() {
   });
 
   const { history, recordTransaction } = useTransactionManager();
+
+  const setStopLossFromAlert = useCallback((symbol: string, price: number) => {
+    recordTransaction({
+      ticker: symbol,
+      price: price,
+      side: 'STOP_LOSS',
+      quantity: 100, // Institutional lot
+      assetType: 'EQUITY',
+      currency: 'IDR',
+      broker: 'CGS_INTERNATIONAL'
+    });
+  }, [recordTransaction]);
+
+  const runDeepAnalysis = async () => {
+    if (isDeepAnalysing) return;
+    setIsDeepAnalysing(true);
+    try {
+      // Fetch 3 more insights than current count (assuming current is insights.length)
+      const nextCount = insights.length + 3;
+      const moreInsights = await fetchLatestInsights(nextCount, true);
+      setInsights(moreInsights);
+      setShowAllInsights(true); // Ensure all insights are shown after deep analysis
+    } catch (error) {
+      console.error("Deep analysis failed:", error);
+    } finally {
+      setIsDeepAnalysing(false);
+    }
+  };
 
   const updateCGSPrices = useCallback(async () => {
     // Simulate fetching live data based on CGS iTrade images with minimal jitter
@@ -544,13 +591,16 @@ export default function App() {
     setIsScanning(true);
     try {
       const newStocks = await fetchStockRecommendations(scanOptions);
-      setStocks(newStocks);
+      
+      // Filter out any stocks without symbols to prevent 'undefined-timestamp' keys
+      const validStocks = newStocks ? newStocks.filter(s => s && s.symbol) : [];
+      setStocks(validStocks);
       
       // Update technical logs if new qualifying stocks found
-      if (newStocks && newStocks.length > 0) {
+      if (validStocks.length > 0) {
         setTechnicalLogs(prev => {
           const now = Date.now();
-          const newEntries = newStocks
+          const newEntries = validStocks
             .filter(stock => !prev.some(p => p.symbol === stock.symbol && p.price === stock.price))
             .map(stock => ({ 
               ...stock, 
@@ -676,7 +726,7 @@ export default function App() {
 
     const start = Date.now();
     try {
-      const response = await fetch(`/api/gateway/check?scriptId=${vamScriptId}`);
+      const response = await fetchWithRetry(`/api/gateway/check?scriptId=${vamScriptId}`, {}, 1);
       const end = Date.now();
       const ping = end - start;
 
@@ -686,8 +736,9 @@ export default function App() {
         signalStrength: ping < 300 ? 100 : 85,
         operational: response.ok
       });
-    } catch (e) {
+    } catch (e: any) {
       // Fallback to simulated connection if network error during demo
+      console.warn("[VAM GATEWAY] Connectivity probe timed out:", e.message || e);
       setNetworkStats({ ping: 42, status: "STABLE", signalStrength: 80, operational: true });
     }
   }, []);
@@ -1152,6 +1203,21 @@ export default function App() {
                           </div>
                         </motion.div>
                       ))}
+                      {isDeepAnalysing && (
+                        <div className="animate-pulse space-y-4">
+                           <div className="flex items-center gap-2 px-3 py-1 bg-[#deff9a]/5 border border-[#deff9a]/10 rounded-lg w-fit">
+                            <Loader2 className="w-3 h-3 text-[#deff9a] animate-spin" />
+                            <span className="text-[8px] font-black text-[#deff9a] uppercase tracking-widest">Identifying Institutional Signals...</span>
+                          </div>
+                          {[1, 2, 3].map(i => (
+                            <div key={`loading-${i}`} className="bg-slate-800/10 p-4 rounded-2xl border border-slate-800/50">
+                              <div className="h-4 bg-slate-800/40 rounded w-2/3 mb-2 font-black"></div>
+                              <div className="h-3 bg-slate-800/40 rounded w-full mb-1"></div>
+                              <div className="h-3 bg-slate-800/40 rounded w-4/5"></div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
                     </div>
                   ) : (
                     <div className="animate-pulse space-y-4">
@@ -1175,8 +1241,19 @@ export default function App() {
                   </button>
                 )}
 
-                <button className="mt-4 w-full bg-[#deff9a] text-slate-950 text-[10px] font-bold px-4 py-2.5 rounded-xl uppercase tracking-[0.1em] hover:opacity-90 transition-all active:scale-[0.98]">
-                  Run Deep Analysis
+                <button 
+                  onClick={runDeepAnalysis}
+                  disabled={isDeepAnalysing}
+                  className="mt-4 w-full bg-[#deff9a] text-slate-950 text-[10px] font-bold px-4 py-2.5 rounded-xl uppercase tracking-[0.1em] hover:opacity-90 transition-all active:scale-[0.98] disabled:opacity-50 flex items-center justify-center gap-2"
+                >
+                  {isDeepAnalysing ? (
+                    <>
+                      <RefreshCw className="w-3 h-3 animate-spin" />
+                      Analysing Institutional Data...
+                    </>
+                  ) : (
+                    "Run Deep Analysis"
+                  )}
                 </button>
               </div>
             </motion.section>
@@ -1498,7 +1575,7 @@ export default function App() {
                 <div className="max-h-[300px] overflow-y-auto scrollbar-hide">
                   {sortedLogs.length > 0 ? (
                     sortedLogs.map((stock, i) => (
-                      <div key={`${stock.symbol}-${stock.detectedAt || i}`}>
+                      <div key={`${stock.symbol || 'IDX'}-${stock.detectedAt || Date.now()}-${i}`}>
                         <MarketFeedLog stockData={stock} />
                       </div>
                     ))
@@ -2434,9 +2511,21 @@ export default function App() {
           );
         }
         return <DriveCenter onAuthRequired={() => setNeedsAuth(true)} />;
+      case 'users':
+        return (
+          <div className="space-y-6">
+            <div className="flex items-center gap-2 mb-2">
+              <button onClick={() => setActiveTab('home')} className="p-1.5 bg-slate-900 rounded-lg border border-slate-800 text-[#deff9a]">
+                <ArrowLeft className="w-4 h-4" />
+              </button>
+              <h3 className="text-sm font-semibold text-slate-300 uppercase tracking-widest">Institutional Governance</h3>
+            </div>
+            <UserManagement />
+          </div>
+        );
       case 'compliance':
       case 'liquidity':
-        const isUnlocked = userRole === 'President_Director';
+        const isUnlocked = userProfile?.role === 'President_Director';
         return (
           <div className="space-y-4">
             <div className="flex items-center gap-2 mb-2">
@@ -2522,7 +2611,6 @@ export default function App() {
 
   return (
     <div className="min-h-screen bg-black text-slate-200 font-sans select-none overflow-x-hidden relative">
-      <SpeedInsights />
       {/* Background Atmosphere */}
       <div className="fixed inset-0 pointer-events-none overflow-hidden">
         <div className="absolute top-[-10%] right-[-10%] w-[50%] h-[50%] bg-[#deff9a]/5 blur-[120px] rounded-full" />
@@ -2539,7 +2627,7 @@ export default function App() {
           </div>
 
           <nav className="flex-1 space-y-2">
-            {SIDEBAR_MENU.map((item) => (
+            {SIDEBAR_MENU.filter(item => !item.restrictedTo || (userProfile && item.restrictedTo.includes(userProfile.role))).map((item) => (
               <React.Fragment key={item.id}>
                 <button
                   onClick={() => {
@@ -2632,7 +2720,7 @@ export default function App() {
               <p className="text-[10px] text-slate-500 font-bold uppercase tracking-widest mb-2">Institutional Identification</p>
               <p className="text-[11px] text-slate-200 font-black tracking-tight">{(typeof process !== 'undefined' && process.env.USER_EMAIL) || 'Institutional User'}</p>
               <div className="flex items-center justify-between mt-2">
-                <p className="text-[9px] text-[#DFFF00] font-mono">ROLE: {userRole.replace('_', ' ')}</p>
+                <p className="text-[9px] text-[#DFFF00] font-mono">ROLE: {userProfile?.role.replace('_', ' ') || 'PUBLIC'}</p>
                 <div className="flex items-center gap-1.5 px-2 py-0.5 bg-green-500/10 border border-green-500/20 rounded-lg">
                   <p className="text-[8px] text-green-500 font-black uppercase">Verified</p>
                 </div>
@@ -2668,26 +2756,39 @@ export default function App() {
 
           {/* Header */}
           <header className="flex justify-between items-center p-4 border-b border-zinc-800 sticky top-0 bg-black z-30">
-            <div className="flex items-center gap-4">
+            <div className="flex items-center gap-6">
               <button 
                 onClick={() => setIsSidebarOpen(true)}
-                className="lg:hidden p-2 bg-zinc-900 border border-zinc-800 text-[#DFFF00] rounded-xl hover:bg-zinc-800 transition-colors"
+                className="w-12 h-12 flex items-center justify-center bg-[#11141b] rounded-2xl border border-white/5 hover:bg-zinc-800 transition-all shadow-xl"
               >
-                <Menu className="w-5 h-5" />
+                <Menu className="w-6 h-6 text-[#DFFF00]" />
               </button>
               
               <div className="flex flex-col">
-                <h1 className="text-xl font-bold text-[#DFFF00] leading-none">VentureAM</h1>
-                <span className="text-[10px] text-zinc-400 mt-1 uppercase tracking-widest font-black">Institutional System</span>
+                <div className="flex items-center gap-2">
+                  <h1 className="text-2xl font-black text-[#DFFF00] tracking-tight leading-none italic">VentureAM</h1>
+                  <div className="w-2 h-4 bg-[#DFFF00]/90 rounded-full blur-[1px] animate-pulse shadow-[0_0_10px_#DFFF00]" />
+                </div>
+                <span className="text-[10px] font-black text-white/40 uppercase tracking-[0.3em] mt-1.5">Institutional System</span>
               </div>
             </div>
+
+            <GlobalSearch />
             
-            <div className="text-right">
-              <p className="text-[9px] text-zinc-500 font-medium uppercase tracking-widest">INTERNATIONAL GATEWAY</p>
-              <p className="text-[11px] font-bold text-white uppercase tracking-tight">
-                {networkStats.operational ? 'CONNECTED' : 'OFFLINE'}
-              </p>
-              <p className="text-[9px] text-zinc-400 uppercase tracking-tighter">Gateway (IBKR/CGS)</p>
+            <div className="text-right flex items-center gap-3">
+              <div className="flex flex-col items-end">
+                <p className="text-[8px] text-zinc-500 font-black uppercase tracking-[0.3em] mb-0.5">VentureAM Global</p>
+                <div className="flex items-center gap-1.5">
+                  <span className="text-[11px] font-black text-white uppercase tracking-widest">Status:</span>
+                  <span className={`text-[11px] font-black uppercase tracking-widest ${networkStats.operational ? 'text-emerald-500 shadow-[0_0_10px_rgba(16,185,129,0.3)]' : 'text-red-500 shadow-[0_0_10px_rgba(239,68,68,0.3)]'}`}>
+                    {networkStats.operational ? 'Connected' : 'Offline'}
+                  </span>
+                </div>
+                <p className="text-[8px] text-zinc-600 font-bold uppercase tracking-tighter mt-0.5">Gateway (IBKR/CGS)</p>
+              </div>
+              <div className="w-10 h-10 rounded-xl bg-zinc-900/50 border border-white/5 flex items-center justify-center shadow-inner">
+                <Link className="w-5 h-5 text-emerald-500/80" />
+              </div>
             </div>
           </header>
 
@@ -2704,7 +2805,6 @@ export default function App() {
                 {renderContent()}
               </motion.div>
             </AnimatePresence>
-            <SpeedInsights />
           </main>
         </div>
 
@@ -2737,7 +2837,7 @@ export default function App() {
                 </div>
 
                 <nav className="flex-1 space-y-2 overflow-y-auto pr-1">
-                  {SIDEBAR_MENU.map((item) => (
+                  {SIDEBAR_MENU.filter(item => !item.restrictedTo || (userProfile && item.restrictedTo.includes(userProfile.role))).map((item) => (
                     <React.Fragment key={item.id}>
                       <button
                         onClick={() => {
@@ -2865,6 +2965,17 @@ export default function App() {
                     <p className="text-[9px] text-[#DFFF00] font-black uppercase tracking-tighter mt-1">
                       Target: {notif.condition === 'gt' ? '>' : '<'} Rp {typeof notif.targetPrice === 'number' ? notif.targetPrice.toLocaleString('id-ID') : (notif.targetPrice || 'N/A')}
                     </p>
+                    
+                    <button 
+                      onClick={() => {
+                        setStopLossFromAlert(notif.symbol, notif.price);
+                        clearNotification(notif.id);
+                      }}
+                      className="mt-3 w-full bg-[#DFFF00] text-black py-1.5 rounded-lg text-[9px] font-black uppercase tracking-widest hover:bg-[#deff9a] transition-all flex items-center justify-center gap-2 group/btn"
+                    >
+                      <ShieldCheck className="w-3 h-3 group-hover/btn:scale-110 transition-transform" />
+                      Set Stop-Loss Order
+                    </button>
                   </div>
                 </div>
                 

@@ -1,5 +1,5 @@
 import React from 'react';
-import { Area, AreaChart, ResponsiveContainer, YAxis } from 'recharts';
+import { LineChart, Line, ResponsiveContainer, YAxis } from 'recharts';
 
 interface SparklineProps {
   data: number[];
@@ -7,31 +7,26 @@ interface SparklineProps {
   height?: number;
 }
 
-export function Sparkline({ data, color = '#deff9a', height = 32 }: SparklineProps) {
-  const chartData = data.map((value, index) => ({ index, value }));
+export const Sparkline: React.FC<SparklineProps> = ({ data, color = '#DFFF00', height = 30 }) => {
+  const chartData = data.map((val, i) => ({ value: val, index: i }));
 
   return (
-    <div style={{ height: `${height}px`, width: '100px' }}>
+    <div style={{ width: '100%', height }}>
       <ResponsiveContainer width="100%" height="100%">
-        <AreaChart data={chartData}>
-          <defs>
-            <linearGradient id={`sparkGradient-${color}`} x1="0" y1="0" x2="0" y2="1">
-              <stop offset="0%" stopColor={color} stopOpacity={0.4} />
-              <stop offset="100%" stopColor={color} stopOpacity={0} />
-            </linearGradient>
-          </defs>
-          <YAxis hide domain={['dataMin - 10', 'dataMax + 10']} />
-          <Area
+        <LineChart data={chartData}>
+          <YAxis hide domain={['dataMin', 'dataMax']} />
+          <Line
             type="monotone"
             dataKey="value"
             stroke={color}
             strokeWidth={1.5}
-            fill={`url(#sparkGradient-${color})`}
-            animationDuration={1500}
-            isAnimationActive={true}
+            dot={false}
+            isAnimationActive={false}
           />
-        </AreaChart>
+        </LineChart>
       </ResponsiveContainer>
     </div>
   );
-}
+};
+
+export default Sparkline;

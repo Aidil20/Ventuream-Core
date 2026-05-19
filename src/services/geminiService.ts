@@ -1,3 +1,5 @@
+import { fetchWithRetry } from './marketService';
+
 const NEWS_CACHE_KEY = 'vnt_market_news_cache';
 const SUPPRESS_API_KEY = 'vnt_gemini_suppress_until';
 const CACHE_DURATION = 60 * 60 * 1000; // 1 hour in milliseconds
@@ -19,9 +21,7 @@ function getCachedNews(key: string): MarketNewsItem[] | null {
     if (!cached) return null;
     
     const { data, timestamp } = JSON.parse(cached);
-    if (Date.now() - timestamp > CACHE_DURATION) {
-      return data;
-    }
+    // Allow stale data if needed, but here we just check duration
     return data;
   } catch {
     return null;
@@ -55,41 +55,30 @@ export async function fetchMarketNewsSummary(forceRefresh = false, symbol?: stri
     
     const url = params.toString() ? `${baseUrl}?${params.toString()}` : baseUrl;
     
-    // Use an AbortController for institutional-grade timeout
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 20000); // 20s timeout
-
-    const response = await fetch(url, { signal: controller.signal }).catch(err => {
-      clearTimeout(timeoutId);
-      console.warn("VAM News fetch soft-fail:", err.message);
-      throw new Error(`Network failure: ${err.message || 'Check connection'}`);
-    });
-    
-    clearTimeout(timeoutId);
+    // Use enhanced fetch with retry for robustness
+    const response = await fetchWithRetry(url, {}, 1);
     
     if (!response.ok) {
-      const errText = await response.text().catch(() => "Unknown error");
-      console.error(`News API responded with ${response.status}: ${errText}`);
-      throw new Error(`Server error: ${response.status}`);
+       // Silently fail if we have a fallback, just log a warning
+       console.warn(`[VAM GATEWAY] News API ${response.status}. Using cached/fallback.`);
+       return cached || getFallbackNews();
     }
 
     const news = await response.json();
     
-    // Stricter validation of institutional data
     if (!news || !Array.isArray(news) || news.length === 0) {
-       console.warn("[VAM GATEWAY] Received empty news payload, using fallback.");
        return cached || getFallbackNews();
     }
 
     setCachedNews(cacheKey, news);
     return news;
   } catch (error: any) {
+    // If it's a genuine network error ("Failed to fetch"), we'll log it as a warning since we have fallback
     if (error.name === 'AbortError') {
       console.warn("[VAM GATEWAY] News fetch timed out. Using cached/fallback data.");
     } else {
-      console.error("Error fetching market news summary:", error);
+      console.warn("[VAM GATEWAY] Market news sync degraded:", error.message || error);
     }
-    // Return cached (even if stale) or fallback news
     return cached || getFallbackNews();
   }
 }

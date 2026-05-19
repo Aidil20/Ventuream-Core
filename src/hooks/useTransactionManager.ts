@@ -5,7 +5,7 @@ export interface Transaction {
   timestamp: string;
   assetType: 'EQUITY' | 'SUKUK' | 'COMMODITY';
   ticker: string;
-  side: 'BUY' | 'SELL';
+  side: 'BUY' | 'SELL' | 'STOP_LOSS';
   quantity: number;
   price: number;
   currency: string;
