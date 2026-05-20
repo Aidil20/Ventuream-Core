@@ -6,7 +6,8 @@ const TradingViewMarketWidget: React.FC = () => {
   useEffect(() => {
     const currentContainer = container.current;
     
-    if (currentContainer && !currentContainer.querySelector('script')) {
+    if (currentContainer) {
+      currentContainer.innerHTML = `<div class="tradingview-widget-container__widget"></div>`;
       const scriptElement = document.createElement("script");
       scriptElement.src = "https://s3.tradingview.com/external-embedding/embed-widget-market-quotes.js";
       scriptElement.type = "text/javascript";
@@ -47,7 +48,9 @@ const TradingViewMarketWidget: React.FC = () => {
     }
     
     return () => {
-      // Safe cleanup
+      if (currentContainer) {
+        currentContainer.innerHTML = '';
+      }
     };
   }, []);
 

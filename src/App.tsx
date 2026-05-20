@@ -40,7 +40,8 @@ import {
   Info,
   CheckCircle2,
   BrainCircuit,
-  Loader2
+  Loader2,
+  Building
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { Decimal } from 'decimal.js';
@@ -59,9 +60,11 @@ import PortfolioChart from './components/PortfolioChart';
 import { useTransactionManager } from './hooks/useTransactionManager';
 import { TransactionTable } from './components/TransactionTable';
 import { UserManagement } from './components/UserManagement';
+import { MyCompanyOverview } from './components/MyCompanyOverview';
+import { GlobalGatewayBanner } from './components/GlobalGatewayBanner';
 import { ensureUserProfile } from './services/userService';
 import { UserProfile, UserRole } from './types';
-import { Settings2, Filter, Target, ArrowLeft, Users, ShieldAlert } from 'lucide-react';
+import { Settings2, Filter, Target, ArrowLeft, Users, ShieldAlert, Lock } from 'lucide-react';
 import { Sparkline } from './components/Sparkline';
 import { AssetDetail } from './components/AssetDetail';
 import VamSmartScanner from './components/VamSmartScanner';
@@ -84,7 +87,7 @@ import { fetchMarketNews } from './services/marketService';
 import { StockExplorer } from './components/StockExplorer';
 import { FundamentalAnalyst } from './components/FundamentalAnalyst';
 import { initAuth, googleSignIn, logout as googleLogout } from './lib/auth';
-import { DriveCenter } from './components/DriveCenter';
+import { WorkspaceHub } from './components/WorkspaceHub';
 import { User } from 'firebase/auth';
 import { GlobalSearch } from './components/GlobalSearch';
 
@@ -174,6 +177,8 @@ const HOLDINGS = [
 
 const SIDEBAR_MENU = [
   { id: 0, label: "Dashboard Utama", icon: Home, path: "home", color: "#deff9a" },
+  { id: 99, label: "About Company", icon: Building, path: "my-company", color: "#DFFF00" },
+  { id: 20, label: "VAM Radar TBML", icon: Radar, path: "radartbml", color: "#f43f5e" },
   { id: 13, label: "Fundamental Analyst", icon: BrainCircuit, path: "fundamental", color: "#DFFF00" },
   { id: 8, label: "Monitor Pasar", icon: Search, path: "market", color: "#deff9a" },
   { id: 1, label: "Analisis Portofolio", icon: BarChart3, path: "portfolio", color: "#deff9a" },
@@ -184,17 +189,17 @@ const SIDEBAR_MENU = [
   { id: 9, label: "Sistem Keamanan", icon: ShieldCheck, path: "security", color: "#deff9a" },
   { id: 7, label: "Rebalancing Asset", icon: Scale, path: "rebalancer", color: "#deff9a" },
   { id: 2, label: "Gateway Internasional", icon: Globe, path: "gateway", color: "#deff9a" },
-  { id: 14, label: "VAM Cloud (Drive)", icon: Cloud, path: "drive", color: "#60a5fa" },
+  { id: 14, label: "VAM Workspace Hub", icon: Cloud, path: "drive", color: "#60a5fa" },
   { id: 3, label: "Laporan Regulasi", icon: Gavel, path: "compliance", color: "#94a3b8" },
   { id: 4, label: "Pengaturan Likuiditas", icon: Droplets, path: "liquidity", color: "#94a3b8" },
-  { id: 15, label: "User Governance", icon: Users, path: "users", color: "#DFFF00", restrictedTo: ['President_Director'] },
+  { id: 15, label: "User Governance", icon: Users, path: "users", color: "#DFFF00" },
   { 
     id: 6, 
     label: "Smart Scanner IDX", 
     provider: "By Ventuream AM", 
     icon: Radar, 
     path: "scanner",
-    color: "#FFD700",
+    color: "#DFFF00",
     markets: [
       {
         id: 'idx',
@@ -221,6 +226,7 @@ const SIDEBAR_MENU = [
 import BloombergTable from './components/BloombergTable';
 import VAMTerminalScanner from './components/VAMTerminalScanner';
 import RebalanceTool from './components/RebalanceTool';
+import VamRadarTbml from './components/VamRadarTbml';
 
 const myCGSPortfolio = {
   accountID: "YU001HC5400154",
@@ -339,6 +345,114 @@ export default function App() {
   const [expandedMarket, setExpandedMarket] = useState<string | null>(null);
   const [portfolioData, setPortfolioData] = useState<PortfolioAsset[]>([]);
   const [selectedStudies, setSelectedStudies] = useState<string[]>(["MASimple@tv-basicstudies", "MAExp@tv-basicstudies"]);
+  const [livePrices, setLivePrices] = useState<Record<string, number>>({});
+  
+  const [language, setLanguage] = useState<'ID' | 'EN'>(() => {
+    try {
+      const stored = localStorage.getItem('vam_language');
+      if (stored === 'ID' || stored === 'EN') return stored;
+    } catch (e) {
+      console.error(e);
+    }
+    return 'ID';
+  });
+
+  const handleLanguageChange = (lang: 'ID' | 'EN') => {
+    setLanguage(lang);
+    try {
+      localStorage.setItem('vam_language', lang);
+    } catch (e) {
+      console.error(e);
+    }
+  };
+
+  const t = useCallback((key: string): string => {
+    const translations: Record<'ID' | 'EN', Record<string, string>> = {
+      ID: {
+        "Dashboard Utama": "Dashboard Utama",
+        "About Company": "Tentang Perusahaan",
+        "Fundamental Analyst": "Analisis Fundamental",
+        "Monitor Pasar": "Monitor Pasar",
+        "Analisis Portofolio": "Analisis Portofolio",
+        "Permintaan Dokumen": "Permintaan Dokumen",
+        "Laporan Keuangan": "Laporan Keuangan",
+        "Arsip & Audit Trail": "Arsip & Audit Trail",
+        "Manajemen Tugas": "Manajemen Tugas",
+        "Sistem Keamanan": "Sistem Keamanan",
+        "Rebalancing Asset": "Rebalancing Asset",
+        "Gateway Internasional": "Gateway Internasional",
+        "VAM Cloud (Drive)": "VAM Cloud (Drive)",
+        "Laporan Regulasi": "Laporan Regulasi",
+        "Pengaturan Likuiditas": "Pengaturan Likuiditas",
+        "User Governance": "Tata Kelola Pengguna",
+        "Smart Scanner IDX": "Smart Scanner IDX",
+        "VAM Radar TBML": "VAM Radar TBML",
+        "Institutional System": "Sistem Institusi",
+        "Ventuream International Gateway": "Gerbang Internasional VentureAM",
+        "CONNECTED": "Terhubung",
+        "OFFLINE": "Luring",
+        "Verified": "Terverifikasi",
+        "ROLE: ": "Peran: ",
+        "Institutional Identification": "Identifikasi Institusi",
+        "VentureAM Core v2.4": "VentureAM Core v2.4",
+        "Gateway (IBKR/CGS)": "Gateway (IBKR/CGS)",
+        "CONNECTED_GATEWAY": "GATEWAY TERHUBUNG",
+        "IDX Market": "Pasar IDX",
+        "Market International": "Pasar Internasional",
+        "High Volume Breakout": "Breakout Volume Tinggi",
+        "Price Breakout Volume MA10 Today": "Breakout Harga Volume MA10 Hari Ini",
+        "Big Accumulation": "Akumulasi Besar",
+        "Volatility Scanner": "Pemindai Volatilitas",
+        "FX Momentum Feed": "Feed Momentum FX",
+        "Yield Arbitrage": "Arbitrase Imbal Hasil",
+        "Refresh Market Data": "Segarkan Data Pasar",
+        "Refresh Market": "Segarkan Pasar",
+        "Refreshing...": "Menyegarkan...",
+      },
+      EN: {
+        "Dashboard Utama": "Main Dashboard",
+        "About Company": "About Company",
+        "Fundamental Analyst": "Fundamental Analyst",
+        "Monitor Pasar": "Market Monitor",
+        "Analisis Portofolio": "Portfolio Analysis",
+        "Permintaan Dokumen": "Document Request",
+        "Laporan Keuangan": "Financial Reports",
+        "Arsip & Audit Trail": "Archive & Audit Trail",
+        "Manajemen Tugas": "Task Management",
+        "Sistem Keamanan": "Security System",
+        "Rebalancing Asset": "Asset Rebalancing",
+        "Gateway Internasional": "International Gateway",
+        "VAM Cloud (Drive)": "VAM Cloud (Drive)",
+        "Laporan Regulasi": "Regulatory Report",
+        "Pengaturan Likuiditas": "Liquidity Settings",
+        "User Governance": "User Governance",
+        "Smart Scanner IDX": "Smart Scanner IDX",
+        "VAM Radar TBML": "VAM Radar TBML",
+        "Institutional System": "Institutional System",
+        "Ventuream International Gateway": "VentureAM International Gateway",
+        "CONNECTED": "CONNECTED",
+        "OFFLINE": "OFFLINE",
+        "Verified": "Verified",
+        "ROLE: ": "Role: ",
+        "Institutional Identification": "Institutional Identification",
+        "VentureAM Core v2.4": "VentureAM Core v2.4",
+        "Gateway (IBKR/CGS)": "Gateway (IBKR/CGS)",
+        "CONNECTED_GATEWAY": "GATEWAY CONNECTED",
+        "IDX Market": "IDX Market",
+        "Market International": "International Market",
+        "High Volume Breakout": "High Volume Breakout",
+        "Price Breakout Volume MA10 Today": "Price Breakout Volume MA10 Today",
+        "Big Accumulation": "Big Accumulation",
+        "Volatility Scanner": "Volatility Scanner",
+        "FX Momentum Feed": "FX Momentum Feed",
+        "Yield Arbitrage": "Yield Arbitrage",
+        "Refresh Market Data": "Refresh Market Data",
+        "Refresh Market": "Refresh Market",
+        "Refreshing...": "Refreshing...",
+      }
+    };
+    return translations[language][key] || key;
+  }, [language]);
   
   const totalPortfolioValue = useMemo(() => {
     return portfolioData.reduce((acc, curr) => new Decimal(acc).plus(curr.marketValue || 0).toNumber(), 0);
@@ -373,6 +487,18 @@ export default function App() {
   const [needsAuth, setNeedsAuth] = useState(false);
   const [googleUser, setGoogleUser] = useState<User | null>(null);
   const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
+  const isLocked = useCallback((path: string) => {
+    const userRole = userProfile?.role || 'Public';
+    if (userRole === 'Public') {
+      const allowedPaths = ['home', 'my-company', 'market', 'fundamental', 'scanner', 'asset-detail', 'users'];
+      return !allowedPaths.includes(path);
+    }
+    const item = SIDEBAR_MENU.find(m => m.path === path);
+    if (item && (item as any).restrictedTo && !(item as any).restrictedTo.includes(userRole)) {
+      return true;
+    }
+    return false;
+  }, [userProfile]);
   const [isLoggingIn, setIsLoggingIn] = useState(false);
 
   useEffect(() => {
@@ -440,14 +566,6 @@ export default function App() {
     isFetching || isScanning || isFetchingNews || isMarketSyncing,
     [isFetching, isScanning, isFetchingNews, isMarketSyncing]
   );
-
-  const livePricesMap = useMemo(() => {
-    const map: Record<string, number> = {};
-    stocks.forEach(s => {
-      if (s.currentPrice) map[s.symbol] = s.currentPrice;
-    });
-    return map;
-  }, [stocks]);
 
   const sortedLogs = useMemo(() => {
     return [...technicalLogs].sort((a, b) => {
@@ -755,6 +873,14 @@ export default function App() {
     socket.on('market-init', (data: Record<string, any>) => {
       console.log('[VAM PROTOCOL] Received Initial Market State');
       
+      const initialPrices: Record<string, number> = {};
+      Object.entries(data).forEach(([key, val]) => {
+        if (val && typeof val.price === 'number') {
+          initialPrices[key] = val.price;
+        }
+      });
+      setLivePrices(prev => ({ ...prev, ...initialPrices }));
+
       // Update Portfolio Data with initial state
       setPortfolioData(prev => prev.map(asset => {
         const cleanTicker = asset.ticker.replace('.JK', '');
@@ -822,6 +948,12 @@ export default function App() {
       timestamp: number 
     }) => {
       const { symbol, price, changePercent } = data;
+
+      // Update the livePrices state mapping symbol to price
+      setLivePrices(prev => ({
+        ...prev,
+        [symbol]: price
+      }));
 
       // Update Assets Data (State)
       setAssetsData(prev => prev.map(asset => {
@@ -983,6 +1115,15 @@ export default function App() {
     return () => clearInterval(backgroundSyncInterval);
   }, [updateStocks, updateMarketNews]);
 
+  // Handle custom manual market refresh requested from child components
+  useEffect(() => {
+    const handleForceRefresh = () => {
+      syncMarketConnectivity();
+    };
+    window.addEventListener('vam-force-market-refresh', handleForceRefresh);
+    return () => window.removeEventListener('vam-force-market-refresh', handleForceRefresh);
+  }, [syncMarketConnectivity]);
+
   // Security Strategy: Context Menu Protection
   useEffect(() => {
     const handleContextMenu = (e: MouseEvent) => {
@@ -993,6 +1134,48 @@ export default function App() {
   }, []);
 
   const renderContent = () => {
+    if (isLocked(activeTab)) {
+      return (
+        <motion.div 
+          initial={{ opacity: 0, y: 10 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="h-[75vh] flex flex-col items-center justify-center p-8 border border-red-500/20 bg-zinc-950/40 backdrop-blur-md rounded-[3rem] text-center max-w-2xl mx-auto shadow-2xl relative overflow-hidden"
+        >
+          {/* Ambient Glow */}
+          <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-72 h-72 bg-red-500/5 blur-3xl rounded-full pointer-events-none" />
+          
+          <div className="p-5 bg-red-500/10 rounded-full border border-red-500/20 mb-6 text-red-500 relative">
+            <Lock className="w-10 h-10" />
+            <span className="absolute -top-1 -right-1 flex h-3 w-3">
+              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
+              <span className="relative inline-flex rounded-full h-3 w-3 bg-red-500"></span>
+            </span>
+          </div>
+
+          <h3 className="text-2xl font-black text-white uppercase tracking-tight mb-2">Institutional Access Restricted</h3>
+          <p className="text-[10px] text-red-400 font-mono font-bold uppercase tracking-widest bg-red-500/5 px-3 py-1.5 rounded-xl border border-red-500/10 mb-6">
+            Authorization Required: {SIDEBAR_MENU.find(m => m.path === activeTab)?.label.toUpperCase() || 'SECURE PROTOCOL'}
+          </p>
+
+          <div className="space-y-4 max-w-md">
+            <p className="text-zinc-400 text-xs uppercase tracking-wider leading-relaxed">
+              Sistem mendeteksi peran akun Anda saat ini adalah <span className="text-[#DFFF00] font-bold">PUBLIK</span>. 
+              Sebagai pengguna publik, fungsionalitas ini dikunci ("Kunci"). Akses diizinkan hanya untuk Dashboard, About Company, Monitor Pasar, Analyst Fundamental, dan Smart Scanner.
+            </p>
+            <p className="text-zinc-500 text-[10px] tracking-wider uppercase leading-relaxed font-mono">
+              Silakan hubungi Administrator untuk meningkatkan level otoritas Anda, atau gunakan menu <span className="text-[#deff9a] font-bold hover:underline cursor-pointer" onClick={() => setActiveTab('users')}>User Governance</span> untuk beralih ke peran berwenang.
+            </p>
+          </div>
+
+          {/* Elegant decorative connection status line */}
+          <div className="mt-8 pt-6 border-t border-zinc-900 w-full flex justify-center items-center gap-2">
+            <div className="w-1.5 h-1.5 rounded-full bg-red-500 animate-pulse" />
+            <span className="text-[9px] font-black text-red-500 uppercase tracking-widest font-mono">CONNECTION GATEWAY_LOCKED</span>
+          </div>
+        </motion.div>
+      );
+    }
+
     if (activeTab === 'asset-detail' && selectedAssetId) {
       const selectedAsset = assetsData.find(a => a.id === selectedAssetId);
       if (selectedAsset) {
@@ -1009,127 +1192,8 @@ export default function App() {
       case 'home':
         return (
           <div className="space-y-6">
-            {/* PERFORMANCE HISTORY CHART */}
-            <PortfolioChart />
-
-            {/* 2. METRIK TOTAL ASSET & INCOME (Di Bawah Chart) */}
-            <section className="grid grid-cols-2 gap-4">
-              <motion.div 
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: 0.1 }}
-                className="group relative overflow-hidden bg-slate-900/60 p-5 rounded-[2.5rem] border border-slate-800/80 backdrop-blur-xl shadow-2xl hover:border-[#deff9a]/30 transition-all duration-500"
-              >
-                <div className="absolute top-0 right-0 -mr-4 -mt-4 w-16 h-16 bg-blue-500/5 blur-3xl rounded-full group-hover:bg-blue-500/10 transition-colors" />
-                <div className="flex items-center gap-3 mb-3">
-                  <div className="p-2 rounded-xl bg-blue-500/10 border border-blue-500/20 group-hover:scale-110 transition-transform">
-                    <PieChart className="w-4 h-4 text-blue-400" />
-                  </div>
-                  <div>
-                    <p className="text-[9px] text-slate-500 uppercase tracking-[0.2em] font-black">Total Assets</p>
-                    <p className="text-[7px] text-slate-600 font-bold uppercase tracking-tighter">YTD PERFORMANCE</p>
-                  </div>
-                </div>
-                <div className="flex items-baseline gap-1">
-                  <span className="text-sm font-bold text-slate-400">Rp</span>
-                  <p className="text-2xl font-black font-mono tracking-tight text-white">9.38M</p>
-                </div>
-                <div className="mt-3 pt-3 border-t border-slate-800/50 flex items-center justify-between">
-                  <span className="text-[8px] text-slate-500 font-bold uppercase tracking-widest">Audit Status</span>
-                  <span className="text-[8px] text-blue-400 font-black uppercase">IFRS COMPLIANT</span>
-                </div>
-              </motion.div>
-
-              <motion.div 
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: 0.2 }}
-                className="group relative overflow-hidden bg-slate-900/60 p-5 rounded-[2.5rem] border border-slate-800/80 backdrop-blur-xl shadow-2xl hover:border-red-500/30 transition-all duration-500"
-              >
-                <div className="absolute top-0 right-0 -mr-4 -mt-4 w-16 h-16 bg-red-500/5 blur-3xl rounded-full group-hover:bg-red-500/10 transition-colors" />
-                <div className="flex items-center gap-3 mb-3">
-                  <div className="p-2 rounded-xl bg-red-500/10 border border-red-500/20 group-hover:scale-110 transition-transform">
-                    <TrendingUp className="w-4 h-4 text-red-500" />
-                  </div>
-                  <div>
-                    <p className="text-[9px] text-slate-500 uppercase tracking-[0.2em] font-black">Net Income</p>
-                    <p className="text-[7px] text-slate-600 font-bold uppercase tracking-tighter">OPERATING LOSS</p>
-                  </div>
-                </div>
-                <div className="flex items-baseline gap-1">
-                  <span className="text-sm font-bold text-slate-400">Rp</span>
-                  <p className="text-2xl font-black font-mono tracking-tight text-red-400 opacity-90">(368K)</p>
-                </div>
-                <div className="mt-3 pt-3 border-t border-slate-800/50 flex items-center justify-between">
-                  <span className="text-[8px] text-slate-500 font-bold uppercase tracking-widest">Efficiency</span>
-                  <span className="text-[8px] text-red-500 font-black uppercase tracking-tighter">CAPEX DRIVEN</span>
-                </div>
-              </motion.div>
-            </section>
-
-            {/* Priority Assets */}
-            <section className="mt-8">
-              <div className="flex justify-between items-end mb-6 px-2">
-                <div>
-                  <h3 className="text-xs font-black text-slate-400 uppercase tracking-[0.3em]">Priority Portfolio</h3>
-                  <p className="text-[10px] text-slate-600 font-bold uppercase tracking-tighter mt-1">REAL-TIME SELECTION</p>
-                </div>
-                <button className="text-[9px] bg-slate-900/50 hover:bg-slate-800 text-[#deff9a] font-black flex items-center uppercase tracking-widest px-3 py-1.5 rounded-xl border border-slate-800 transition-colors">
-                  View Full <ChevronRight className="w-3 h-3 ml-1" />
-                </button>
-              </div>
-              
-              <div className="space-y-4">
-                {assetsData.map((asset, index) => (
-                  <motion.div 
-                    key={asset.id}
-                    initial={{ opacity: 0, x: -20 }}
-                    animate={{ opacity: 1, x: 0 }}
-                    transition={{ delay: 0.1 * (index + 3) }}
-                    whileTap={{ scale: 0.98 }}
-                    onClick={() => {
-                      setSelectedAssetId(asset.id);
-                      setActiveTab('asset-detail');
-                    }}
-                    className="bg-slate-900/40 p-4 rounded-[2rem] flex justify-between items-center border border-slate-800/80 hover:bg-slate-800/50 hover:border-[#deff9a]/20 transition-all cursor-pointer group shadow-lg"
-                  >
-                    <div className="flex items-center gap-4">
-                      <div className={`w-1 h-10 rounded-full ${index % 2 === 0 ? 'bg-[#deff9a]' : 'bg-blue-400'} shadow-[0_0_10px_rgba(222,255,154,0.2)]`} />
-                      <div>
-                        <p className="font-black text-sm text-slate-100 group-hover:text-white transition-colors uppercase tracking-tight">{asset.name}</p>
-                        <div className="flex items-center gap-2 mt-0.5">
-                          <p className="text-[9px] text-slate-500 font-bold uppercase tracking-tighter">{asset.category}</p>
-                          <span className="text-[7px] px-1.5 py-0.5 rounded-lg bg-slate-950 text-slate-500 font-black border border-slate-800 uppercase tracking-widest">
-                            LIQ: {asset.liquidity}
-                          </span>
-                        </div>
-                      </div>
-                    </div>
-                    <div className="flex items-center gap-8">
-                      <div className="hidden sm:block opacity-60 group-hover:opacity-100 transition-opacity">
-                        <Sparkline 
-                          data={asset.performance} 
-                          color={asset.status === 'Bullish' || index % 2 === 0 ? '#deff9a' : '#60a5fa'} 
-                          height={20} 
-                        />
-                      </div>
-                      <div className="text-right">
-                        <p className={`font-black font-mono text-base ${index % 2 === 0 ? 'text-[#deff9a]' : 'text-white'}`}>{asset.value}</p>
-                        <div className="flex justify-end mt-1">
-                          <span className={`text-[8px] px-2 py-0.5 rounded-lg font-black uppercase tracking-[0.1em]
-                            ${asset.status === 'Performing' ? 'bg-green-950/40 text-green-400 border border-green-500/20' : 
-                              asset.status === 'Bullish' ? 'bg-blue-950/40 text-blue-400 border border-blue-500/20' : 
-                              'bg-red-950/40 text-red-400 border border-red-800/20'}`}
-                          >
-                            {asset.status}
-                          </span>
-                        </div>
-                      </div>
-                    </div>
-                  </motion.div>
-                ))}
-              </div>
-            </section>
+            {/* Global Gateway Sync Status Banner */}
+            <GlobalGatewayBanner />
 
             {/* Market Insights */}
             <motion.section
@@ -1598,7 +1662,7 @@ export default function App() {
                   {stocks.length > 0 ? (
                     stocks.map((stock, idx) => (
                       <motion.div 
-                        key={stock.symbol}
+                        key={`${stock.symbol}-${idx}`}
                         initial={{ opacity: 0, x: -10 }}
                         animate={{ opacity: 1, x: 0 }}
                         exit={{ opacity: 0, scale: 0.95 }}
@@ -1938,7 +2002,7 @@ export default function App() {
             defaultTab="PORTFOLIO"
             activeMarket={activeScannerMarket}
             activeModule={activeScannerModule}
-            livePrices={livePricesMap}
+            livePrices={livePrices}
             portfolioContent={
               <div className="space-y-6">
                 <div className="flex justify-between items-center px-1">
@@ -2060,7 +2124,7 @@ export default function App() {
                   <div className="space-y-3">
                     {portfolioData.map((asset, idx) => (
                       <motion.div 
-                        key={asset.ticker}
+                        key={`${asset.ticker}-${idx}`}
                         initial={{ opacity: 0, y: 10 }}
                         animate={{ opacity: 1, y: 0 }}
                         transition={{ delay: idx * 0.05 }}
@@ -2337,7 +2401,7 @@ export default function App() {
             defaultTab="SCANNER"
             activeMarket={activeScannerMarket}
             activeModule={activeScannerModule}
-            livePrices={livePricesMap}
+            livePrices={livePrices}
             portfolioContent={
               <div className="space-y-6">
                 <BloombergTable 
@@ -2352,9 +2416,9 @@ export default function App() {
                   }}
                 />
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  {portfolioData.map((asset) => (
+                  {portfolioData.map((asset, idx) => (
                     <div 
-                      key={asset.ticker} 
+                      key={`${asset.ticker}-${idx}`} 
                       onClick={() => {
                         setSelectedSymbol(`IDX:${asset.ticker.replace('.JK', '')}`);
                         setActiveTab('home');
@@ -2510,7 +2574,11 @@ export default function App() {
             </div>
           );
         }
-        return <DriveCenter onAuthRequired={() => setNeedsAuth(true)} />;
+        return <WorkspaceHub onAuthRequired={() => setNeedsAuth(true)} />;
+      case 'my-company':
+        return <MyCompanyOverview />;
+      case 'radartbml':
+        return <VamRadarTbml />;
       case 'users':
         return (
           <div className="space-y-6">
@@ -2623,35 +2691,42 @@ export default function App() {
         <aside className="hidden lg:flex sidebar-nav flex-col bg-black border-r border-slate-800 p-6 sticky top-0 h-screen">
           <div className="mb-8">
             <h2 className="text-3xl font-black text-[#DFFF00] tracking-tight">VentureAM</h2>
-            <p className="text-[10px] text-slate-500 font-black uppercase tracking-[0.3em] mt-1">Institutional System</p>
+            <p className="text-[10px] text-slate-500 font-black uppercase tracking-[0.3em] mt-1">{t('Institutional System')}</p>
           </div>
 
-          <nav className="flex-1 space-y-2">
-            {SIDEBAR_MENU.filter(item => !item.restrictedTo || (userProfile && item.restrictedTo.includes(userProfile.role))).map((item) => (
-              <React.Fragment key={item.id}>
-                <button
-                  onClick={() => {
-                    if ('external' in item && item.external) {
-                      window.open(item.path, '_blank');
-                    } else {
-                      setActiveTab(item.path);
-                      if (item.path !== 'scanner') {
-                        setActiveScannerModule(null);
+          <nav className="flex-1 space-y-1.5 overflow-y-auto max-h-[75vh] pr-1">
+            {SIDEBAR_MENU.map((item) => {
+              const locked = isLocked(item.path);
+              return (
+                <React.Fragment key={item.id}>
+                  <button
+                    onClick={() => {
+                      if ('external' in item && item.external) {
+                        window.open(item.path, '_blank');
+                      } else {
+                        setActiveTab(item.path);
+                        if (item.path !== 'scanner') {
+                          setActiveScannerModule(null);
+                        }
                       }
-                    }
-                  }}
-                  className={`w-full flex items-center gap-4 p-4 rounded-3xl transition-all border ${
-                    activeTab === item.path 
-                    ? 'bg-[#deff9a]/10 border-[#deff9a]/20 text-[#deff9a]' 
-                    : 'bg-slate-900/40 border-slate-800 hover:bg-slate-800/60 text-slate-400'
-                  }`}
-                >
-                  <item.icon className="w-5 h-5" style={{ color: item.color }} />
-                  <div className="text-left flex-1">
-                    <p className="text-xs font-black uppercase tracking-tight">{item.label}</p>
-                    {item.provider && <p className="text-[8px] text-slate-500 font-bold uppercase">{item.provider}</p>}
-                  </div>
-                </button>
+                    }}
+                    className={`w-full flex items-center gap-4 p-3.5 rounded-3xl transition-all border ${
+                      activeTab === item.path 
+                      ? 'bg-[#deff9a]/10 border-[#deff9a]/20 text-[#deff9a]' 
+                      : locked
+                        ? 'bg-zinc-950/20 border-zinc-900/50 text-zinc-500 hover:bg-zinc-900/20'
+                        : 'bg-slate-900/40 border-slate-800 hover:bg-slate-800/60 text-slate-400'
+                    }`}
+                  >
+                    <item.icon className="w-5 h-5 flex-shrink-0" style={{ color: locked ? '#71717a' : item.color }} />
+                    <div className="text-left flex-1 flex justify-between items-center gap-2 overflow-hidden">
+                      <div className="min-w-0">
+                        <p className={`text-xs font-black uppercase tracking-tight truncate ${locked ? 'text-zinc-500' : ''}`}>{t(item.label)}</p>
+                        {item.provider && <p className="text-[8px] text-zinc-600 font-bold uppercase truncate">{item.provider}</p>}
+                      </div>
+                      {locked && <Lock className="w-3.5 h-3.5 text-zinc-500 flex-shrink-0" />}
+                    </div>
+                  </button>
                 
                 {/* Sub-menu for Scanner Markets and Modules */}
                 {item.path === 'scanner' && (
@@ -2712,17 +2787,18 @@ export default function App() {
                   </AnimatePresence>
                 )}
               </React.Fragment>
-            ))}
+            );
+          })}
           </nav>
 
           <div className="mt-auto pt-6 border-t border-slate-800/50">
             <div className="bg-slate-900/40 p-4 rounded-2xl border border-slate-800">
-              <p className="text-[10px] text-slate-500 font-bold uppercase tracking-widest mb-2">Institutional Identification</p>
+              <p className="text-[10px] text-slate-500 font-bold uppercase tracking-widest mb-2">{t('Institutional Identification')}</p>
               <p className="text-[11px] text-slate-200 font-black tracking-tight">{(typeof process !== 'undefined' && process.env.USER_EMAIL) || 'Institutional User'}</p>
               <div className="flex items-center justify-between mt-2">
-                <p className="text-[9px] text-[#DFFF00] font-mono">ROLE: {userProfile?.role.replace('_', ' ') || 'PUBLIC'}</p>
+                <p className="text-[9px] text-[#DFFF00] font-mono">{t('ROLE: ')}{userProfile?.role.replace('_', ' ') || 'PUBLIC'}</p>
                 <div className="flex items-center gap-1.5 px-2 py-0.5 bg-green-500/10 border border-green-500/20 rounded-lg">
-                  <p className="text-[8px] text-green-500 font-black uppercase">Verified</p>
+                  <p className="text-[8px] text-green-500 font-black uppercase">{t('Verified')}</p>
                 </div>
               </div>
             </div>
@@ -2755,7 +2831,7 @@ export default function App() {
           </AnimatePresence>
 
           {/* Header */}
-          <header className="flex justify-between items-center p-4 border-b border-zinc-800 sticky top-0 bg-black z-30">
+          <header className="flex justify-between items-center p-4 border-b border-zinc-800 sticky top-0 bg-black z-30 gap-4">
             <div className="flex items-center gap-6">
               <button 
                 onClick={() => setIsSidebarOpen(true)}
@@ -2769,22 +2845,72 @@ export default function App() {
                   <h1 className="text-2xl font-black text-[#DFFF00] tracking-tight leading-none italic">VentureAM</h1>
                   <div className="w-2 h-4 bg-[#DFFF00]/90 rounded-full blur-[1px] animate-pulse shadow-[0_0_10px_#DFFF00]" />
                 </div>
-                <span className="text-[10px] font-black text-white/40 uppercase tracking-[0.3em] mt-1.5">Institutional System</span>
+                <span className="text-[10px] font-black text-white/40 uppercase tracking-[0.3em] mt-1.5">{t('Institutional System')}</span>
               </div>
             </div>
 
             <GlobalSearch />
             
-            <div className="text-right flex items-center gap-3">
+            <div className="text-right flex items-center gap-4">
+              {/* Language Switcher Capsule */}
+              <div className="hidden md:flex bg-zinc-950 p-1 rounded-[14px] border border-zinc-800/80 gap-0.5 shadow-inner select-none mr-2">
+                <button
+                  onClick={() => handleLanguageChange('EN')}
+                  className={`px-3 py-1 rounded-xl text-[9px] font-black uppercase tracking-wider transition-all duration-200 cursor-pointer ${
+                    language === 'EN'
+                      ? 'bg-[#DFFF00] text-black font-extrabold shadow-sm'
+                      : 'text-zinc-500 hover:text-white hover:bg-zinc-900/30'
+                  }`}
+                >
+                  EN
+                </button>
+                <button
+                  onClick={() => handleLanguageChange('ID')}
+                  className={`px-3 py-1 rounded-xl text-[9px] font-black uppercase tracking-wider transition-all duration-200 cursor-pointer ${
+                    language === 'ID'
+                      ? 'bg-[#DFFF00] text-black font-extrabold shadow-sm'
+                      : 'text-zinc-500 hover:text-white hover:bg-zinc-900/30'
+                  }`}
+                >
+                  ID
+                </button>
+              </div>
+
+              {/* Smaller/Responsive toggle on mobile viewports */}
+              <div className="flex md:hidden bg-zinc-950 p-1 rounded-[12px] border border-zinc-800/80 gap-1 shadow-inner select-none mr-1">
+                <button
+                  onClick={() => handleLanguageChange(language === 'ID' ? 'EN' : 'ID')}
+                  className="px-2.5 py-1 rounded-[10px] text-[9px] font-black uppercase tracking-widest text-[#DFFF00] hover:bg-zinc-900/40 border border-[#DFFF00]/10"
+                >
+                  {language}
+                </button>
+              </div>
+
+              {/* Manual Market Refresh Button */}
+              <button
+                onClick={syncMarketConnectivity}
+                disabled={isMarketSyncing}
+                title={t('Refresh Market Data')}
+                id="header-refresh-market-button"
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl border text-[9px] font-black uppercase tracking-wider transition-all duration-200 cursor-pointer ${
+                  isMarketSyncing
+                    ? 'bg-[#deff9a]/10 border-[#deff9a]/30 text-[#deff9a]'
+                    : 'bg-zinc-950 border-zinc-800 text-slate-400 hover:text-white hover:bg-zinc-900/40 hover:border-zinc-700'
+                }`}
+              >
+                <RefreshCw className={`w-3.5 h-3.5 ${isMarketSyncing ? 'animate-spin text-[#deff9a]' : ''}`} />
+                <span className="hidden sm:inline">
+                  {isMarketSyncing ? t('Refreshing...') : t('Refresh Market')}
+                </span>
+              </button>
+
               <div className="flex flex-col items-end">
-                <p className="text-[8px] text-zinc-500 font-black uppercase tracking-[0.3em] mb-0.5">VentureAM Global</p>
+                <p className="text-[8px] text-zinc-500 font-black uppercase tracking-[0.25em] mb-0.5">{t('Ventuream International Gateway')}</p>
                 <div className="flex items-center gap-1.5">
-                  <span className="text-[11px] font-black text-white uppercase tracking-widest">Status:</span>
                   <span className={`text-[11px] font-black uppercase tracking-widest ${networkStats.operational ? 'text-emerald-500 shadow-[0_0_10px_rgba(16,185,129,0.3)]' : 'text-red-500 shadow-[0_0_10px_rgba(239,68,68,0.3)]'}`}>
-                    {networkStats.operational ? 'Connected' : 'Offline'}
+                    {networkStats.operational ? t('CONNECTED') : t('OFFLINE')}
                   </span>
                 </div>
-                <p className="text-[8px] text-zinc-600 font-bold uppercase tracking-tighter mt-0.5">Gateway (IBKR/CGS)</p>
               </div>
               <div className="w-10 h-10 rounded-xl bg-zinc-900/50 border border-white/5 flex items-center justify-center shadow-inner">
                 <Link className="w-5 h-5 text-emerald-500/80" />
@@ -2829,7 +2955,7 @@ export default function App() {
                 <div className="flex justify-between items-center mb-8">
                   <div>
                     <h2 className="text-xl font-black text-[#deff9a] tracking-tight">VentureAM</h2>
-                    <p className="text-[9px] text-slate-500 font-black uppercase tracking-[0.2em]">Institutional System</p>
+                    <p className="text-[9px] text-slate-500 font-black uppercase tracking-[0.2em]">{t('Institutional System')}</p>
                   </div>
                   <button onClick={() => setIsSidebarOpen(false)} className="p-2 bg-slate-900 rounded-xl border border-slate-800 text-slate-400">
                     <X className="w-5 h-5" />
@@ -2837,32 +2963,39 @@ export default function App() {
                 </div>
 
                 <nav className="flex-1 space-y-2 overflow-y-auto pr-1">
-                  {SIDEBAR_MENU.filter(item => !item.restrictedTo || (userProfile && item.restrictedTo.includes(userProfile.role))).map((item) => (
-                    <React.Fragment key={item.id}>
-                      <button
-                        onClick={() => {
-                          if ('external' in item && item.external) {
-                            window.open(item.path, '_blank');
-                          } else {
-                            setActiveTab(item.path);
-                            if (item.path !== 'scanner') {
-                              setActiveScannerModule(null);
-                              setIsSidebarOpen(false);
+                  {SIDEBAR_MENU.map((item) => {
+                    const locked = isLocked(item.path);
+                    return (
+                      <React.Fragment key={item.id}>
+                        <button
+                          onClick={() => {
+                            if ('external' in item && item.external) {
+                              window.open(item.path, '_blank');
+                            } else {
+                              setActiveTab(item.path);
+                              if (item.path !== 'scanner') {
+                                setActiveScannerModule(null);
+                                setIsSidebarOpen(false);
+                              }
                             }
-                          }
-                        }}
-                        className={`w-full flex items-center gap-4 p-4 rounded-2xl transition-all border ${
-                          activeTab === item.path 
-                          ? 'bg-[#deff9a]/10 border-[#deff9a]/20 text-[#deff9a]' 
-                          : 'bg-slate-900/40 border-slate-800 hover:bg-slate-800/60 text-slate-400'
-                        }`}
-                      >
-                        <item.icon className="w-5 h-5" style={{ color: item.color }} />
-                        <div className="text-left flex-1">
-                          <p className="text-xs font-black uppercase tracking-tight">{item.label}</p>
-                          {item.provider && <p className="text-[8px] text-slate-500 font-bold uppercase">{item.provider}</p>}
-                        </div>
-                      </button>
+                          }}
+                          className={`w-full flex items-center gap-4 p-4 rounded-2xl transition-all border ${
+                            activeTab === item.path 
+                            ? 'bg-[#deff9a]/10 border-[#deff9a]/20 text-[#deff9a]' 
+                            : locked
+                              ? 'bg-zinc-950/20 border-zinc-900/50 text-zinc-500 hover:bg-zinc-900/20'
+                              : 'bg-slate-900/40 border-slate-800 hover:bg-slate-800/60 text-slate-400'
+                          }`}
+                        >
+                          <item.icon className="w-5 h-5 flex-shrink-0" style={{ color: locked ? '#71717a' : item.color }} />
+                          <div className="text-left flex-1 flex justify-between items-center gap-2 overflow-hidden">
+                            <div className="min-w-0">
+                              <p className={`text-xs font-black uppercase tracking-tight truncate ${locked ? 'text-zinc-500' : ''}`}>{t(item.label)}</p>
+                              {item.provider && <p className="text-[8px] text-zinc-600 font-bold uppercase truncate">{item.provider}</p>}
+                            </div>
+                            {locked && <Lock className="w-3.5 h-3.5 text-zinc-500 flex-shrink-0" />}
+                          </div>
+                        </button>
 
                       {/* Sub-menu for Scanner Markets and Modules in Mobile Sidebar */}
                       {item.path === 'scanner' && (
@@ -2926,7 +3059,8 @@ export default function App() {
                         </AnimatePresence>
                       )}
                     </React.Fragment>
-                  ))}
+                  );
+                })}
                 </nav>
               </motion.aside>
             </>

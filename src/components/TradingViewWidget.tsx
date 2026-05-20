@@ -12,7 +12,10 @@ function TradingViewWidget({ symbol = "IDX:BBCA", studies = ["MASimple@tv-basics
   useEffect(() => {
     const currentContainer = container.current;
 
-    if (currentContainer && !currentContainer.querySelector('script')) {
+    if (currentContainer) {
+      // Clear container first to prevent duplicates or leaked elements
+      currentContainer.innerHTML = `<div id="${widgetId}" class="h-full w-full"></div>`;
+      
       const scriptElement = document.createElement("script");
       scriptElement.src = "https://s3.tradingview.com/external-embedding/embed-widget-advanced-chart.js";
       scriptElement.type = "text/javascript";
@@ -35,12 +38,14 @@ function TradingViewWidget({ symbol = "IDX:BBCA", studies = ["MASimple@tv-basics
       currentContainer.appendChild(scriptElement);
     }
     return () => {
-      // Safe cleanup
+      if (currentContainer) {
+        currentContainer.innerHTML = '';
+      }
     };
-  }, [symbol, studies]);
+  }, [symbol, studies, widgetId]);
 
   return (
-    <div className="tradingview-widget-container h-[400px] w-full rounded-2xl overflow-hidden border border-slate-800" ref={container}>
+    <div className="tradingview-widget-container h-full w-full" ref={container}>
       <div id={widgetId} className="h-full w-full"></div>
     </div>
   );

@@ -1,21 +1,22 @@
 .bloomberg-terminal {
-    background-color: #000;
-    color: #f0f0f0;
-    font-family: 'Roboto Mono', monospace;
-    padding: 20px;
-    border: 2px solid #333;
-    border-radius: 8px;
+    background-color: #020407;
+    color: #f4f4f5;
+    font-family: "Inter", ui-sans-serif, system-ui, sans-serif;
+    padding: 24px;
+    border: 1px solid rgba(39, 39, 42, 0.8);
+    border-radius: 24px; /* Align with standard rounded-3xl/2.5rem cards */
 }
 
 .terminal-header {
-    border-bottom: 1px solid #ff9900;
-    margin-bottom: 15px;
-    padding-bottom: 10px;
+    border-bottom: 1px solid rgba(39, 39, 42, 0.8);
+    margin-bottom: 20px;
+    padding-bottom: 14px;
     display: flex;
     justify-content: space-between;
+    align-items: center;
 }
 
-.account-id { color: #ff9900; font-weight: bold; }
+.account-id { color: #DFFF00; font-weight: bold; }
 
 .portfolio-table {
     width: 100%;
@@ -24,21 +25,29 @@
 }
 
 .portfolio-table th {
-    color: #00ffff; /* Cyan khas Bloomberg */
+    color: #a1a1aa; /* Softer, highly legible gray */
+    font-size: 10px;
+    font-weight: 900;
+    letter-spacing: 0.15em;
     text-align: left;
-    border-bottom: 1px solid #333;
-    padding: 8px;
+    border-bottom: 2px solid rgba(39, 39, 42, 0.8);
+    padding: 12px 8px;
     text-transform: uppercase;
 }
 
 .portfolio-table td {
-    padding: 8px;
-    border-bottom: 1px solid #1a1a1a;
+    padding: 14px 8px;
+    border-bottom: 1px solid rgba(24, 24, 27, 0.5);
+    vertical-align: middle;
 }
 
 /* Dinamis Warna Berdasarkan Performa */
-.price-up { color: #00ff00; }
-.price-down { color: #ff3333; }
-.price-stable { color: #ffffff; }
+.price-up { color: #34d399; } /* Modern emerald green instead of neon #00ff00 */
+.price-down { color: #f43f5e; } /* Modern rose/red instead of harsh #ff3333 */
+.price-stable { color: #f4f4f5; }
 
-.ticker-cell { font-weight: bold; color: #fff; }
+.ticker-cell { 
+    font-weight: 900; 
+    color: #ffffff; 
+    letter-spacing: -0.01em;
+}

@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Users, Shield, Check, RefreshCw, AlertCircle } from 'lucide-react';
+import { Users, Shield, Check, RefreshCw, AlertCircle, Filter } from 'lucide-react';
 import { getAllUsers, updateUserRole } from '../services/userService';
 import { UserProfile, UserRole } from '../types';
 import { motion } from 'motion/react';
@@ -10,6 +10,7 @@ export const UserManagement: React.FC = () => {
   const [users, setUsers] = useState<UserProfile[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isUpdating, setIsUpdating] = useState<string | null>(null);
+  const [selectedRoleFilter, setSelectedRoleFilter] = useState<UserRole | 'All'>('All');
 
   const fetchUsers = async () => {
     setIsLoading(true);
@@ -39,9 +40,11 @@ export const UserManagement: React.FC = () => {
     }
   };
 
+  const filteredUsers = users.filter(user => selectedRoleFilter === 'All' || user.role === selectedRoleFilter);
+
   return (
     <div className="bg-[#020407] border border-zinc-800 rounded-[2.5rem] overflow-hidden">
-      <div className="p-8 border-b border-zinc-800 flex items-center justify-between">
+      <div className="p-8 border-b border-zinc-800 flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
           <h2 className="text-xl font-black text-white uppercase tracking-widest flex items-center gap-3">
             <Users className="w-6 h-6 text-[#DFFF00]" />
@@ -49,12 +52,33 @@ export const UserManagement: React.FC = () => {
           </h2>
           <p className="text-zinc-500 text-[10px] font-bold uppercase tracking-widest mt-1">Institutional Access Control List (ACL)</p>
         </div>
-        <button 
-          onClick={fetchUsers}
-          className="p-3 bg-zinc-900 rounded-2xl border border-zinc-800 hover:border-[#DFFF00]/30 transition-all text-zinc-400 hover:text-[#DFFF00]"
-        >
-          <RefreshCw className={`w-5 h-5 ${isLoading ? 'animate-spin' : ''}`} />
-        </button>
+
+        <div className="flex items-center gap-3 flex-wrap">
+          {/* Role Filter Select Dropdown */}
+          <div className="flex items-center gap-2 bg-zinc-900/60 border border-zinc-800 rounded-2xl px-4 py-2 text-zinc-400">
+            <Filter className="w-4 h-4 text-[#DFFF00]/80" />
+            <span className="text-[10px] font-black uppercase tracking-wider hidden sm:inline">Designation:</span>
+            <select
+              value={selectedRoleFilter}
+              onChange={(e) => setSelectedRoleFilter(e.target.value as UserRole | 'All')}
+              className="bg-transparent text-[10px] font-black text-white outline-none cursor-pointer pr-1"
+            >
+              <option value="All" className="bg-zinc-950 text-white">All Roles</option>
+              {ROLES.map(role => (
+                <option key={role} value={role} className="bg-zinc-950 text-white">
+                  {role.replace('_', ' ')}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <button 
+            onClick={fetchUsers}
+            className="p-3 bg-zinc-900 rounded-2xl border border-zinc-800 hover:border-[#DFFF00]/30 transition-all text-zinc-400 hover:text-[#DFFF00]"
+          >
+            <RefreshCw className={`w-5 h-5 ${isLoading ? 'animate-spin' : ''}`} />
+          </button>
+        </div>
       </div>
 
       <div className="overflow-x-auto">
@@ -68,7 +92,7 @@ export const UserManagement: React.FC = () => {
             </tr>
           </thead>
           <tbody className="divide-y divide-zinc-900">
-            {users.map((user) => (
+            {filteredUsers.map((user) => (
               <motion.tr 
                 key={user.uid}
                 initial={{ opacity: 0 }}
@@ -125,10 +149,12 @@ export const UserManagement: React.FC = () => {
         </table>
       </div>
 
-      {users.length === 0 && !isLoading && (
+      {filteredUsers.length === 0 && !isLoading && (
         <div className="p-12 text-center">
           <AlertCircle className="w-12 h-12 text-zinc-800 mx-auto mb-4" />
-          <p className="text-zinc-500 text-[11px] font-bold uppercase tracking-widest">No institutional records found</p>
+          <p className="text-zinc-500 text-[11px] font-bold uppercase tracking-widest">
+            {selectedRoleFilter !== 'All' ? `No ${selectedRoleFilter.replace('_', ' ')} records found` : 'No institutional records found'}
+          </p>
         </div>
       )}
     </div>

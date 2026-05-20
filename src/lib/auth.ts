@@ -11,6 +11,9 @@ const provider = new GoogleAuthProvider();
 // Request Workspace scopes
 provider.addScope('https://www.googleapis.com/auth/drive.file');
 provider.addScope('https://www.googleapis.com/auth/drive.readonly');
+provider.addScope('https://www.googleapis.com/auth/documents');
+provider.addScope('https://www.googleapis.com/auth/spreadsheets');
+provider.addScope('https://www.googleapis.com/auth/calendar');
 
 // Flag to indicate if we are in the middle of a sign-in flow.
 let isSigningIn = false;

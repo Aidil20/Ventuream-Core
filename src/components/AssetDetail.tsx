@@ -16,11 +16,43 @@ import {
   Link,
   Loader2,
   HelpCircle,
-  Newspaper
+  Newspaper,
+  Building,
+  Users,
+  Target,
+  Briefcase,
+  Star
 } from 'lucide-react';
 import { Sparkline } from './Sparkline';
 import { fetchCorrelationScore, CorrelationResult, fetchMarketNews, MarketNews } from '../services/marketService';
 import { NewsFeed } from './NewsFeed';
+
+interface CompanyProfile {
+  ticker: string;
+  companyName: string;
+  fundamentalInfo: {
+    sector: string;
+    location: string;
+    foundedAndIpo: string;
+    marketCap: string;
+    keyRatios: {
+      peRatio: string;
+      divYield: string;
+      roe: string;
+      der: string;
+    };
+    generalDescription: string;
+  };
+  businessModel: {
+    streams: string[];
+    advantages: string[];
+  };
+  management: {
+    commissioners: string[];
+    directors: string[];
+    strategy: string;
+  };
+}
 
 interface AssetDetailProps {
   asset: {
@@ -46,6 +78,62 @@ export function AssetDetail({ asset, onBack }: AssetDetailProps) {
   const [isLoadingNews, setIsLoadingNews] = useState(false);
   const [showTooltip, setShowTooltip] = useState(false);
 
+  const [profile, setProfile] = useState<CompanyProfile | null>(null);
+  const [profileTab, setProfileTab] = useState<'fundamental' | 'business' | 'management'>('fundamental');
+  const [isLoadingProfile, setIsLoadingProfile] = useState(false);
+
+  const [isWatchlisted, setIsWatchlisted] = useState<boolean>(() => {
+    try {
+      const stored = localStorage.getItem('vam_watchlist_portfolio');
+      if (stored) {
+        const list = JSON.parse(stored) as string[];
+        return list.includes(asset.symbol);
+      }
+    } catch (e) {
+      console.error(e);
+    }
+    return false;
+  });
+
+  const toggleWatchlist = () => {
+    try {
+      const stored = localStorage.getItem('vam_watchlist_portfolio');
+      let list: string[] = [];
+      if (stored) {
+        list = JSON.parse(stored) as string[];
+      }
+      
+      if (list.includes(asset.symbol)) {
+        list = list.filter(sym => sym !== asset.symbol);
+        setIsWatchlisted(false);
+      } else {
+        list.push(asset.symbol);
+        setIsWatchlisted(true);
+      }
+      localStorage.setItem('vam_watchlist_portfolio', JSON.stringify(list));
+    } catch (e) {
+      console.error(e);
+    }
+  };
+
+  useEffect(() => {
+    async function loadProfile() {
+      setIsLoadingProfile(true);
+      try {
+        const response = await fetch(`/api/market/company-profile?symbol=${encodeURIComponent(asset.symbol)}`);
+        if (response.ok) {
+          const data = await response.json();
+          setProfile(data);
+        }
+      } catch (error) {
+        console.error("Failed to fetch company profile info", error);
+      } finally {
+        setIsLoadingProfile(false);
+      }
+    }
+    loadProfile();
+  }, [asset.symbol]);
+
   useEffect(() => {
     async function loadCorrelation() {
       setIsLoadingCorrelation(true);
@@ -70,7 +158,7 @@ export function AssetDetail({ asset, onBack }: AssetDetailProps) {
     async function loadNews() {
       setIsLoadingNews(true);
       try {
-        const result = await fetchMarketNews(asset.symbol);
+        const result = await fetchMarketNews(asset.symbol, 10);
         setNews(result);
       } catch (e) {
         console.error(e);
@@ -92,12 +180,25 @@ export function AssetDetail({ asset, onBack }: AssetDetailProps) {
     >
       {/* Header */}
       <div className="flex items-center justify-between px-1">
-        <button 
-          onClick={onBack}
-          className="p-2 bg-slate-900/50 text-[#deff9a] rounded-xl border border-slate-800 hover:bg-slate-800 transition-colors"
-        >
-          <ArrowLeft className="w-5 h-5" />
-        </button>
+        <div className="flex items-center gap-2">
+          <button 
+            onClick={onBack}
+            className="p-2 bg-slate-900/50 text-[#deff9a] rounded-xl border border-slate-800 hover:bg-slate-800 transition-colors"
+          >
+            <ArrowLeft className="w-5 h-5" />
+          </button>
+          <button 
+            onClick={toggleWatchlist}
+            className={`p-2 rounded-xl border transition-all flex items-center gap-1.5 text-[10px] uppercase font-black tracking-wider ${
+              isWatchlisted
+                ? 'bg-[#DFFF00]/10 border-[#DFFF00]/30 text-[#DFFF00]'
+                : 'bg-slate-900/50 border-slate-800 text-slate-400 hover:text-white'
+            }`}
+          >
+            <Star className={`w-3.5 h-3.5 ${isWatchlisted ? 'fill-[#DFFF00]' : ''}`} />
+            <span>{isWatchlisted ? 'Watchlisted' : 'Watchlist'}</span>
+          </button>
+        </div>
         <div className="text-right">
           <p className="text-[10px] text-slate-500 uppercase tracking-widest font-black">Asset Overview</p>
           <p className="text-[8px] text-[#deff9a] font-mono uppercase">VentureAM Core v2.4</p>
@@ -173,6 +274,235 @@ export function AssetDetail({ asset, onBack }: AssetDetailProps) {
             </div>
           </div>
         </div>
+      </section>
+
+      {/* Company Profile Section */}
+      <section className="bg-slate-900/40 p-6 rounded-[2rem] border border-slate-800/80 relative overflow-hidden">
+        <div className="absolute top-0 right-0 p-8 bg-[#deff9a]/5 blur-3xl rounded-full -mr-4 -mt-4"></div>
+        
+        <div className="flex justify-between items-start mb-5 gap-4">
+          <div className="flex flex-col gap-1">
+            <h4 className="text-[10px] font-black text-slate-500 uppercase tracking-[0.2em] flex items-center gap-2">
+              <Building className="w-3.5 h-3.5 text-[#deff9a]" />
+              Company Profile
+            </h4>
+            <div className="flex items-center gap-1.5">
+              <span className="text-[8px] font-mono text-[#deff9a]/80 bg-[#deff9a]/10 px-1.5 py-0.5 rounded border border-[#deff9a]/20 uppercase">
+                {asset.symbol} REGISTRY
+              </span>
+              <span className="text-[8px] text-slate-600 font-bold uppercase tracking-widest">Grounding: Bloomberg SEC Pro</span>
+            </div>
+          </div>
+          {profile && (
+            <span className="text-[10px] font-mono text-slate-400 font-bold text-right max-w-[200px] truncate">
+              {profile.companyName}
+            </span>
+          )}
+        </div>
+
+        {isLoadingProfile ? (
+          <div className="flex flex-col items-center justify-center py-10 gap-3">
+            <Loader2 className="w-6 h-6 text-[#deff9a] animate-spin" />
+            <p className="text-[10px] text-slate-500 font-black uppercase tracking-widest">Querying Corporate Databases...</p>
+          </div>
+        ) : profile ? (
+          <div className="space-y-5">
+            {/* Interactive Tab Controller */}
+            <div className="flex bg-slate-950/50 p-1 rounded-xl border border-slate-800/60">
+              <button
+                onClick={() => setProfileTab('fundamental')}
+                className={`flex-1 py-2 text-[10px] font-black uppercase tracking-wider rounded-lg transition-all ${
+                  profileTab === 'fundamental' 
+                    ? 'bg-[#deff9a] text-slate-950 shadow-md font-extrabold' 
+                    : 'text-slate-400 hover:text-white'
+                }`}
+              >
+                Fundamental Info
+              </button>
+              <button
+                onClick={() => setProfileTab('business')}
+                className={`flex-1 py-2 text-[10px] font-black uppercase tracking-wider rounded-lg transition-all ${
+                  profileTab === 'business' 
+                    ? 'bg-[#deff9a] text-slate-950 shadow-md font-extrabold' 
+                    : 'text-slate-400 hover:text-white'
+                }`}
+              >
+                Business Model
+              </button>
+              <button
+                onClick={() => setProfileTab('management')}
+                className={`flex-1 py-2 text-[10px] font-black uppercase tracking-wider rounded-lg transition-all ${
+                  profileTab === 'management' 
+                    ? 'bg-[#deff9a] text-slate-950 shadow-md font-extrabold' 
+                    : 'text-slate-400 hover:text-white'
+                }`}
+              >
+                Management
+              </button>
+            </div>
+
+            {/* Tab view containers */}
+            <AnimatePresence mode="wait">
+              {profileTab === 'fundamental' && (
+                <motion.div
+                  key="fundamental-tab"
+                  initial={{ opacity: 0, y: 5 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -5 }}
+                  className="space-y-4"
+                >
+                  <p className="text-xs text-slate-300 leading-relaxed font-normal">
+                    {profile.fundamentalInfo.generalDescription}
+                  </p>
+
+                  <div className="grid grid-cols-2 gap-3 pt-2">
+                    <div className="bg-slate-950/30 p-3 rounded-xl border border-slate-800">
+                      <span className="text-[8px] text-slate-400 font-bold uppercase tracking-wider">Sector / Industry</span>
+                      <p className="text-xs font-bold text-white mt-0.5">{profile.fundamentalInfo.sector}</p>
+                    </div>
+                    <div className="bg-slate-950/30 p-3 rounded-xl border border-slate-800">
+                      <span className="text-[8px] text-slate-400 font-bold uppercase tracking-wider">Headquarters</span>
+                      <p className="text-xs font-bold text-white mt-0.5">{profile.fundamentalInfo.location}</p>
+                    </div>
+                    <div className="bg-slate-950/30 p-3 rounded-xl border border-slate-800">
+                      <span className="text-[8px] text-slate-400 font-bold uppercase tracking-wider">Establishment / IPO</span>
+                      <p className="text-xs font-bold text-white mt-0.5">{profile.fundamentalInfo.foundedAndIpo}</p>
+                    </div>
+                    <div className="bg-slate-950/30 p-3 rounded-xl border border-slate-800">
+                      <span className="text-[8px] text-slate-400 font-bold uppercase tracking-wider">Market Capitalization</span>
+                      <p className="text-xs font-bold text-[#deff9a] mt-0.5">{profile.fundamentalInfo.marketCap}</p>
+                    </div>
+                  </div>
+
+                  {/* Financial Metrics Ratios Table */}
+                  <div className="p-4 bg-slate-950/50 rounded-2xl border border-slate-800 mt-2">
+                    <span className="text-[9px] text-[#deff9a] font-extrabold uppercase tracking-widest flex items-center gap-1.5 mb-3">
+                      <BarChart3 className="w-3.5 h-3.5" /> Core Financial Multiples
+                    </span>
+                    <div className="grid grid-cols-2 gap-4">
+                      <div className="flex justify-between items-center py-1.5 border-b border-slate-800/80">
+                        <span className="text-[11px] text-slate-400 font-medium">P/E Ratio</span>
+                        <span className="text-[11px] font-mono text-white font-extrabold">{profile.fundamentalInfo.keyRatios.peRatio}</span>
+                      </div>
+                      <div className="flex justify-between items-center py-1.5 border-b border-slate-800/80">
+                        <span className="text-[11px] text-slate-400 font-medium">Div Yield</span>
+                        <span className="text-[11px] font-mono text-white font-extrabold">{profile.fundamentalInfo.keyRatios.divYield}</span>
+                      </div>
+                      <div className="flex justify-between items-center py-1.5">
+                        <span className="text-[11px] text-slate-400 font-medium">ROE</span>
+                        <span className="text-[11px] font-mono text-white font-extrabold">{profile.fundamentalInfo.keyRatios.roe}</span>
+                      </div>
+                      <div className="flex justify-between items-center py-1.5">
+                        <span className="text-[11px] text-slate-400 font-medium">Debt / Equity</span>
+                        <span className="text-[11px] font-mono text-white font-extrabold">{profile.fundamentalInfo.keyRatios.der}</span>
+                      </div>
+                    </div>
+                  </div>
+                </motion.div>
+              )}
+
+              {profileTab === 'business' && (
+                <motion.div
+                  key="business-tab"
+                  initial={{ opacity: 0, y: 5 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -5 }}
+                  className="space-y-4"
+                >
+                  {/* Revenue Streams */}
+                  <div className="space-y-2">
+                    <span className="text-[9px] text-[#deff9a] font-extrabold uppercase tracking-widest flex items-center gap-1.5">
+                      <Briefcase className="w-3.5 h-3.5" /> Primary Revenue Operations
+                    </span>
+                    <div className="space-y-2">
+                      {profile.businessModel.streams.map((stream, idx) => (
+                        <div key={idx} className="flex gap-2.5 items-start p-3 bg-slate-950/20 rounded-xl border border-slate-800/40">
+                          <div className="w-1.5 h-1.5 rounded-full bg-[#deff9a] mt-1.5 flex-shrink-0" />
+                          <p className="text-xs text-slate-300 leading-normal font-medium">{stream}</p>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Competitive Advantages */}
+                  <div className="space-y-2 pt-2">
+                    <span className="text-[9px] text-blue-400 font-extrabold uppercase tracking-widest flex items-center gap-1.5">
+                      <Target className="w-3.5 h-3.5" /> Competitive Moat / Advantages
+                    </span>
+                    <div className="space-y-2">
+                      {profile.businessModel.advantages.map((adv, idx) => (
+                        <div key={idx} className="flex gap-2.5 items-start p-3 bg-blue-500/5 rounded-xl border border-blue-500/10">
+                          <ShieldCheck className="w-4 h-4 text-blue-400 flex-shrink-0 mt-0.5" />
+                          <p className="text-xs text-slate-300 leading-normal font-medium">{adv}</p>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </motion.div>
+              )}
+
+              {profileTab === 'management' && (
+                <motion.div
+                  key="management-tab"
+                  initial={{ opacity: 0, y: 5 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -5 }}
+                  className="space-y-4"
+                >
+                  <div className="grid grid-cols-2 gap-4">
+                    {/* Commissioners */}
+                    <div className="space-y-2">
+                      <span className="text-[9px] text-slate-500 font-black uppercase tracking-widest flex items-center gap-1.5">
+                        <Users className="w-3.5 h-3.5" /> Commissioners Board
+                      </span>
+                      <div className="bg-slate-950/30 rounded-xl border border-slate-800/80 p-3 space-y-1.5">
+                        {profile.management.commissioners.map((comm, idx) => (
+                          <div key={idx} className="py-1 border-b border-slate-800/40 last:border-0">
+                            <p className="text-xs font-bold text-white leading-tight">{comm.split('(')[0].trim()}</p>
+                            {comm.includes('(') && (
+                              <p className="text-[9px] text-[#deff9a] font-bold uppercase">{comm.split('(')[1].replace(')', '').trim()}</p>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+
+                    {/* Directors */}
+                    <div className="space-y-2">
+                      <span className="text-[9px] text-slate-500 font-black uppercase tracking-widest flex items-center gap-1.5">
+                        <Users className="w-3.5 h-3.5" /> Executive Board
+                      </span>
+                      <div className="bg-slate-950/30 rounded-xl border border-slate-800/80 p-3 space-y-1.5">
+                        {profile.management.directors.map((dir, idx) => (
+                          <div key={idx} className="py-1 border-b border-slate-800/40 last:border-0">
+                            <p className="text-xs font-bold text-white leading-tight">{dir.split('(')[0].trim()}</p>
+                            {dir.includes('(') && (
+                              <p className="text-[9px] text-blue-400 font-bold uppercase">{dir.split('(')[1].replace(')', '').trim()}</p>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Corporate Focus Roadmap */}
+                  <div className="p-3.5 bg-gradient-to-br from-slate-950 to-slate-900 border border-slate-800 rounded-xl">
+                    <span className="text-[9px] text-[#deff9a] font-extrabold uppercase tracking-widest flex items-center gap-1.5 mb-2">
+                      <Zap className="w-3.5 h-3.5" /> Strategic Horizon & Direction
+                    </span>
+                    <p className="text-xs text-slate-300 leading-relaxed font-normal italic pl-3 border-l border-[#deff9a]/40">
+                      {profile.management.strategy}
+                    </p>
+                  </div>
+                </motion.div>
+              )}
+            </AnimatePresence>
+          </div>
+        ) : (
+          <div className="text-center py-6">
+            <p className="text-[10px] text-slate-600 font-bold uppercase">No Profile Data Available</p>
+          </div>
+        )}
       </section>
 
       {/* Real-time News Feed */}
@@ -312,8 +642,16 @@ export function AssetDetail({ asset, onBack }: AssetDetailProps) {
         <button className="py-4 rounded-2xl bg-[#deff9a] text-slate-950 font-black text-[11px] uppercase tracking-widest shadow-[0_0_20px_rgba(222,255,154,0.2)] hover:scale-[1.02] active:scale-[0.98] transition-all">
           Execute Buy Order
         </button>
-        <button className="py-4 rounded-2xl bg-slate-900 border border-slate-800 text-slate-100 font-black text-[11px] uppercase tracking-widest hover:bg-slate-800 active:scale-[0.98] transition-all">
-          Add to Watchlist
+        <button 
+          onClick={toggleWatchlist}
+          className={`py-4 rounded-2xl border font-black text-[11px] uppercase tracking-widest active:scale-[0.98] transition-all flex items-center justify-center gap-2 ${
+            isWatchlisted
+              ? 'bg-[#DFFF00]/10 border-[#DFFF00]/30 text-[#DFFF00] hover:bg-[#DFFF00]/20'
+              : 'bg-slate-900 border-slate-800 text-slate-100 hover:bg-slate-800'
+          }`}
+        >
+          <Star className={`w-4 h-4 ${isWatchlisted ? 'fill-[#DFFF00]' : ''}`} />
+          {isWatchlisted ? 'Remove from Watchlist' : 'Add to Watchlist'}
         </button>
       </div>
 

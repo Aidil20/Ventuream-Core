@@ -14,7 +14,8 @@ function TradingViewTechnicalAnalysisWidget({
   useEffect(() => {
     const currentContainer = container.current;
 
-    if (currentContainer && !currentContainer.querySelector('script')) {
+    if (currentContainer) {
+      currentContainer.innerHTML = `<div class="tradingview-widget-container__widget h-full w-full"></div>`;
       const scriptElement = document.createElement("script");
       scriptElement.src = "https://s3.tradingview.com/external-embedding/embed-widget-technical-analysis.js";
       scriptElement.type = "text/javascript";
@@ -34,7 +35,9 @@ function TradingViewTechnicalAnalysisWidget({
     }
 
     return () => {
-      // Safe cleanup
+      if (currentContainer) {
+        currentContainer.innerHTML = '';
+      }
     };
   }, [symbol, interval]);
 

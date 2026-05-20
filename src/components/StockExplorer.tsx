@@ -3,7 +3,9 @@ import { motion, AnimatePresence } from 'motion/react';
 import { Search, Plus, TrendingUp, TrendingDown, Clock, Newspaper, BarChart2, Star, X, Zap, Bell, Trash2, ChevronDown, ExternalLink, Activity, Info, Loader2, BrainCircuit, RefreshCw, ShieldAlert } from 'lucide-react';
 import TradingViewWidget from './TradingViewWidget';
 import TradingViewTechnicalAnalysisWidget from './TradingViewTechnicalAnalysisWidget';
+import TechnicalIndicatorsChart from './TechnicalIndicatorsChart';
 import Sparkline from './Sparkline';
+import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from 'recharts';
 import { fetchMarketNewsSummary } from '../services/geminiService';
 import { PriceAlert } from '../App';
 import { searchAsset, AssetSearchInfo, fetchNewsSentimentSummary, NewsSentimentAnalysis } from '../services/marketService';
@@ -15,6 +17,21 @@ interface StockNews {
   timestamp: string;
   url?: string;
 }
+
+interface SearchCacheEntry {
+  results: AssetSearchInfo[];
+  timestamp: number;
+}
+
+interface NewsCacheEntry {
+  news: StockNews[];
+  sentiment: NewsSentimentAnalysis | null;
+  timestamp: number;
+}
+
+const searchCache: Record<string, SearchCacheEntry> = {};
+const newsCache: Record<string, NewsCacheEntry> = {};
+const CACHE_TTL_MS = 120 * 1000; // 2 minutes TTL
 
 interface StockExplorerProps {
   alerts: PriceAlert[];
@@ -47,6 +64,7 @@ export const StockExplorer: React.FC<StockExplorerProps> = ({
   const [macdSignal, setMacdSignal] = useState<'any' | 'bullish' | 'bearish'>('any');
   const [macdPosition, setMacdPosition] = useState<'any' | 'above' | 'below'>('any');
   const [isChartExpanded, setIsChartExpanded] = useState(false);
+  const [showChartInsights, setShowChartInsights] = useState(true);
   const [tickHistory, setTickHistory] = useState<{ price: number, changePercent: number, timestamp: number }[]>([]);
   const [activeTab, setActiveTab] = useState<'DISCOVERY' | 'WATCHLIST'>('DISCOVERY');
 
@@ -63,8 +81,31 @@ export const StockExplorer: React.FC<StockExplorerProps> = ({
       setSearchResults([]);
       setError(null);
       setActiveTab('DISCOVERY');
+
+      const cacheKey = query.toUpperCase();
+      const cached = searchCache[cacheKey];
+      if (cached && (Date.now() - cached.timestamp < CACHE_TTL_MS)) {
+        setSearchResults(cached.results);
+        if (cached.results.length === 1) {
+          setStockInfo(cached.results[0]);
+          setSelectedStock(cached.results[0].symbol);
+        } else if (cached.results.length > 0) {
+          const exactMatch = cached.results.find(r => r.symbol.toUpperCase() === cacheKey);
+          if (exactMatch) {
+            setStockInfo(exactMatch);
+            setSelectedStock(exactMatch.symbol);
+          }
+        }
+        setIsSearching(false);
+        return;
+      }
+
       try {
         const results = await searchAsset(query);
+        searchCache[cacheKey] = {
+          results,
+          timestamp: Date.now()
+        };
         setSearchResults(results);
         
         if (results.length === 1) {
@@ -109,6 +150,16 @@ export const StockExplorer: React.FC<StockExplorerProps> = ({
     if (!selectedStock) return;
     setIsNewsLoading(true);
     setSentimentAnalysis(null);
+
+    const cacheKey = selectedStock.toUpperCase();
+    const cached = newsCache[cacheKey];
+    if (!force && cached && (Date.now() - cached.timestamp < CACHE_TTL_MS)) {
+      setNews(cached.news);
+      setSentimentAnalysis(cached.sentiment);
+      setIsNewsLoading(false);
+      return;
+    }
+
     try {
       const data = await fetchMarketNewsSummary(force, selectedStock);
       const mappedNews = data.map(item => ({
@@ -122,11 +173,13 @@ export const StockExplorer: React.FC<StockExplorerProps> = ({
       setNews(mappedNews);
 
       // Get AI Sentiment Analysis for the news bundle
+      let finalSentiment: NewsSentimentAnalysis | null = null;
       if (mappedNews.length > 0) {
         setIsSentimentLoading(true);
         try {
           const analysis = await fetchNewsSentimentSummary(mappedNews as any, selectedStock);
           setSentimentAnalysis(analysis);
+          finalSentiment = analysis;
         } catch (err: any) {
           console.error("Sentiment analysis error:", err);
           try {
@@ -144,6 +197,12 @@ export const StockExplorer: React.FC<StockExplorerProps> = ({
           setIsSentimentLoading(false);
         }
       }
+
+      newsCache[cacheKey] = {
+        news: mappedNews,
+        sentiment: finalSentiment,
+        timestamp: Date.now()
+      };
     } catch (error) {
       console.error("News load error:", error);
     } finally {
@@ -187,9 +246,25 @@ export const StockExplorer: React.FC<StockExplorerProps> = ({
       // If we don't have stockInfo but have a selectedStock (e.g. from watchlist), fetch info
       if (!stockInfo || stockInfo.symbol !== selectedStock) {
         const loadInfo = async () => {
+          const cacheKey = selectedStock.toUpperCase();
+          const cached = searchCache[cacheKey];
+          if (cached && (Date.now() - cached.timestamp < CACHE_TTL_MS)) {
+            const match = cached.results.find(r => r.symbol.toUpperCase() === cacheKey) || cached.results[0];
+            if (match) {
+              setStockInfo(match);
+              return;
+            }
+          }
+
           try {
             const data = await searchAsset(selectedStock);
-            if (data) setStockInfo(data);
+            if (data) {
+              setStockInfo(data as any);
+              searchCache[cacheKey] = {
+                results: Array.isArray(data) ? data : [data],
+                timestamp: Date.now()
+              };
+            }
           } catch (e) {
             console.error("Info load error:", e);
           }
@@ -200,6 +275,37 @@ export const StockExplorer: React.FC<StockExplorerProps> = ({
       loadStockNews(false);
     }
   }, [selectedStock]);
+
+  useEffect(() => {
+    if (selectedStock && stockInfo && tickHistory.length === 0) {
+      const isSymbolMatch = 
+        stockInfo.symbol.toUpperCase() === selectedStock.toUpperCase() ||
+        selectedStock.toUpperCase().endsWith(stockInfo.symbol.toUpperCase()) ||
+        stockInfo.symbol.toUpperCase().endsWith(selectedStock.toUpperCase());
+        
+      if (isSymbolMatch) {
+        const basePrice = stockInfo.price || 5000;
+        const baseChange = stockInfo.changePercent || 0;
+        const now = Date.now();
+        const seededTicks: { price: number, changePercent: number, timestamp: number }[] = [];
+        
+        // Populate 20 previous ticks stretching 5 minutes back (15 seconds apart)
+        for (let i = 19; i >= 0; i--) {
+          const timestamp = now - i * 15000;
+          // Simulated micro random walk around basePrice
+          const walk = (Math.sin(i / 2.5) * 0.12 + Math.cos(i / 4) * 0.08 + (Math.random() - 0.5) * 0.05) * (basePrice * 0.001);
+          const tickPrice = Math.max(1, Math.round(basePrice - walk));
+          const tickChange = baseChange - (walk / basePrice) * 100;
+          seededTicks.push({
+            price: tickPrice,
+            changePercent: Number(tickChange.toFixed(2)),
+            timestamp
+          });
+        }
+        setTickHistory(seededTicks);
+      }
+    }
+  }, [selectedStock, stockInfo, tickHistory.length]);
 
   const toggleWatchlist = (symbol: string) => {
     setWatchlist(prev => 
@@ -762,11 +868,19 @@ export const StockExplorer: React.FC<StockExplorerProps> = ({
                       <span className="text-[8px] font-black text-emerald-400 uppercase">Real-time Stream</span>
                     </div>
                   </div>
-                  <div className="flex items-center gap-4">
-                    <div className="hidden md:flex items-center gap-1.5">
-                      <Zap className="w-3 h-3 text-[#DFFF00]" />
-                      <span className="text-[9px] font-black text-[#DFFF00] uppercase tracking-widest">ADVANCED ANALYTICS ACTIVE</span>
-                    </div>
+                  <div className="flex items-center gap-2">
+                    <button 
+                      onClick={() => setShowChartInsights(!showChartInsights)}
+                      className={`px-3 py-1.5 rounded-xl border text-[9px] font-black uppercase tracking-wider transition-all flex items-center gap-1.5 ${
+                        showChartInsights 
+                          ? 'bg-[#DFFF00]/10 border-[#DFFF00]/30 text-[#DFFF00]' 
+                          : 'bg-zinc-900 border-zinc-800 text-zinc-500 hover:text-white'
+                      }`}
+                      title="Toggle AI Intelligence Companion"
+                    >
+                      <BrainCircuit className="w-3.5 h-3.5" />
+                      <span className="hidden sm:inline">AI Analysis</span>
+                    </button>
                     <button 
                       onClick={() => setIsChartExpanded(!isChartExpanded)}
                       className="p-2 bg-zinc-900 border border-zinc-800 rounded-xl text-zinc-500 hover:text-[#DFFF00] transition-colors"
@@ -776,11 +890,148 @@ export const StockExplorer: React.FC<StockExplorerProps> = ({
                     </button>
                   </div>
                 </div>
-                <div className={`${isChartExpanded ? 'h-[700px]' : 'h-[500px]'} transition-all duration-500`}>
-                  <TradingViewWidget 
-                    symbol={selectedStock.includes(':') ? selectedStock : `IDX:${selectedStock}`} 
-                    studies={["MASimple@tv-basicstudies", "MAExp@tv-basicstudies", "RSI@tv-basicstudies", "MACD@tv-basicstudies", "BB@tv-basicstudies"]}
-                  />
+                <div className={`${isChartExpanded ? 'h-[700px]' : 'h-[500px]'} transition-all duration-500 flex flex-col md:flex-row divide-y md:divide-y-0 md:divide-x divide-zinc-800`}>
+                  <div className="flex-1 h-full min-w-0">
+                    <TradingViewWidget 
+                      symbol={selectedStock.includes(':') ? selectedStock : `IDX:${selectedStock}`} 
+                      studies={["MASimple@tv-basicstudies", "MAExp@tv-basicstudies", "RSI@tv-basicstudies", "MACD@tv-basicstudies", "BB@tv-basicstudies"]}
+                    />
+                  </div>
+                  
+                  {showChartInsights && (
+                    <div className="w-full md:w-[320px] lg:w-[340px] shrink-0 h-full flex flex-col bg-zinc-950/60 relative overflow-hidden border-t md:border-t-0 border-zinc-800">
+                      {/* Sub header info panel */}
+                      <div className="p-4 border-b border-zinc-900 bg-zinc-950/40 flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          <BrainCircuit className="w-3.5 h-3.5 text-[#DFFF00] animate-pulse" />
+                          <div>
+                            <span className="text-[8px] font-black text-zinc-500 uppercase tracking-widest block">Linked Intelligence</span>
+                            <span className="text-[10px] font-bold text-white uppercase tracking-wider block">AI Sentiment Correlator</span>
+                          </div>
+                        </div>
+                        {sentimentAnalysis && (
+                          <div className={`px-2 py-0.5 rounded-lg text-[8px] font-black border uppercase tracking-wider ${
+                            sentimentAnalysis.score > 55
+                              ? 'bg-emerald-500/10 border-emerald-500/20 text-emerald-400'
+                              : sentimentAnalysis.score < 45
+                              ? 'bg-rose-500/10 border-rose-500/20 text-rose-400'
+                              : 'bg-zinc-500/10 border-zinc-500/20 text-zinc-400'
+                          }`}>
+                            {sentimentAnalysis.score > 55 ? 'Bullish' : sentimentAnalysis.score < 45 ? 'Bearish' : 'Neutral'} (Score: {sentimentAnalysis.score}%)
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Scrollable contents panel */}
+                      <div className="flex-1 overflow-y-auto p-4 space-y-4 custom-scrollbar">
+                        {isNewsLoading || isSentimentLoading ? (
+                          <div className="py-24 flex flex-col items-center justify-center space-y-3">
+                            <RefreshCw className="w-6 h-6 text-[#DFFF00] animate-spin" />
+                            <div className="text-center">
+                              <p className="text-[10px] font-black uppercase tracking-widest text-[#DFFF00]">Syncing Market Data</p>
+                              <p className="text-[8px] text-zinc-500 uppercase tracking-widest mt-1">Grounding with Gemini LLM...</p>
+                            </div>
+                          </div>
+                        ) : !sentimentAnalysis && news.length === 0 ? (
+                          <div className="py-16 text-center text-zinc-500">
+                            <Info className="w-5 h-5 mx-auto mb-2 text-zinc-600" />
+                            <p className="text-[10px] font-black uppercase tracking-widest">No Intelligence Feeds</p>
+                            <p className="text-[8px] mt-1">Select another stock or force-sync the market news below.</p>
+                            <button
+                              onClick={() => loadStockNews(true)}
+                              className="mt-4 px-3 py-1.5 rounded-xl bg-zinc-900 border border-zinc-800 text-[9px] hover:text-[#DFFF00] transition-colors font-medium text-white"
+                            >
+                              Sync Ticker Intelligence
+                            </button>
+                          </div>
+                        ) : (
+                          <>
+                            {/* Visual Sentiment Scale */}
+                            <div className="p-3 bg-zinc-950/50 border border-zinc-900 rounded-2xl">
+                              <div className="flex justify-between items-center text-[9px] text-zinc-400 mb-2">
+                                <span className="font-bold uppercase tracking-wider">News Bias Spectrum</span>
+                                <span className="font-mono">{sentimentAnalysis?.score || 50}% Bullish</span>
+                              </div>
+                              <div className="w-full h-1.5 bg-zinc-900 rounded-full overflow-hidden flex">
+                                <div 
+                                  className="h-full bg-emerald-500 transition-all duration-1000" 
+                                  style={{ width: `${sentimentAnalysis?.score || 50}%` }}
+                                />
+                                <div 
+                                  className="h-full bg-rose-500 transition-all duration-1000" 
+                                  style={{ width: `${100 - (sentimentAnalysis?.score || 50)}%` }}
+                                />
+                              </div>
+                              <div className="flex justify-between items-center mt-1 text-[7px] text-zinc-600 font-mono">
+                                <span>BEARISH SKEW</span>
+                                <span>BULLISH SKEW</span>
+                              </div>
+                            </div>
+
+                            {/* Volatility Digest Summary */}
+                            {sentimentAnalysis?.summary && (
+                              <div className="p-3 bg-[#DFFF00]/[0.02] border border-[#DFFF00]/10 rounded-2xl">
+                                <span className="text-[8px] font-black text-[#DFFF00] uppercase tracking-widest flex items-center gap-1.5 mb-2">
+                                  <BrainCircuit className="w-3.5 h-3.5 text-[#DFFF00]" />
+                                  Gemini Performance Diagnosis
+                                </span>
+                                <p className="text-[11px] font-normal text-zinc-300 leading-relaxed">
+                                  {sentimentAnalysis.summary}
+                                </p>
+                              </div>
+                            )}
+
+                            {/* Inline matching story feed */}
+                            <div className="space-y-2">
+                              <span className="text-[8px] font-black text-zinc-500 uppercase tracking-widest block mb-1">Matched Impact Matrix</span>
+                              {news.slice(0, 3).map((item, idx) => {
+                                const analysis = sentimentAnalysis?.items?.find(s => s.headline === item.headline);
+                                const isBullish = item.sentiment === 'bullish' || (analysis && analysis.score > 55);
+                                const isBearish = item.sentiment === 'bearish' || (analysis && analysis.score < 45);
+
+                                return (
+                                  <div 
+                                    key={idx} 
+                                    className="p-3 bg-zinc-900/40 hover:bg-zinc-900/80 border border-zinc-900/60 rounded-xl transition-all relative group"
+                                  >
+                                    <div className="flex items-start justify-between gap-2">
+                                      <p className="text-[10px] font-bold text-white group-hover:text-[#DFFF00] transition-colors leading-snug">
+                                        {item.headline}
+                                      </p>
+                                      <div className={`shrink-0 p-1 rounded-lg ${
+                                        isBullish ? 'bg-emerald-500/10 text-emerald-400' : isBearish ? 'bg-rose-500/10 text-rose-400' : 'bg-zinc-800 text-zinc-400'
+                                      }`}>
+                                        {isBullish ? (
+                                          <TrendingUp className="w-3 h-3" />
+                                        ) : isBearish ? (
+                                          <TrendingDown className="w-3 h-3" />
+                                        ) : (
+                                          <Info className="w-3 h-3" />
+                                        )}
+                                      </div>
+                                    </div>
+                                    
+                                    <p className="text-[9px] text-zinc-500 mt-1 line-clamp-2 leading-relaxed">
+                                      {item.summary}
+                                    </p>
+
+                                    <div className="flex items-center justify-between mt-2 pt-2 border-t border-zinc-900/30 text-[7.5px] font-mono text-zinc-600">
+                                      <span>{item.timestamp ? new Date(item.timestamp).toLocaleDateString() : 'Gateway Source'}</span>
+                                      {analysis && (
+                                        <span className={analysis.score > 50 ? 'text-emerald-500/80' : 'text-rose-500/80'}>
+                                          Correlation: {analysis.score}%
+                                        </span>
+                                      )}
+                                    </div>
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          </>
+                        )}
+                      </div>
+                    </div>
+                  )}
                 </div>
               </div>
 
@@ -802,6 +1053,14 @@ export const StockExplorer: React.FC<StockExplorerProps> = ({
                   </div>
                 </div>
               )}
+            </div>
+
+            {/* Technical Indicators Visualization Section */}
+            <div className="mt-8">
+              <TechnicalIndicatorsChart 
+                symbol={selectedStock} 
+                currentPrice={stockInfo?.price || 5000} 
+              />
             </div>
 
             {/* News & Analytics */}
@@ -981,12 +1240,12 @@ export const StockExplorer: React.FC<StockExplorerProps> = ({
               {/* Sidebar Info */}
               <div className="space-y-6">
                 {/* Live Tick Feed Console */}
-                <div className="bg-[#020407] rounded-[2.5rem] border border-zinc-800 p-6 shadow-2xl relative overflow-hidden flex flex-col min-h-[350px]">
+                <div className="bg-[#020407] rounded-[2.5rem] border border-zinc-800 p-6 shadow-2xl relative overflow-hidden flex flex-col min-h-[460px]">
                   <div className="absolute top-0 right-0 p-4 bg-emerald-500/5 blur-2xl rounded-full" />
                   <div className="flex items-center justify-between mb-4 relative z-10">
                     <h4 className="text-[10px] font-black text-zinc-500 uppercase tracking-widest flex items-center gap-2">
                        <Activity className="w-3 h-3 text-emerald-400" />
-                       Live WebSocket Feed
+                       REAL-TIME TICK CORRELATION
                     </h4>
                     <div className="flex items-center gap-2">
                       <div className="flex items-center gap-1.5 px-2 py-0.5 bg-blue-500/10 rounded-lg border border-blue-500/20">
@@ -999,16 +1258,109 @@ export const StockExplorer: React.FC<StockExplorerProps> = ({
                     </div>
                   </div>
 
-                  <div className="flex-1 overflow-y-auto space-y-2 pr-2 scrollbar-thin scrollbar-thumb-zinc-800 scrollbar-track-transparent custom-scrollbar max-h-[300px]">
+                  {/* Real-Time Tick History Chart */}
+                  {(() => {
+                    const chronologicalTicks = [...tickHistory].reverse();
+                    const firstTick = chronologicalTicks[0];
+                    const lastTick = chronologicalTicks[chronologicalTicks.length - 1];
+                    const isNetPositive = lastTick && firstTick ? lastTick.price >= firstTick.price : true;
+                    const chartColor = isNetPositive ? '#10b981' : '#f43f5e';
+                    const chartGradientId = `tick-gradient-${selectedStock}-${isNetPositive ? 'pos' : 'neg'}`;
+
+                    const prices = tickHistory.map(t => t.price);
+                    const minPrice = prices.length > 0 ? Math.min(...prices) : 0;
+                    const maxPrice = prices.length > 0 ? Math.max(...prices) : 10000;
+                    const priceRange = maxPrice - minPrice;
+                    const domainMin = priceRange > 0 ? Math.max(0, Math.floor(minPrice - priceRange * 0.1)) : Math.max(0, minPrice - 5);
+                    const domainMax = priceRange > 0 ? Math.ceil(maxPrice + priceRange * 0.1) : maxPrice + 5;
+
+                    return (
+                      <div className="relative z-10 mb-4">
+                        <div className="flex items-center justify-between mb-2">
+                          <div className="flex flex-col">
+                             <span className="text-[8px] font-black text-zinc-500 uppercase tracking-widest">Gateway Metric</span>
+                             <span className="text-[11px] font-mono font-bold text-white uppercase mt-0.5">5-Minute Live Graph</span>
+                          </div>
+                          {tickHistory.length > 0 && (
+                            <div className="text-right flex flex-col items-end">
+                               <span className="text-[8px] font-black text-zinc-500 uppercase tracking-widest">Volatility Span</span>
+                               <span className="text-[9px] font-mono font-bold text-[#DFFF00] uppercase mt-0.5">
+                                 ±{((priceRange / (minPrice || 1)) * 100).toFixed(2)}% Range
+                               </span>
+                            </div>
+                          )}
+                        </div>
+
+                        {tickHistory.length > 0 ? (
+                          <div className="w-full h-[140px] bg-zinc-950/40 rounded-2xl border border-zinc-900/60 p-1 relative overflow-hidden">
+                            <ResponsiveContainer width="100%" height="100%">
+                              <AreaChart data={chronologicalTicks} margin={{ top: 10, right: 8, left: 8, bottom: 5 }}>
+                                <defs>
+                                  <linearGradient id={chartGradientId} x1="0" y1="0" x2="0" y2="1">
+                                    <stop offset="5%" stopColor={chartColor} stopOpacity={0.25}/>
+                                    <stop offset="95%" stopColor={chartColor} stopOpacity={0}/>
+                                  </linearGradient>
+                                </defs>
+                                <CartesianGrid stroke="#18181b" strokeDasharray="2 4" vertical={false} />
+                                <YAxis hide domain={[domainMin, domainMax]} />
+                                <Tooltip
+                                  content={({ active, payload }: any) => {
+                                    if (active && payload && payload.length) {
+                                      const data = payload[0].payload;
+                                      return (
+                                        <div className="bg-zinc-950 border border-zinc-800 px-2.5 py-1.5 rounded-xl shadow-2xl text-[9px] font-mono">
+                                          <p className="text-zinc-500 mb-0.5">
+                                            {new Date(data.timestamp).toLocaleTimeString([], { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' })}
+                                          </p>
+                                          <p className="font-bold text-white">
+                                            Rp {data.price.toLocaleString('id-ID')}
+                                          </p>
+                                          <p className={`font-bold ${data.changePercent >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
+                                            {data.changePercent >= 0 ? '+' : ''}{data.changePercent.toFixed(2)}%
+                                          </p>
+                                        </div>
+                                      );
+                                    }
+                                    return null;
+                                  }}
+                                  cursor={{ stroke: '#27272a', strokeWidth: 1 }}
+                                />
+                                <Area
+                                  type="monotone"
+                                  dataKey="price"
+                                  stroke={chartColor}
+                                  strokeWidth={1.5}
+                                  fillOpacity={1}
+                                  fill={`url(#${chartGradientId})`}
+                                  isAnimationActive={false}
+                                />
+                              </AreaChart>
+                            </ResponsiveContainer>
+                          </div>
+                        ) : (
+                          <div className="w-full h-[140px] bg-zinc-950/20 rounded-2xl border border-zinc-900/40 flex flex-col items-center justify-center opacity-30">
+                            <RefreshCw className="w-5 h-5 animate-spin-slow mb-1.5" />
+                            <p className="text-[10px] font-black uppercase tracking-widest text-center">Seeding data streams...</p>
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })()}
+
+                  <h5 className="text-[8px] font-black text-zinc-500 uppercase tracking-widest mb-2 border-t border-zinc-900/80 pt-3 relative z-10">
+                     Detailed Burst Logs
+                  </h5>
+
+                  <div className="flex-1 overflow-y-auto space-y-2 pr-2 scrollbar-thin scrollbar-thumb-zinc-800 scrollbar-track-transparent custom-scrollbar max-h-[160px]">
                     <AnimatePresence initial={false}>
                       {tickHistory.length > 0 ? (
-                        tickHistory.map((tick) => (
+                        tickHistory.map((tick, idx) => (
                           <motion.div 
-                            key={tick.timestamp + Math.random()}
+                            key={`${tick.timestamp}-${idx}-${tick.price}`}
                             initial={{ opacity: 0, x: -10, height: 0 }}
                             animate={{ opacity: 1, x: 0, height: 'auto' }}
                             exit={{ opacity: 0, x: 20 }}
-                            className="flex items-center justify-between p-2.5 bg-zinc-900/50 rounded-xl border border-zinc-800/50 hover:border-zinc-700/50 transition-all"
+                            className="flex items-center justify-between p-2.5 bg-zinc-900/40 rounded-xl border border-zinc-800/40 hover:border-zinc-700/40 transition-all relative z-10"
                           >
                             <div className="flex items-center gap-3">
                               <span className="text-[9px] font-mono text-zinc-600">

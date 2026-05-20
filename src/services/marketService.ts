@@ -47,9 +47,14 @@ export async function fetchWithRetry(resource: string, options: any = {}, retrie
   }
 }
 
-export async function fetchMarketNews(symbol?: string): Promise<MarketNews[]> {
+export async function fetchMarketNews(symbol?: string, limit?: number): Promise<MarketNews[]> {
   try {
-    const url = symbol ? `/api/news?symbol=${symbol}` : '/api/news';
+    let url = '/api/news';
+    const params = new URLSearchParams();
+    if (symbol) params.append('symbol', symbol);
+    if (limit) params.append('limit', String(limit));
+    const qs = params.toString();
+    if (qs) url += `?${qs}`;
     const response = await fetchWithRetry(url);
     if (!response.ok) throw new Error(`Server error fetching news: ${response.status}`);
     const data = await response.json();
@@ -103,7 +108,81 @@ export interface ScanOptions {
   dateRange?: { start: string; end: string };
 }
 
-const CACHE_DURATION = 120 * 60 * 1000; // 2 hours
+// --- CACHING ENGINE START ---
+export class MarketApiCache {
+  private static memCache = new Map<string, { data: any; expiry: number }>();
+  private static inFlight = new Map<string, Promise<any>>();
+
+  static get<T>(key: string): T | null {
+    const mem = this.memCache.get(key);
+    if (mem) {
+      if (Date.now() < mem.expiry) {
+        return mem.data as T;
+      }
+      this.memCache.delete(key);
+    }
+
+    try {
+      const persisted = localStorage.getItem(key);
+      if (persisted) {
+        const { data, expiry } = JSON.parse(persisted);
+        if (Date.now() < expiry) {
+          this.memCache.set(key, { data, expiry });
+          return data as T;
+        }
+        localStorage.removeItem(key);
+      }
+    } catch (_) {}
+    return null;
+  }
+
+  static set<T>(key: string, data: T, ttlMs: number, persist: boolean = true) {
+    const expiry = Date.now() + ttlMs;
+    this.memCache.set(key, { data, expiry });
+
+    if (persist) {
+      try {
+        localStorage.setItem(key, JSON.stringify({ data, expiry }));
+      } catch (_) {}
+    }
+  }
+
+  static async fetch<T>(
+    key: string,
+    fetchFn: () => Promise<T>,
+    ttlMs: number,
+    persist: boolean = true
+  ): Promise<T> {
+    const cached = this.get<T>(key);
+    if (cached !== null) {
+      return cached;
+    }
+
+    let promise = this.inFlight.get(key);
+    if (!promise) {
+      promise = fetchFn().then((data) => {
+        this.set(key, data, ttlMs, persist);
+        this.inFlight.delete(key);
+        return data;
+      }).catch((err) => {
+        this.inFlight.delete(key);
+        throw err;
+      });
+      this.inFlight.set(key, promise);
+    }
+    return promise;
+  }
+
+  static invalidate(key: string) {
+    this.memCache.delete(key);
+    this.inFlight.delete(key);
+    try {
+      localStorage.removeItem(key);
+    } catch (_) {}
+  }
+}
+// --- CACHING ENGINE END ---
+
 const CIRCUIT_BREAKER_DURATION = 15 * 60 * 1000; // 15 minutes
 
 function getCircuitBreakerKey(type: string) {
@@ -127,46 +206,48 @@ function breakCircuit(type: string) {
 
 export async function fetchLatestInsights(count: number = 5, force: boolean = false): Promise<MarketInsight[]> {
   const cacheKey = `ventuream_insights_cache_${count}`;
+  if (force) {
+    MarketApiCache.invalidate(cacheKey);
+  }
+
+  const ttl = 10 * 60 * 1000; // 10 minutes cache for general insights
   const type = 'insights';
-  
   const circuitBroken = isCircuitBroken(type);
-  const cached = localStorage.getItem(cacheKey);
 
-  if (cached && !force) {
-    const { data, timestamp } = JSON.parse(cached);
-    const isExpired = Date.now() - timestamp > CACHE_DURATION;
-    if (circuitBroken || !isExpired) {
-      return Array.isArray(data) ? data : [data];
-    }
-  } else if (circuitBroken && !force) {
+  if (circuitBroken && !force) {
+    const cached = MarketApiCache.get<MarketInsight[]>(cacheKey);
+    if (cached) return cached;
     return getInsightFallback();
   }
-  
-  try {
-    const response = await fetchWithRetry(`/api/market/insights?count=${count}&force=${force}`).catch(err => {
-      console.error("Network error fetching insights:", err);
-      throw new Error(`Network failure: ${err.message}`);
-    });
-    
-    if (!response.ok) {
-      const errText = await response.text().catch(() => "Unknown error");
-      console.error(`Insights API responded with ${response.status}: ${errText}`);
-      throw new Error(`Server error: ${response.status}`);
-    }
-    
-    const data = await response.json();
-    const insights = (Array.isArray(data) ? data : [data]).map((item: any) => ({
-      ...item,
-      timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-    }));
 
-    localStorage.setItem(cacheKey, JSON.stringify({ data: insights, timestamp: Date.now() }));
-    return insights;
-  } catch (error: any) {
-    console.error(`Error fetching ${type}:`, error);
-    if (cached) return JSON.parse(cached).data;
+  return MarketApiCache.fetch<MarketInsight[]>(
+    cacheKey,
+    async () => {
+      const response = await fetchWithRetry(`/api/market/insights?count=${count}&force=${force}`).catch(err => {
+        console.error("Network error fetching insights:", err);
+        throw new Error(`Network failure: ${err.message}`);
+      });
+      
+      if (!response.ok) {
+        const errText = await response.text().catch(() => "Unknown error");
+        console.error(`Insights API responded with ${response.status}: ${errText}`);
+        throw new Error(`Server error: ${response.status}`);
+      }
+      
+      const data = await response.json();
+      return (Array.isArray(data) ? data : [data]).map((item: any) => ({
+        ...item,
+        timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+      }));
+    },
+    ttl,
+    true
+  ).catch((error) => {
+    console.error("Error fetching insights, utilizing fallback:", error);
+    const cached = MarketApiCache.get<MarketInsight[]>(cacheKey);
+    if (cached) return cached;
     return getInsightFallback();
-  }
+  });
 }
 
 function getInsightFallback(): MarketInsight[] {
@@ -189,30 +270,27 @@ export interface ScannerResult {
 
 export async function fetchScannerResults(scannerName: string): Promise<ScannerResult[]> {
   const cacheKey = `ventuream_scanner_cache_${scannerName}`;
-  const cached = localStorage.getItem(cacheKey);
+  const ttl = 10 * 60 * 1000; // 10 minutes scanner cache
   
-  if (cached) {
-    const { data, timestamp } = JSON.parse(cached);
-    if (Date.now() - timestamp < 30 * 60 * 1000) {
-      return data;
-    }
-  }
-
-  try {
-    const response = await fetchWithRetry(`/api/market/scanner?name=${encodeURIComponent(scannerName)}`, {}, 1);
-    if (!response.ok) throw new Error("Server error fetching scanner");
-    
-    const results = await response.json();
-    localStorage.setItem(cacheKey, JSON.stringify({ data: results, timestamp: Date.now() }));
-    return results;
-  } catch (error) {
-    console.error(`Error fetching scanner ${scannerName}:`, error);
+  return MarketApiCache.fetch<ScannerResult[]>(
+    cacheKey,
+    async () => {
+      const response = await fetchWithRetry(`/api/market/scanner?name=${encodeURIComponent(scannerName)}`, {}, 1);
+      if (!response.ok) throw new Error("Server error fetching scanner");
+      return await response.json();
+    },
+    ttl,
+    true
+  ).catch(error => {
+    console.error(`Error fetching scanner ${scannerName}, fallback to simulated data:`, error);
+    const cached = MarketApiCache.get<ScannerResult[]>(cacheKey);
+    if (cached) return cached;
     return [
       { symbol: 'BBRI', name: 'Bank Rakyat Indonesia', signal: 'BUY', score: 85, metrics: { 'Price': '6,150', 'Volume': '45.2M', 'P/E Ratio': '12.4x', 'Market Cap': '920T', 'RSI': 62 } },
       { symbol: 'TLKM', name: 'Telkom Indonesia', signal: 'BUY', score: 92, metrics: { 'Price': '3,840', 'Volume': '28.1M', 'P/E Ratio': '15.2x', 'Market Cap': '380T', 'RSI': 58 } },
       { symbol: 'ADRO', name: 'Adaro Energy', signal: 'HOLD', score: 45, metrics: { 'Price': '2,850', 'Volume': '12.5M', 'P/E Ratio': '4.8x', 'Market Cap': '92T', 'RSI': 42 } }
     ];
-  }
+  });
 }
 
 export interface CorrelationResult {
@@ -240,35 +318,93 @@ export interface LivePrice {
 }
 
 export async function fetchLivePrices(symbols: string[]): Promise<LivePrice[]> {
-  try {
-    const tickersString = symbols.map(s => s.replace('.JK', '')).join(',');
-    const response = await fetchWithRetry(`/api/market/live-prices?symbols=${tickersString}`, {}, 1);
-    if (response.ok) {
-      const data = await response.json();
-      if (Array.isArray(data)) {
-        return data.map((item: any) => ({
-          symbol: item.symbol,
-          price: item.price,
-          changePercent: item.changePercent || 0
-        }));
-      }
+  const TTL_PRICE = 10000; // 10 seconds cache for live prices
+  const result: LivePrice[] = [];
+  const missingSymbols: string[] = [];
+
+  for (const s of symbols) {
+    const key = `live_price_${s}`;
+    const cached = MarketApiCache.get<LivePrice>(key);
+    if (cached) {
+      result.push(cached);
+    } else {
+      missingSymbols.push(s);
     }
-  } catch (e) {
-    console.warn("[VentureAM Gateway] Live price sync degraded:", e);
   }
 
-    return symbols.map(s => {
-    let price = 1000;
-    if (s === 'COMPOSITE') price = 7125;
-    else if (s === 'BBCA') price = 10450;
-    else if (s === 'BMRI') price = 7125;
-    else if (s === 'BBRI') price = 4850;
-    else if (s === 'TLKM') price = 2820;
-    
+  // If there are symbols missing from cache, fetch them together in one request
+  if (missingSymbols.length > 0) {
+    try {
+      const tickersString = missingSymbols.map(s => s.replace('.JK', '')).join(',');
+      const fetchKey = `live_price_batch_${tickersString}`;
+      
+      const prices = await MarketApiCache.fetch<LivePrice[]>(
+        fetchKey,
+        async () => {
+          const response = await fetchWithRetry(`/api/market/live-prices?symbols=${tickersString}`, {}, 1);
+          if (!response.ok) throw new Error("Price API response not warning-free");
+          const data = await response.json();
+          if (Array.isArray(data)) {
+            return data.map((item: any) => ({
+              symbol: item.symbol,
+              price: item.price,
+              changePercent: item.changePercent || 0
+            }));
+          }
+          throw new Error("Invalid response format");
+        },
+        TTL_PRICE,
+        false // Do not persist live prices to localStorage to prevent disk wear
+      );
+
+      for (const item of prices) {
+        // Cache individual symbol
+        MarketApiCache.set(`live_price_${item.symbol}`, item, TTL_PRICE, false);
+        
+        // Match user requested symbol (including possible .JK suffix)
+        const matchedReq = missingSymbols.find(s => s === item.symbol || s.replace('.JK', '') === item.symbol);
+        if (matchedReq) {
+          if (matchedReq !== item.symbol) {
+             MarketApiCache.set(`live_price_${matchedReq}`, item, TTL_PRICE, false);
+          }
+          result.push({ ...item, symbol: matchedReq });
+        }
+      }
+    } catch (e) {
+      console.warn("[VentureAM Gateway] Live price sync degraded/fetching failure:", e);
+    }
+
+    // Populate remaining un-fetched symbols with safe simulated prices & cache them
+    for (const s of missingSymbols) {
+      const matched = result.some(r => r.symbol === s);
+      if (!matched) {
+        let price = 1000;
+        if (s === 'COMPOSITE') price = 7125;
+        else if (s === 'BBCA') price = 10450;
+        else if (s === 'BMRI') price = 7125;
+        else if (s === 'BBRI') price = 4850;
+        else if (s === 'TLKM') price = 2820;
+
+        const simulated: LivePrice = {
+          symbol: s,
+          price: price,
+          changePercent: (Math.random() - 0.5) * 2
+        };
+
+        MarketApiCache.set(`live_price_${s}`, simulated, TTL_PRICE, false);
+        result.push(simulated);
+      }
+    }
+  }
+
+  // Restore alignment matching the parameter array order
+  return symbols.map(s => {
+    const found = result.find(r => r.symbol === s) || result.find(r => r.symbol.replace('.JK', '') === s.replace('.JK', ''));
+    if (found) return found;
     return {
       symbol: s,
-      price: price,
-      changePercent: (Math.random() - 0.5) * 2
+      price: 1000,
+      changePercent: 0
     };
   });
 }
@@ -285,51 +421,59 @@ export interface AssetSearchInfo {
 }
 
 export async function searchAsset(query: string): Promise<AssetSearchInfo[]> {
-  try {
-    const response = await fetchWithRetry(`/api/market/search?query=${encodeURIComponent(query)}`, {}, 1);
-    
-    if (!response.ok) {
-      const errorData = await response.json().catch(() => ({ error: "Search failed" }));
-      if (response.status === 429 || errorData.code === 'RESOURCE_EXHAUSTED') {
-        throw new Error(JSON.stringify({ 
-          code: 'RESOURCE_EXHAUSTED', 
-          message: errorData.message || "Institutional Search Quota Exceeded" 
-        }));
+  const cacheKey = `search_query_${query.trim().toLowerCase()}`;
+  const ttl = 2 * 60 * 1000; // 2 minutes query caching
+
+  return MarketApiCache.fetch<AssetSearchInfo[]>(
+    cacheKey,
+    async () => {
+      const response = await fetchWithRetry(`/api/market/search?query=${encodeURIComponent(query)}`, {}, 1);
+      
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({ error: "Search failed" }));
+        if (response.status === 429 || errorData.code === 'RESOURCE_EXHAUSTED') {
+          throw new Error(JSON.stringify({ 
+            code: 'RESOURCE_EXHAUSTED', 
+            message: errorData.message || "Institutional Search Quota Exceeded" 
+          }));
+        }
+        throw new Error(JSON.stringify(errorData));
       }
-      throw new Error(JSON.stringify(errorData));
-    }
-    const data = await response.json();
-    const assets = Array.isArray(data) ? data : [data];
-    return assets.map((asset: any) => ({
-      ...asset,
-      sparkline: asset.sparkline || Array.from({ length: 12 }, () => 
-        asset.price * (1 + (Math.random() - 0.5) * 0.05)
-      )
-    }));
-  } catch (error: any) {
-    console.error("Asset search error:", error);
+      const data = await response.json();
+      const assets = Array.isArray(data) ? data : [data];
+      return assets.map((asset: any) => ({
+        ...asset,
+        sparkline: asset.sparkline || Array.from({ length: 12 }, () => 
+          asset.price * (1 + (Math.random() - 0.5) * 0.05)
+        )
+      }));
+    },
+    ttl,
+    false // don't persist searches to disk
+  ).catch((error: any) => {
+    console.error("Asset search mapping / fetch error:", error);
     
-    // Check if it's a network error "Failed to fetch"
-    const isNetworkError = error.message?.includes('Failed to fetch') || error.message?.includes('Network failure');
-    
-    if (isNetworkError) {
-      console.warn("[VAM GATEWAY] Search network failure. Serving partial simulated results.");
-      // Provide subset of common assets as partial fallback for search if network is down
+    const cached = MarketApiCache.get<AssetSearchInfo[]>(cacheKey);
+    if (cached) return cached;
+
+    const isNetworkError = error.message?.includes('Failed to fetch') || error.message?.includes('Network failure') || String(error).includes('Network');
+    if (isNetworkError || true) {
+      console.warn("[VAM GATEWAY] Serving partial simulated results for search query:", query);
       const simulated = [
         { symbol: "BBCA", name: "Bank Central Asia Tbk.", price: 10450, changePercent: 0.25, volume: "45.2M", marketCap: "1,280T", summary: "Offline Fallback: Large-cap bank.", sparkline: Array.from({ length: 12 }, () => 10450 * (1 + (Math.random() - 0.5) * 0.02)) },
         { symbol: "BBRI", name: "Bank Rakyat Indonesia Tbk.", price: 4850, changePercent: -1.2, volume: "120M", marketCap: "735T", summary: "Offline Fallback: Micro-finance leader.", sparkline: Array.from({ length: 12 }, () => 4850 * (1 + (Math.random() - 0.5) * 0.03)) },
         { symbol: "TLKM", name: "Telkom Indonesia Tbk.", price: 2820, changePercent: 0.5, volume: "85M", marketCap: "280T", summary: "Offline Fallback: Telecom provider.", sparkline: Array.from({ length: 12 }, () => 2820 * (1 + (Math.random() - 0.5) * 0.02)) },
         { symbol: "ASII", name: "Astra International Tbk.", price: 4850, changePercent: -0.5, volume: "42M", marketCap: "196T", summary: "Offline Fallback: Conglomerate.", sparkline: Array.from({ length: 12 }, () => 4850 * (1 + (Math.random() - 0.5) * 0.025)) }
       ].filter(item => 
-        item.symbol.includes(query.toUpperCase()) || 
-        item.name.toUpperCase().includes(query.toUpperCase())
+        item.symbol.toLowerCase().includes(query.toLowerCase()) || 
+        item.name.toLowerCase().includes(query.toLowerCase())
       );
       
-      if (simulated.length > 0) return simulated;
+      return simulated;
     }
     
     throw error;
-  }
+  });
 }
 
 export interface NewsSentimentAnalysis {
@@ -463,83 +607,81 @@ export interface FundamentalAudit {
 }
 
 export async function fetchFundamentalAudit(symbol: string, retries = 2): Promise<FundamentalAudit | null> {
-  try {
-    const response = await fetchWithRetry(`/api/market/fundamental-audit?symbol=${encodeURIComponent(symbol)}`, {}, retries);
-    if (!response.ok) {
-      const errorData = await response.json().catch(() => ({ error: "Audit failed" }));
-      if (response.status === 429 || errorData.code === 'RESOURCE_EXHAUSTED') {
-        if (retries > 0) {
-          console.warn(`[VAM GATEWAY] Quota reached, retrying... (${retries} left)`);
-          await new Promise(resolve => setTimeout(resolve, 2000));
-          return fetchFundamentalAudit(symbol, retries - 1);
+  const cleanSymbol = symbol.trim().toUpperCase();
+  const cacheKey = `fundamental_audit_${cleanSymbol}`;
+  const ttl = 15 * 60 * 1000; // 15 minutes cache for company profiles
+
+  return MarketApiCache.fetch<FundamentalAudit | null>(
+    cacheKey,
+    async () => {
+      const response = await fetchWithRetry(`/api/market/fundamental-audit?symbol=${encodeURIComponent(cleanSymbol)}`, {}, retries);
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({ error: "Audit failed" }));
+        if (response.status === 429 || errorData.code === 'RESOURCE_EXHAUSTED') {
+          throw new Error(JSON.stringify({ 
+            code: 'RESOURCE_EXHAUSTED', 
+            message: errorData.message || "Institutional Quota Exceeded" 
+          }));
         }
-        throw new Error(JSON.stringify({ 
-          code: 'RESOURCE_EXHAUSTED', 
-          message: errorData.message || "Institutional Quota Exceeded" 
-        }));
+        throw new Error(JSON.stringify(errorData));
       }
-      throw new Error(JSON.stringify(errorData));
-    }
-    return await response.json();
-  } catch (error) {
-    console.error("Fundamental audit error:", error);
-    if (retries > 0 && !(error instanceof Error && error.message.includes('RESOURCE_EXHAUSTED'))) {
-       await new Promise(resolve => setTimeout(resolve, 1000));
-       return fetchFundamentalAudit(symbol, retries - 1);
-    }
+      return await response.json();
+    },
+    ttl,
+    true // Persist company profiles across reloads, since these are large static models
+  ).catch(error => {
+    console.error("Fundamental audit fetch error:", error);
+    const cached = MarketApiCache.get<FundamentalAudit>(cacheKey);
+    if (cached) return cached;
+    
     throw error;
-  }
+  });
 }
 
 export async function fetchStockRecommendations(options?: ScanOptions): Promise<StockRecommendation[]> {
-  const cacheKey = 'ventuream_stocks_cache';
-  const type = 'stocks';
+  const cacheKey = options 
+    ? `recommendations_cache_${JSON.stringify(options)}` 
+    : 'recommendations_cache_default';
+  
+  const ttl = 15 * 60 * 1000; // 15 minutes recommendations cache
 
-  const circuitBroken = isCircuitBroken(type);
-  const cached = localStorage.getItem(cacheKey);
+  return MarketApiCache.fetch<StockRecommendation[]>(
+    cacheKey,
+    async () => {
+      const params = new URLSearchParams();
+      if (options?.sector) params.append('sector', options.sector);
+      if (options?.riskProfile) params.append('riskProfile', options.riskProfile);
+      if (options?.signalFilter) params.append('signalFilter', options.signalFilter);
+      if (options?.rsiRange) params.append('rsiRange', JSON.stringify(options.rsiRange));
+      if (options?.macdLevel) params.append('macdLevel', options.macdLevel);
+      if (options?.minVolume) params.append('minVolume', options.minVolume);
+      if (options?.dateRange) params.append('dateRange', JSON.stringify(options.dateRange));
+      
+      const response = await fetchWithRetry(`/api/market/recommendations?${params.toString()}`, {}, 1).catch(err => {
+        console.error("Network error fetching recommendations:", err);
+        throw new Error(`Network failure: ${err.message}`);
+      });
+      
+      if (!response.ok) {
+        const errText = await response.text().catch(() => "Unknown error");
+        console.error(`Recommendations API responded with ${response.status}: ${errText}`);
+        throw new Error(`Server error: ${response.status}`);
+      }
+      
+      return await response.json();
+    },
+    ttl,
+    true
+  ).catch((error: any) => {
+    console.error("Error fetching recommendations, utilizing fallback:", error);
+    const cached = MarketApiCache.get<StockRecommendation[]>(cacheKey) || MarketApiCache.get<StockRecommendation[]>('recommendations_cache_default');
+    if (cached) return cached;
 
-  if (!options || (options.sector === '' && options.riskProfile === 'moderate' && options.signalFilter === 'ALL')) {
-    if (cached) {
-      const { data, timestamp } = JSON.parse(cached);
-      const isExpired = Date.now() - timestamp > CACHE_DURATION;
-      if (circuitBroken || !isExpired) return data;
-    }
-  }
-
-  try {
-    const params = new URLSearchParams();
-    if (options?.sector) params.append('sector', options.sector);
-    if (options?.riskProfile) params.append('riskProfile', options.riskProfile);
-    if (options?.signalFilter) params.append('signalFilter', options.signalFilter);
-    if (options?.rsiRange) params.append('rsiRange', JSON.stringify(options.rsiRange));
-    if (options?.macdLevel) params.append('macdLevel', options.macdLevel);
-    if (options?.minVolume) params.append('minVolume', options.minVolume);
-    if (options?.dateRange) params.append('dateRange', JSON.stringify(options.dateRange));
-    
-    const response = await fetchWithRetry(`/api/market/recommendations?${params.toString()}`, {}, 1).catch(err => {
-      console.error("Network error fetching recommendations:", err);
-      throw new Error(`Network failure: ${err.message}`);
-    });
-    
-    if (!response.ok) {
-      const errText = await response.text().catch(() => "Unknown error");
-      console.error(`Recommendations API responded with ${response.status}: ${errText}`);
-      throw new Error(`Server error: ${response.status}`);
-    }
-    
-    const recommendations = await response.json();
-    if (!options || (options.sector === '' && options.riskProfile === 'moderate' && options.signalFilter === 'ALL')) {
-      localStorage.setItem(cacheKey, JSON.stringify({ data: recommendations, timestamp: Date.now() }));
-    }
-    return recommendations;
-  } catch (error: any) {
-    console.error(`Error fetching ${type}:`, error);
-    if (cached) return JSON.parse(cached).data;
     return [
       { symbol: 'BBCA', name: 'Bank Central Asia Tbk', price: '10,450', change: '+1.21%', signal: 'BUY', volume: '45.2M', peRatio: '24.8x', marketCap: '1,280T', ema20: '10,240' },
       { symbol: 'BMRI', name: 'Bank Mandiri (Persero) Tbk', price: '7,125', change: '+0.85%', signal: 'BUY', volume: '62.1M', peRatio: '11.5x', marketCap: '665T', ema20: '7,050' },
       { symbol: 'BBRI', name: 'Bank Rakyat Indonesia Tbk', price: '4,850', change: '+1.04%', signal: 'BUY', volume: '88.4M', peRatio: '14.5x', marketCap: '735T', ema20: '4,790' },
       { symbol: 'TLKM', name: 'Telkom Indonesia Tbk', price: '2,820', change: '-0.35%', signal: 'HOLD', volume: '110.2M', peRatio: '14.2x', marketCap: '279T', ema20: '2,860' },
     ];
-  }
+  });
 }

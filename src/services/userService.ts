@@ -13,7 +13,15 @@ export const getUserProfile = async (uid: string): Promise<UserProfile | null> =
 
 export const ensureUserProfile = async (uid: string, email: string, displayName: string): Promise<UserProfile> => {
   const existing = await getUserProfile(uid);
-  if (existing) return existing;
+  const isAdminEmail = email === 'aidilsyahdan2000@gmail.com' || email === 'pt.ventuream@gmail.com';
+
+  if (existing) {
+    if (isAdminEmail && existing.role !== 'President_Director') {
+      existing.role = 'President_Director';
+      await updateUserRole(uid, 'President_Director');
+    }
+    return existing;
+  }
 
   const newUser: any = {
     uid,
@@ -24,7 +32,7 @@ export const ensureUserProfile = async (uid: string, email: string, displayName:
   };
 
   // Bootstrap President_Director if it's the specific admin email
-  if (email === 'aidilsyahdan2000@gmail.com') {
+  if (isAdminEmail) {
     newUser.role = 'President_Director';
   }
 

@@ -48,13 +48,13 @@ function VamSmartScanner() {
   }, []);
 
   return (
-    <div className="secure-scanner-container border border-[#FFD700] rounded-3xl overflow-hidden bg-slate-950 shadow-2xl shadow-[#FFD700]/5">
-      <div className="scanner-header bg-slate-900/80 p-3 text-[#FFD700] text-[10px] font-black uppercase tracking-[0.2em] border-b border-slate-800 flex items-center justify-between gap-2">
+    <div className="secure-scanner-container border border-zinc-800/80 rounded-3xl overflow-hidden bg-[#020407] shadow-xl">
+      <div className="scanner-header bg-zinc-900/10 p-4 text-[#DFFF00] text-[10px] font-black uppercase tracking-[0.2em] border-b border-zinc-900 flex items-center justify-between gap-2">
         <div className="flex items-center gap-2">
-          <div className="w-1.5 h-1.5 bg-red-500 rounded-full animate-pulse" />
+          <div className="w-1.5 h-1.5 bg-emerald-500 rounded-full animate-pulse" />
           INSTITUTIONAL FEED: VAM SMART SCANNER (LIVE IDX)
         </div>
-        <div className="text-[8px] bg-red-500/10 px-2 py-0.5 rounded border border-red-500/30 text-red-500 font-bold">
+        <div className="text-[8px] bg-[#DFFF00]/10 px-2 py-0.5 rounded border border-[#DFFF00]/20 text-[#DFFF00] font-bold">
           GATEWAY_SYNC_ACTIVE
         </div>
       </div>

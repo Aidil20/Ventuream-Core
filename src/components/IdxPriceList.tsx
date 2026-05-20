@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { TrendingUp, TrendingDown, Minus, Zap } from 'lucide-react';
+import { TrendingUp, TrendingDown, Minus, Zap, RefreshCw } from 'lucide-react';
 
 interface PriceData {
   symbol: string;
@@ -43,6 +43,18 @@ const IDX_COMPANIES: Record<string, string> = {
 export const IdxPriceList = () => {
   const [prices, setPrices] = useState<Record<string, PriceData>>({});
   const [lastUpdate, setLastUpdate] = useState<string>("");
+  const [isRefreshing, setIsRefreshing] = useState(false);
+
+  const handleManualRefresh = () => {
+    if (isRefreshing) return;
+    setIsRefreshing(true);
+    // Dispatch global refresh event
+    window.dispatchEvent(new CustomEvent('vam-force-market-refresh'));
+    // Visual feedback delay
+    setTimeout(() => {
+      setIsRefreshing(false);
+    }, 1200);
+  };
 
   useEffect(() => {
     const handleMarketUpdate = (event: any) => {
@@ -78,9 +90,19 @@ export const IdxPriceList = () => {
           </h3>
           <p className="text-[8px] text-zinc-500 font-bold uppercase tracking-widest mt-1">Direct Exchange Gateway Access</p>
         </div>
-        <div className="text-right">
-          <p className="text-[8px] text-zinc-600 font-black uppercase tracking-tighter">Connection: Active</p>
-          <p className="text-[9px] text-[#deff9a] font-mono font-bold">{lastUpdate || '--:--:--'}</p>
+        <div className="flex items-center gap-3">
+          <div className="text-right">
+            <p className="text-[8px] text-zinc-600 font-black uppercase tracking-tighter">Connection: Active</p>
+            <p className="text-[9px] text-[#deff9a] font-mono font-bold">{lastUpdate || '--:--:--'}</p>
+          </div>
+          <button
+            onClick={handleManualRefresh}
+            disabled={isRefreshing}
+            className="p-1.5 rounded-lg border border-zinc-800 bg-zinc-900/50 hover:bg-zinc-800 text-[#deff9a] hover:text-white transition-all active:scale-95 cursor-pointer flex items-center justify-center"
+            title="Refresh IDX Feed"
+          >
+            <RefreshCw className={`w-3 h-3 ${isRefreshing ? 'animate-spin' : ''}`} />
+          </button>
         </div>
       </div>
 

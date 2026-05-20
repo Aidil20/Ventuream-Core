@@ -6,7 +6,8 @@ const TradingViewScreenerWidget: React.FC = () => {
   useEffect(() => {
     const currentContainer = container.current;
     
-    if (currentContainer && !currentContainer.querySelector('script')) {
+    if (currentContainer) {
+      currentContainer.innerHTML = `<div class="tradingview-widget-container__widget h-full"></div>`;
       const scriptElement = document.createElement("script");
       scriptElement.src = "https://s3.tradingview.com/external-embedding/embed-widget-screener.js";
       scriptElement.type = "text/javascript";
@@ -26,7 +27,9 @@ const TradingViewScreenerWidget: React.FC = () => {
     }
     
     return () => {
-      // Safe cleanup
+      if (currentContainer) {
+        currentContainer.innerHTML = '';
+      }
     };
   }, []);
 

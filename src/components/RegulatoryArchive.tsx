@@ -75,7 +75,7 @@ export default function RegulatoryArchive() {
                 <AnimatePresence mode="popLayout">
                   {filteredLogs.map((log, i) => (
                     <motion.tr 
-                      key={log.time}
+                      key={`${log.time}-${i}`}
                       initial={{ opacity: 0 }}
                       animate={{ opacity: 1 }}
                       exit={{ opacity: 0 }}
