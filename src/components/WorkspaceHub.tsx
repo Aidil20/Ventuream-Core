@@ -570,9 +570,9 @@ export const WorkspaceHub: React.FC<WorkspaceHubProps> = ({ onAuthRequired }) =>
                 </div>
               ) : (
                 <div className="max-h-[500px] overflow-y-auto space-y-2 pr-1 custom-scrollbar">
-                  {getFilteredItems(files).map((file) => (
+                  {getFilteredItems(files).map((file, idx) => (
                     <div 
-                      key={file.id} 
+                      key={`${file.id}-${idx}`} 
                       className="bg-black/40 border border-zinc-900/60 p-3.5 rounded-xl flex items-center justify-between hover:border-zinc-800 transition-colors"
                     >
                       <div className="flex items-center gap-3">
@@ -635,9 +635,9 @@ export const WorkspaceHub: React.FC<WorkspaceHubProps> = ({ onAuthRequired }) =>
                   </div>
                 ) : (
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-3 max-h-[300px] overflow-y-auto pr-1">
-                    {getFilteredItems(docs).map((docFile) => (
+                    {getFilteredItems(docs).map((docFile, idx) => (
                       <button
-                        key={docFile.id}
+                        key={`${docFile.id}-${idx}`}
                         onClick={() => loadDocContent(docFile.id, docFile.name)}
                         className={`text-left p-4 rounded-2xl border transition-all flex flex-col justify-between ${
                           selectedDocId === docFile.id 
@@ -728,9 +728,9 @@ export const WorkspaceHub: React.FC<WorkspaceHubProps> = ({ onAuthRequired }) =>
                   </div>
                 ) : (
                   <div className="flex gap-2 pb-2 overflow-x-auto select-none custom-scrollbar">
-                    {sheets.map((sheet) => (
+                    {sheets.map((sheet, idx) => (
                       <button
-                        key={sheet.id}
+                        key={`${sheet.id}-${idx}`}
                         onClick={() => {
                           setSelectedSheetId(sheet.id);
                           loadSheetValues(sheet.id);
@@ -847,12 +847,12 @@ export const WorkspaceHub: React.FC<WorkspaceHubProps> = ({ onAuthRequired }) =>
                 </div>
               ) : (
                 <div className="space-y-3 max-h-[500px] overflow-y-auto pr-1">
-                  {events.map((event) => {
+                  {events.map((event, idx) => {
                     const startStr = event.start?.dateTime || event.start?.date || '';
                     const parsedDate = startStr ? new Date(startStr) : null;
                     return (
                       <div 
-                        key={event.id}
+                        key={`${event.id || 'evt'}-${idx}`}
                         className="p-4 bg-zinc-950/40 border border-zinc-900 hover:border-zinc-850 rounded-2xl flex items-center justify-between"
                       >
                         <div className="flex items-start gap-4">

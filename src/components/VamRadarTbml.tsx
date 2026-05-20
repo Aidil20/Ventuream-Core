@@ -676,9 +676,9 @@ export default function VamRadarTbml() {
                 </div>
 
                 <div className="space-y-3 max-h-[460px] overflow-y-auto pr-2 custom-scrollbar">
-                  {alerts.map((alert) => (
+                  {alerts.map((alert, idx) => (
                     <div 
-                      key={alert.id}
+                      key={`${alert.id}-${idx}`}
                       className="p-4 bg-zinc-950/60 hover:bg-zinc-950/90 border border-zinc-900 hover:border-zinc-800 rounded-2xl transition-all relative overflow-hidden group"
                     >
                       {/* Critical Red left border glow */}
@@ -730,7 +730,7 @@ export default function VamRadarTbml() {
 
                     return (
                       <div 
-                        key={invoice.id}
+                        key={`${invoice.id}-${idx}`}
                         className={`p-3.5 rounded-2xl border ${hasAnom ? 'bg-zinc-950/20 border-red-500/10' : 'bg-zinc-950/40 border-zinc-900'} relative`}
                       >
                         <div className="flex items-center justify-between mb-2">
@@ -1107,7 +1107,7 @@ export default function VamRadarTbml() {
               <span className="text-[8px] font-black text-zinc-500 uppercase tracking-widest block mb-2">Live Matching Sequences</span>
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                {bankLogs.map((log) => {
+                {bankLogs.map((log, idx) => {
                   // Mapped invoice
                   const correlatedInvoice = invoices.find(i => i.id === log.invoice_id);
                   // Find related SID Activity based on amount proximity or explicitly seeded matching timestamps
@@ -1122,7 +1122,7 @@ export default function VamRadarTbml() {
 
                   return (
                     <div 
-                      key={log.transaction_id}
+                      key={`${log.transaction_id}-${idx}`}
                       className={`p-5 rounded-[2rem] border transition-all ${
                         isLayeringMatch 
                           ? 'bg-zinc-950/40 border-red-500/20 shadow-[0_0_20px_rgba(239,68,68,0.03)]' 
