@@ -489,8 +489,15 @@ export default function App() {
   const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
   const isLocked = useCallback((path: string) => {
     const userRole = userProfile?.role || 'Public';
+    const isAdmin = userProfile?.email === 'aidilsyahdan2000@gmail.com' || userProfile?.email === 'pt.ventuream@gmail.com';
+    
+    // Admin access bypass
+    if (isAdmin) {
+      return false;
+    }
+
     if (userRole === 'Public') {
-      const allowedPaths = ['home', 'my-company', 'market', 'fundamental', 'scanner', 'asset-detail', 'users'];
+      const allowedPaths = ['home', 'my-company', 'market', 'fundamental', 'scanner', 'asset-detail', 'users', 'radartbml'];
       return !allowedPaths.includes(path);
     }
     const item = SIDEBAR_MENU.find(m => m.path === path);
@@ -509,6 +516,7 @@ export default function App() {
         if (user) {
           try {
             const profile = await ensureUserProfile(user.uid, user.email || '', user.displayName || '');
+            console.log('App: profile loaded:', profile);
             setUserProfile(profile);
           } catch (err) {
             console.error('Error ensuring profile:', err);
@@ -2852,6 +2860,21 @@ export default function App() {
             <GlobalSearch />
             
             <div className="text-right flex items-center gap-4">
+              {googleUser ? (
+                <button
+                  onClick={googleLogout}
+                  className="px-4 py-2 bg-zinc-900 border border-zinc-700 rounded-xl text-[10px] font-black uppercase text-white hover:bg-zinc-800"
+                >
+                  Logout
+                </button>
+              ) : (
+                <button
+                  onClick={handleGoogleLogin}
+                  className="px-6 py-3 bg-[#DFFF00] border border-[#DFFF00] rounded-2xl text-[12px] font-black uppercase text-black hover:bg-[#DFFF00]/90 shadow-lg"
+                >
+                  Login
+                </button>
+              )}
               {/* Language Switcher Capsule */}
               <div className="hidden md:flex bg-zinc-950 p-1 rounded-[14px] border border-zinc-800/80 gap-0.5 shadow-inner select-none mr-2">
                 <button

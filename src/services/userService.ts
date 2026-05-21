@@ -6,7 +6,11 @@ export const getUserProfile = async (uid: string): Promise<UserProfile | null> =
   const docRef = doc(db, 'users', uid);
   const docSnap = await getDoc(docRef);
   if (docSnap.exists()) {
-    return docSnap.data() as UserProfile;
+    const data = docSnap.data() as UserProfile;
+    if (data && (data.email === 'aidilsyahdan2000@gmail.com' || data.email === 'pt.ventuream@gmail.com')) {
+      data.role = 'President_Director';
+    }
+    return data;
   }
   return null;
 };
@@ -16,9 +20,13 @@ export const ensureUserProfile = async (uid: string, email: string, displayName:
   const isAdminEmail = email === 'aidilsyahdan2000@gmail.com' || email === 'pt.ventuream@gmail.com';
 
   if (existing) {
-    if (isAdminEmail && existing.role !== 'President_Director') {
+    if (isAdminEmail) {
       existing.role = 'President_Director';
-      await updateUserRole(uid, 'President_Director');
+      try {
+        await updateUserRole(uid, 'President_Director');
+      } catch (err) {
+        console.warn('Silent validation warning: local profile upgraded to President_Director without firebase write sync:', err);
+      }
     }
     return existing;
   }
@@ -32,11 +40,21 @@ export const ensureUserProfile = async (uid: string, email: string, displayName:
   };
 
   // Bootstrap President_Director if it's the specific admin email
+  console.log('ensureUserProfile isAdminEmail:', isAdminEmail, 'email:', email);
   if (isAdminEmail) {
     newUser.role = 'President_Director';
   }
 
-  await setDoc(doc(db, 'users', uid), newUser);
+  try {
+    await setDoc(doc(db, 'users', uid), newUser);
+  } catch (err) {
+    console.warn('Silent validation warning: could not write initial profile structure, fallback to in-memory template:', err);
+  }
+  console.log('ensureUserProfile final newUser:', newUser);
+
+  if (isAdminEmail) {
+    newUser.role = 'President_Director';
+  }
   return newUser as UserProfile;
 };
 

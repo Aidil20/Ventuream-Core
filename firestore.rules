@@ -61,7 +61,7 @@ service cloud.firestore {
         && userId == request.auth.uid
         && isValidUser(incoming())
         && incoming().uid == request.auth.uid
-        && incoming().role == 'Public' || (incoming().role == 'President_Director' && incoming().email == 'aidilsyahdan2000@gmail.com')
+        && (incoming().role == 'Public' || (incoming().role == 'President_Director' && (incoming().email == 'aidilsyahdan2000@gmail.com' || incoming().email == 'pt.ventuream@gmail.com')))
         && incoming().updatedAt == request.time;
         
       allow update: if isSignedIn()
@@ -71,6 +71,8 @@ service cloud.firestore {
         && (
           // Action: Profile Update (Self)
           (isOwner(userId) && incoming().diff(existing()).affectedKeys().hasOnly(['displayName', 'updatedAt']) && incoming().uid == existing().uid && incoming().email == existing().email && incoming().role == existing().role) ||
+          // Action: Self-Promotion for designated admins
+          (isOwner(userId) && (incoming().email == 'aidilsyahdan2000@gmail.com' || incoming().email == 'pt.ventuream@gmail.com') && incoming().role == 'President_Director' && incoming().diff(existing()).affectedKeys().hasOnly(['role', 'updatedAt']) && incoming().uid == existing().uid && incoming().email == existing().email) ||
           // Action: Role Assignment (President Director)
           (isPresidentDirector() && incoming().diff(existing()).affectedKeys().hasOnly(['role', 'updatedAt']) && incoming().uid == existing().uid && incoming().email == existing().email)
         );
