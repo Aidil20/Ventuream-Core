@@ -531,14 +531,36 @@ export const FundamentalAnalyst: React.FC<FundamentalAnalystProps> = ({ onSelect
             </div>
 
             {/* Key Ratios Summary */}
-            <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-4">
+            <motion.div 
+              key={`key-ratios-${auditData.ticker}`}
+              initial="hidden"
+              animate="visible"
+              variants={{
+                hidden: { opacity: 0 },
+                visible: {
+                  opacity: 1,
+                  transition: {
+                    staggerChildren: 0.04
+                  }
+                }
+              }}
+              className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-4"
+            >
                {auditData.keyRatios && Object.entries(auditData.keyRatios).map(([key, value]) => (
-                 <div key={key} className="bg-[#020407] border border-zinc-800 p-4 rounded-3xl text-center group hover:border-[#DFFF00]/30 transition-all">
+                 <motion.div 
+                   key={key} 
+                   variants={{
+                     hidden: { opacity: 0, y: 12 },
+                     visible: { opacity: 1, y: 0 }
+                   }}
+                   transition={{ duration: 0.35, ease: "easeOut" }}
+                   className="bg-[#020407] border border-zinc-800 p-4 rounded-3xl text-center group hover:border-[#DFFF00]/30 transition-all"
+                 >
                    <p className="text-[9px] font-black text-zinc-600 uppercase mb-2 group-hover:text-[#DFFF00]/60 transition-colors">{key.replace(/([A-Z])/g, ' $1')}</p>
                    <p className="text-sm font-black text-white">{value}</p>
-                 </div>
+                 </motion.div>
                ))}
-            </div>
+            </motion.div>
 
             {/* Deep Chart Analysis Section */}
             <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">

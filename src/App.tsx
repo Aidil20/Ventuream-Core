@@ -86,10 +86,12 @@ import { NewsFeed } from './components/NewsFeed';
 import { fetchMarketNews } from './services/marketService';
 import { StockExplorer } from './components/StockExplorer';
 import { FundamentalAnalyst } from './components/FundamentalAnalyst';
-import { initAuth, googleSignIn, logout as googleLogout } from './lib/auth';
+import { initAuth, googleSignIn, logout as googleLogout, db } from './lib/auth';
 import { WorkspaceHub } from './components/WorkspaceHub';
 import { User } from 'firebase/auth';
+import { doc, onSnapshot } from 'firebase/firestore';
 import { GlobalSearch } from './components/GlobalSearch';
+import HoldingCard from './components/HoldingCard';
 
 const ASSETS = [
   {
@@ -179,6 +181,7 @@ const SIDEBAR_MENU = [
   { id: 0, label: "Dashboard Utama", icon: Home, path: "home", color: "#deff9a" },
   { id: 99, label: "About Company", icon: Building, path: "my-company", color: "#DFFF00" },
   { id: 20, label: "VAM Radar TBML", icon: Radar, path: "radartbml", color: "#f43f5e" },
+  { id: 21, label: "VamSmartScanner", icon: Activity, path: "vamsmartscanner", color: "#DFFF00" },
   { id: 13, label: "Fundamental Analyst", icon: BrainCircuit, path: "fundamental", color: "#DFFF00" },
   { id: 8, label: "Monitor Pasar", icon: Search, path: "market", color: "#deff9a" },
   { id: 1, label: "Analisis Portofolio", icon: BarChart3, path: "portfolio", color: "#deff9a" },
@@ -227,6 +230,7 @@ import BloombergTable from './components/BloombergTable';
 import VAMTerminalScanner from './components/VAMTerminalScanner';
 import RebalanceTool from './components/RebalanceTool';
 import VamRadarTbml from './components/VamRadarTbml';
+import { TechnicalRecommendations } from './components/TechnicalRecommendations';
 
 const myCGSPortfolio = {
   accountID: "YU001HC5400154",
@@ -271,16 +275,38 @@ const MarketFeedLog = ({ stockData }: { stockData: StockRecommendation }) => {
   const isUp = performanceData[performanceData.length - 1] >= performanceData[0];
 
   return (
-    <div className="flex items-start gap-4 p-3 border-b border-white/5 last:border-0 hover:bg-white/5 transition-colors group">
-      <div className="flex flex-col items-center gap-1 min-w-[50px]">
+    <motion.div 
+      initial={{ opacity: 0, x: -8 }}
+      animate={{ opacity: 1, x: 0 }}
+      exit={{ opacity: 0, x: 8 }}
+      transition={{ duration: 0.35, ease: 'easeOut' }}
+      className="flex items-start gap-4 p-3 border-b border-white/5 last:border-0 hover:bg-white/5 transition-colors group relative overflow-hidden"
+    >
+      <AnimatePresence>
+        {isUpdating && (
+          <motion.div 
+            initial={{ opacity: 0.15 }}
+            animate={{ opacity: 0 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 1.2 }}
+            className="absolute inset-0 bg-[#deff9a]/10 pointer-events-none"
+          />
+        )}
+      </AnimatePresence>
+
+      <div className="flex flex-col items-center gap-1 min-w-[50px] relative z-10">
         <span className="text-[9px] font-mono text-zinc-500">{timeString}</span>
         <div className="w-px h-full bg-zinc-800 group-last:hidden" />
       </div>
-      <div className="flex-1 flex items-center justify-between gap-4">
+      <div className="flex-1 flex items-center justify-between gap-4 relative z-10">
         <div className="flex-1">
           <p className="text-[11px] leading-relaxed text-zinc-300">
             <span className="font-black text-white">{stockData.symbol}</span> detected: 
-            Price (<span className={`transition-colors duration-300 ${isUpdating ? 'text-[#deff9a]' : 'text-blue-400'}`}>Rp {currentPrice}</span> <span className={`text-[8px] font-black uppercase transition-all ${isUpdating ? 'text-[#deff9a] scale-110' : 'text-blue-500/80 animate-pulse'}`}>LIVE</span>) &gt; EMA20 (<span className="text-orange-400">Rp {stockData.ema20}</span>). 
+            Price (<motion.span 
+              animate={isUpdating ? { scale: [1, 1.15, 1], color: ['#60a5fa', '#deff9a', '#60a5fa'] } : {}}
+              transition={{ duration: 0.4 }}
+              className="inline-block font-mono font-bold text-blue-400"
+            >Rp {currentPrice}</motion.span> <span className={`text-[8px] font-black uppercase transition-all ${isUpdating ? 'text-[#deff9a] scale-110' : 'text-blue-500/80 animate-pulse'}`}>LIVE</span>) &gt; EMA20 (<span className="text-orange-400">Rp {stockData.ema20}</span>). 
             <span className="ml-2 inline-flex items-center gap-1.5 font-bold uppercase tracking-widest text-[9px]">
               Strength: <span className="text-[#00ff00] bg-[#00ff00]/10 px-1.5 py-0.5 rounded border border-[#00ff00]/20">QUALIFIED</span>
             </span>
@@ -294,7 +320,7 @@ const MarketFeedLog = ({ stockData }: { stockData: StockRecommendation }) => {
           />
         </div>
       </div>
-    </div>
+    </motion.div>
   );
 };
 
@@ -489,7 +515,12 @@ export default function App() {
   const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
   const isLocked = useCallback((path: string) => {
     const userRole = userProfile?.role || 'Public';
-    const isAdmin = userProfile?.email === 'aidilsyahdan2000@gmail.com' || userProfile?.email === 'pt.ventuream@gmail.com';
+    const profileEmailLower = (userProfile?.email || '').toLowerCase();
+    const googleEmailLower = (googleUser?.email || '').toLowerCase();
+    const isAdmin = profileEmailLower === 'aidilsyahdan2000@gmail.com' || 
+                    profileEmailLower === 'pt.ventuream@gmail.com' ||
+                    googleEmailLower === 'aidilsyahdan2000@gmail.com' ||
+                    googleEmailLower === 'pt.ventuream@gmail.com';
     
     // Admin access bypass
     if (isAdmin) {
@@ -497,7 +528,7 @@ export default function App() {
     }
 
     if (userRole === 'Public') {
-      const allowedPaths = ['home', 'my-company', 'market', 'fundamental', 'scanner', 'asset-detail', 'users', 'radartbml'];
+      const allowedPaths = ['home', 'my-company', 'market', 'fundamental', 'scanner', 'asset-detail', 'users', 'radartbml', 'vamsmartscanner'];
       return !allowedPaths.includes(path);
     }
     const item = SIDEBAR_MENU.find(m => m.path === path);
@@ -505,10 +536,12 @@ export default function App() {
       return true;
     }
     return false;
-  }, [userProfile]);
+  }, [userProfile, googleUser]);
   const [isLoggingIn, setIsLoggingIn] = useState(false);
 
   useEffect(() => {
+    let unsubProfile: (() => void) | null = null;
+
     const unsubscribe = initAuth(
       async (user) => {
         setGoogleUser(user);
@@ -518,6 +551,27 @@ export default function App() {
             const profile = await ensureUserProfile(user.uid, user.email || '', user.displayName || '');
             console.log('App: profile loaded:', profile);
             setUserProfile(profile);
+
+            // Clean up any existing firestore snapshot listener
+            if (unsubProfile) {
+              unsubProfile();
+              unsubProfile = null;
+            }
+
+            // Real-time listener on user profile
+            const docRef = doc(db, 'users', user.uid);
+            unsubProfile = onSnapshot(docRef, (docSnap) => {
+              if (docSnap.exists()) {
+                const data = docSnap.data() as UserProfile;
+                const emailLower = (data?.email || '').toLowerCase();
+                if (data && (emailLower === 'aidilsyahdan2000@gmail.com' || emailLower === 'pt.ventuream@gmail.com')) {
+                  data.role = 'President_Director';
+                }
+                setUserProfile(data);
+              }
+            }, (err) => {
+              console.error('Real-time profile listener error:', err);
+            });
           } catch (err) {
             console.error('Error ensuring profile:', err);
           }
@@ -526,9 +580,18 @@ export default function App() {
       () => {
         setNeedsAuth(true);
         setUserProfile(null);
+        if (unsubProfile) {
+          unsubProfile();
+          unsubProfile = null;
+        }
       }
     );
-    return () => unsubscribe();
+    return () => {
+      unsubscribe();
+      if (unsubProfile) {
+        unsubProfile();
+      }
+    };
   }, []);
 
   const handleGoogleLogin = async () => {
@@ -1222,6 +1285,16 @@ export default function App() {
           <div className="space-y-6">
             {/* Global Gateway Sync Status Banner */}
             <GlobalGatewayBanner />
+
+            {/* AI Technical Engine Recommendations Section */}
+            <motion.section
+              initial={{ opacity: 0, y: 15 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.6 }}
+              className="mt-4"
+            >
+              <TechnicalRecommendations />
+            </motion.section>
 
             {/* Market Insights */}
             <motion.section
@@ -1966,14 +2039,42 @@ export default function App() {
                   Scan 800+ IDX tickers for breakout patterns and relative strength using core Ventuream intelligence. Precision targeting for the Indonesian market.
                 </p>
                 <div className="flex flex-col gap-3">
-                  <button 
+                  <motion.button 
                     onClick={() => {
                       updateStocks();
                       setShowVamScanner(!showVamScanner);
                     }}
                     disabled={isScanning}
-                    className="w-full py-4 bg-[#deff9a] text-slate-950 font-black text-[11px] uppercase tracking-[0.2em] rounded-2xl shadow-[0_0_30px_rgba(222,255,154,0.15)] hover:scale-[1.01] active:scale-[0.98] transition-all disabled:opacity-50 flex items-center justify-center gap-3"
+                    className="w-full py-4 bg-[#deff9a] text-slate-950 font-black text-[11px] uppercase tracking-[0.2em] rounded-2xl shadow-[0_0_30px_rgba(222,255,154,0.15)] hover:scale-[1.01] active:scale-[0.98] transition-all disabled:opacity-50 flex items-center justify-center gap-3 relative overflow-hidden"
+                    animate={(!isScanning && !showVamScanner) ? {
+                      boxShadow: [
+                        "0 0 15px rgba(222,255,154,0.15)",
+                        "0 0 32px rgba(222,255,154,0.5)",
+                        "0 0 15px rgba(222,255,154,0.15)"
+                      ]
+                    } : {}}
+                    transition={(!isScanning && !showVamScanner) ? {
+                      duration: 2,
+                      repeat: Infinity,
+                      ease: "easeInOut"
+                    } : {}}
                   >
+                    {/* Subtle sweeping shimmer overlay when idle */}
+                    {!isScanning && !showVamScanner && (
+                      <motion.div 
+                        className="absolute inset-0 w-[200%] h-full bg-gradient-to-r from-transparent via-white/35 to-transparent -skew-x-12"
+                        animate={{
+                          x: ['-100%', '100%']
+                        }}
+                        transition={{
+                          repeat: Infinity,
+                          duration: 2.5,
+                          ease: "easeInOut",
+                          repeatDelay: 1.5
+                        }}
+                        style={{ pointerEvents: 'none' }}
+                      />
+                    )}
                     {isScanning ? (
                       <>
                         <RefreshCw className="w-4 h-4 animate-spin text-slate-900" />
@@ -1985,7 +2086,7 @@ export default function App() {
                         {showVamScanner ? 'Hide Smart Scanner' : 'Execute Smart IDX Scan'}
                       </>
                     )}
-                  </button>
+                  </motion.button>
 
                   <button 
                     onClick={() => setShowIntradayScanner(!showIntradayScanner)}
@@ -2151,11 +2252,10 @@ export default function App() {
                   
                   <div className="space-y-3">
                     {portfolioData.map((asset, idx) => (
-                      <motion.div 
+                      <HoldingCard
                         key={`${asset.ticker}-${idx}`}
-                        initial={{ opacity: 0, y: 10 }}
-                        animate={{ opacity: 1, y: 0 }}
-                        transition={{ delay: idx * 0.05 }}
+                        asset={asset}
+                        idx={idx}
                         onClick={() => {
                           const cleanTicker = asset.ticker.split('.')[0];
                           const foundAsset = ASSETS.find(a => a.symbol === cleanTicker);
@@ -2164,26 +2264,7 @@ export default function App() {
                             setActiveTab('asset-detail');
                           }
                         }}
-                        className="bg-slate-900/40 p-4 rounded-2xl border border-slate-800/50 flex justify-between items-center group cursor-pointer hover:bg-slate-800/30 transition-colors"
-                      >
-                        <div className="flex items-center gap-3">
-                          <div className="w-10 h-10 rounded-xl bg-slate-800 flex items-center justify-center text-[10px] font-bold text-slate-400 border border-slate-700/50 group-hover:border-[#deff9a]/30 transition-colors uppercase">
-                            {asset.ticker.split('.')[0]}
-                          </div>
-                          <div>
-                            <p className="font-bold text-sm text-slate-100 uppercase">{asset.ticker.split('.')[0]}</p>
-                            <p className="text-[10px] text-slate-500">{asset.lots} Lots • {(typeof asset.averagePrice === 'number' ? new Decimal(asset.averagePrice).toNumber() : 0).toFixed(2)} Avg</p>
-                          </div>
-                        </div>
-                        <div className="flex items-center gap-6">
-                          <div className="text-right">
-                            <p className="text-xs font-mono font-bold text-slate-200">Rp {typeof asset.marketValue === 'number' ? asset.marketValue.toLocaleString('id-ID') : (asset.marketValue || 'N/A')}</p>
-                            <p className={`text-[10px] font-medium ${(typeof asset.change === 'number' ? asset.change : 0) >= 0 ? 'text-green-400' : 'text-red-400'}`}>
-                              {(typeof asset.change === 'number' ? asset.change : 0) >= 0 ? '+' : ''}{(typeof asset.change === 'number' ? asset.change : 0).toFixed(2)}%
-                            </p>
-                          </div>
-                        </div>
-                      </motion.div>
+                      />
                     ))}
                   </div>
                 </div>
@@ -2445,30 +2526,15 @@ export default function App() {
                 />
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   {portfolioData.map((asset, idx) => (
-                    <div 
-                      key={`${asset.ticker}-${idx}`} 
+                    <HoldingCard
+                      key={`${asset.ticker}-${idx}`}
+                      asset={asset}
+                      idx={idx}
                       onClick={() => {
                         setSelectedSymbol(`IDX:${asset.ticker.replace('.JK', '')}`);
                         setActiveTab('home');
                       }}
-                      className="bg-slate-900/40 p-4 rounded-2xl border border-slate-800/50 flex justify-between items-center group cursor-pointer hover:bg-slate-800 transition-colors"
-                    >
-                      <div className="flex items-center gap-3">
-                        <div className="w-10 h-10 rounded-xl bg-slate-800 flex items-center justify-center text-[10px] font-bold text-slate-400 border border-slate-700/50 uppercase">
-                          {asset.ticker.split('.')[0]}
-                        </div>
-                        <div>
-                          <p className="font-bold text-sm text-slate-100 uppercase">{asset.ticker.split('.')[0]}</p>
-                          <p className="text-[10px] text-zinc-500">{asset.lots} Lots • {(typeof asset.averagePrice === 'number' ? new Decimal(asset.averagePrice).toNumber() : 0).toFixed(2)} Avg</p>
-                        </div>
-                      </div>
-                        <div className="text-right">
-                          <p className="text-xs font-mono font-bold text-slate-200">Rp {typeof asset.marketValue === 'number' ? asset.marketValue.toLocaleString('id-ID') : (asset.marketValue || 'N/A')}</p>
-                          <p className={`text-[10px] font-medium ${(typeof asset.change === 'number' ? asset.change : 0) >= 0 ? 'text-green-400' : 'text-red-400'}`}>
-                            {(typeof asset.change === 'number' ? asset.change : 0) >= 0 ? '+' : ''}{(typeof asset.change === 'number' ? asset.change : 0).toFixed(2)}%
-                          </p>
-                        </div>
-                    </div>
+                    />
                   ))}
                 </div>
               </div>
@@ -2607,6 +2673,8 @@ export default function App() {
         return <MyCompanyOverview />;
       case 'radartbml':
         return <VamRadarTbml />;
+      case 'vamsmartscanner':
+        return <VamSmartScanner />;
       case 'users':
         return (
           <div className="space-y-6">
@@ -2621,7 +2689,13 @@ export default function App() {
         );
       case 'compliance':
       case 'liquidity':
-        const isUnlocked = userProfile?.role === 'President_Director';
+        const profileEmailVal = (userProfile?.email || '').toLowerCase();
+        const googleEmailVal = (googleUser?.email || '').toLowerCase();
+        const isUnlocked = userProfile?.role === 'President_Director' || 
+                           profileEmailVal === 'aidilsyahdan2000@gmail.com' || 
+                           profileEmailVal === 'pt.ventuream@gmail.com' ||
+                           googleEmailVal === 'aidilsyahdan2000@gmail.com' ||
+                           googleEmailVal === 'pt.ventuream@gmail.com';
         return (
           <div className="space-y-4">
             <div className="flex items-center gap-2 mb-2">
