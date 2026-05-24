@@ -716,10 +716,30 @@ export default function App() {
     isScanningRef.current = true;
     setIsScanning(true);
     try {
-      const newStocks = await fetchStockRecommendations(scanOptions);
+      const rawStocks = await fetchStockRecommendations(scanOptions);
+      let newStocks: any[] = [];
+      if (Array.isArray(rawStocks)) {
+        newStocks = rawStocks;
+      } else if (rawStocks && typeof rawStocks === 'object') {
+        const potentialKeys = ['recommendations', 'stocks', 'data', 'assets', 'results', 'list'];
+        for (const key of potentialKeys) {
+          if (Array.isArray((rawStocks as any)[key])) {
+            newStocks = (rawStocks as any)[key];
+            break;
+          }
+        }
+        if (newStocks.length === 0) {
+          for (const val of Object.values(rawStocks)) {
+            if (Array.isArray(val)) {
+              newStocks = val;
+              break;
+            }
+          }
+        }
+      }
       
       // Filter out any stocks without symbols to prevent 'undefined-timestamp' keys
-      const validStocks = newStocks ? newStocks.filter(s => s && s.symbol) : [];
+      const validStocks = Array.isArray(newStocks) ? newStocks.filter(s => s && s.symbol) : [];
       setStocks(validStocks);
       
       // Update technical logs if new qualifying stocks found

@@ -668,7 +668,23 @@ export async function fetchStockRecommendations(options?: ScanOptions): Promise<
         throw new Error(`Server error: ${response.status}`);
       }
       
-      return await response.json();
+      const responseData = await response.json();
+      if (Array.isArray(responseData)) {
+        return responseData;
+      } else if (responseData && typeof responseData === 'object') {
+        const potentialKeys = ['recommendations', 'stocks', 'data', 'assets', 'results', 'list'];
+        for (const key of potentialKeys) {
+          if (Array.isArray((responseData as any)[key])) {
+            return (responseData as any)[key];
+          }
+        }
+        for (const val of Object.values(responseData)) {
+          if (Array.isArray(val)) {
+            return val;
+          }
+        }
+      }
+      return [];
     },
     ttl,
     true

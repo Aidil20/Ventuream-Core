@@ -19,9 +19,11 @@ import {
   Sparkles,
   Link,
   ChevronRight,
-  Info
+  Info,
+  Network
 } from 'lucide-react';
 import { getAccessToken } from '../lib/auth';
+import { BeneficialOwnershipGnnGraph } from './BeneficialOwnershipGnnGraph';
 
 interface DriveFile {
   id: string;
@@ -43,7 +45,7 @@ interface WorkspaceHubProps {
   onAuthRequired: () => void;
 }
 
-type ActiveTab = 'drive' | 'docs' | 'sheets' | 'calendar';
+type ActiveTab = 'drive' | 'docs' | 'sheets' | 'calendar' | 'gnn';
 
 export const WorkspaceHub: React.FC<WorkspaceHubProps> = ({ onAuthRequired }) => {
   const [activeTab, setActiveTab] = useState<ActiveTab>('drive');
@@ -134,7 +136,9 @@ export const WorkspaceHub: React.FC<WorkspaceHubProps> = ({ onAuthRequired }) =>
   };
 
   useEffect(() => {
-    fetchAllFilesAndData();
+    if (activeTab !== 'gnn') {
+      fetchAllFilesAndData();
+    }
   }, [activeTab]);
 
   const getFileIcon = (mimeType: string) => {
@@ -464,7 +468,7 @@ export const WorkspaceHub: React.FC<WorkspaceHubProps> = ({ onAuthRequired }) =>
       </div>
 
       {/* 2. Interactive Tab Controls */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-2 bg-zinc-950 p-1.5 rounded-2xl border border-zinc-900">
+      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-2 bg-zinc-950 p-1.5 rounded-2xl border border-zinc-900">
         <button
           onClick={() => { setActiveTab('drive'); setSearchTerm(''); }}
           className={`flex items-center justify-center gap-2 py-3 px-4 rounded-xl text-xs font-bold uppercase tracking-wider transition-all ${
@@ -512,6 +516,18 @@ export const WorkspaceHub: React.FC<WorkspaceHubProps> = ({ onAuthRequired }) =>
           <Calendar className="w-4 h-4" />
           Calendar
         </button>
+
+        <button
+          onClick={() => { setActiveTab('gnn'); setSearchTerm(''); }}
+          className={`flex items-center justify-center gap-2 py-3 px-4 rounded-xl text-xs font-bold uppercase tracking-wider transition-all ${
+            activeTab === 'gnn' 
+              ? 'bg-purple-500 text-white shadow-md' 
+              : 'text-zinc-400 hover:text-white hover:bg-zinc-900'
+          }`}
+        >
+          <Network className="w-4 h-4" />
+          GNN Ownership
+        </button>
       </div>
 
       {/* Error display */}
@@ -532,7 +548,10 @@ export const WorkspaceHub: React.FC<WorkspaceHubProps> = ({ onAuthRequired }) =>
       )}
 
       {/* 3. Main Dashboard Workspace Content Grid */}
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+      {activeTab === 'gnn' ? (
+        <BeneficialOwnershipGnnGraph />
+      ) : (
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
         
         {/* Left Hand: Tab Content Core (Span 7 or 8) */}
         <div className="lg:col-span-8 space-y-6">
@@ -1123,6 +1142,7 @@ export const WorkspaceHub: React.FC<WorkspaceHubProps> = ({ onAuthRequired }) =>
         </div>
 
       </div>
+      )}
 
       {/* 4. VENTUREAM CORPORATE ACTION GATEWAY CONFIRMATION DIALOG (MODAL) */}
       <AnimatePresence>
