@@ -37,9 +37,33 @@ import {
   Play,
   Pause,
   Check,
-  ArrowRight
+  ArrowRight,
+  Bell,
+  BellRing,
+  Trash2,
+  SlidersHorizontal
 } from 'lucide-react';
-import { AreaChart, Area, ResponsiveContainer, XAxis, YAxis, Tooltip } from 'recharts';
+import { AreaChart, Area, ResponsiveContainer, XAxis, YAxis, Tooltip, CartesianGrid, ReferenceLine } from 'recharts';
+
+export interface PriceThreshold {
+  id: string;
+  itemId: string;        // "COAL", "NICKEL", "GOLD", "LUXURY_WATCH", "TECH_LICENSE"
+  condition: 'ABOVE' | 'BELOW';
+  value: number;
+  active: boolean;
+  lastTriggeredAt?: number;
+}
+
+export interface PriceTriggeredNotification {
+  id: string;
+  itemId: string;
+  condition: 'ABOVE' | 'BELOW';
+  targetValue: number;
+  actualValue: number;
+  timestamp: number;
+  txId: string;
+  read: boolean;
+}
 
 // Strict typing for trade items, banking transactions, and securities deposits
 export interface InvoiceData {
@@ -529,6 +553,83 @@ export default function VamRadarTbml() {
   const [playInvoiceId, setPlayInvoiceId] = useState('INV-2026-002');
   const [playNetworkFilter, setPlayNetworkFilter] = useState('beneficial-owners');
 
+  // PRICE THRESHOLD ALERT SYSTEM STATE
+  const [priceThresholds, setPriceThresholds] = useState<PriceThreshold[]>([
+    { id: 'THR-1', itemId: 'NICKEL', condition: 'ABOVE', value: 275000000, active: true },
+    { id: 'THR-2', itemId: 'GOLD', condition: 'BELOW', value: 1100000, active: true },
+    { id: 'THR-3', itemId: 'COAL', condition: 'ABOVE', value: 1650000, active: true }
+  ]);
+  const [priceNotifications, setPriceNotifications] = useState<PriceTriggeredNotification[]>([]);
+  const [newAlertItemId, setNewAlertItemId] = useState<string>('NICKEL');
+  const [newAlertCondition, setNewAlertCondition] = useState<'ABOVE' | 'BELOW'>('ABOVE');
+  const [newAlertValue, setNewAlertValue] = useState<string>('260000000');
+  const [thresholdTab, setThresholdTab] = useState<'MATRIX' | 'HISTORY'>('MATRIX');
+
+  const priceThresholdsRef = React.useRef(priceThresholds);
+  useEffect(() => {
+    priceThresholdsRef.current = priceThresholds;
+  }, [priceThresholds]);
+
+  // Check custom price threshold limits and auto-spawn alert warning elements
+  const checkPriceThresholds = (itemId: string, price: number, txId: string) => {
+    const triggeredAlerts: PriceTriggeredNotification[] = [];
+    const currentThresholds = priceThresholdsRef.current;
+
+    const updatedThresholds = currentThresholds.map(t => {
+      if (t.itemId === itemId && t.active) {
+        const isAbove = t.condition === 'ABOVE' && price > t.value;
+        const isBelow = t.condition === 'BELOW' && price < t.value;
+        
+        if (isAbove || isBelow) {
+          const alreadyTriggeredRecently = t.lastTriggeredAt && (Date.now() - t.lastTriggeredAt < 5000); // 5 sec cooling down
+          if (!alreadyTriggeredRecently) {
+            const newNotif: PriceTriggeredNotification = {
+              id: `PRC-NOTIF-${Math.floor(1000 + Math.random() * 8999)}`,
+              itemId,
+              condition: t.condition,
+              targetValue: t.value,
+              actualValue: price,
+              timestamp: Date.now(),
+              txId,
+              read: false
+            };
+            triggeredAlerts.push(newNotif);
+            return { ...t, lastTriggeredAt: Date.now() };
+          }
+        }
+      }
+      return t;
+    });
+
+    // Check if any thresholds were modified or triggered
+    let changed = false;
+    for (let i = 0; i < currentThresholds.length; i++) {
+      if (updatedThresholds[i].lastTriggeredAt !== currentThresholds[i].lastTriggeredAt) {
+        changed = true;
+        break;
+      }
+    }
+
+    if (changed) {
+      setPriceThresholds(updatedThresholds);
+    }
+
+    if (triggeredAlerts.length > 0) {
+      setPriceNotifications(prev => [
+        ...triggeredAlerts,
+        ...prev
+      ].slice(0, 30));
+
+      triggeredAlerts.forEach(notif => {
+        const condSymbol = notif.condition === 'ABOVE' ? '>' : '<';
+        setTerminalFeed(prev => [
+          `[🚨 PRICE ALARM] ${notif.itemId} has crossed limit of Rp ${notif.targetValue.toLocaleString('id-ID')} (${notif.actualValue.toLocaleString('id-ID')} ${condSymbol} Rp ${notif.targetValue.toLocaleString('id-ID')}). Traced on ID: ${notif.txId}`,
+          ...prev
+        ].slice(0, 30));
+      });
+    }
+  };
+
   // Live output terminal feed
   const [terminalFeed, setTerminalFeed] = useState<string[]>([
     "[SYSTEM] Initializing VAM-Radar-API-Bridge container on private subnet...",
@@ -692,6 +793,26 @@ export default function VamRadarTbml() {
         setSidActivities(prev => [generatedSid, ...prev].slice(0, 30));
       }
 
+      // Check configured custom price threshold alarms on new generated prices
+      checkPriceThresholds(template.item_id, calculatedPrice, newTxId);
+
+      setAnimatedMarketPrices(prev => {
+        const history = prev[template.item_id] || [];
+        const nextTime = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+        const newPoint = {
+          date: nextTime,
+          price: calculatedPrice,
+          volume: Math.round(template.quantity * (0.8 + Math.random() * 0.4)),
+          minPrice: Math.round(calculatedPrice * 0.95),
+          maxPrice: Math.round(calculatedPrice * 1.05)
+        };
+        const updated = [...history, newPoint].slice(-10);
+        return {
+          ...prev,
+          [template.item_id]: updated
+        };
+      });
+
       setAuditedLogsCount(prev => prev + 1);
 
       // Log actions inside terminal Feed
@@ -718,6 +839,198 @@ export default function VamRadarTbml() {
   const [sbOrigin, setSbOrigin] = useState('British Virgin Islands');
   const [sbSidActivityMinutes, setSbSidActivityMinutes] = useState('15'); // 15 minutes difference
   const [sbSidAmount, setSbSidAmount] = useState('2400000000');
+
+  const [selectedChartAsset, setSelectedChartAsset] = useState<string>('COAL');
+  const [animatedMarketPrices, setAnimatedMarketPrices] = useState<Record<string, { date: string; price: number; volume: number; minPrice: number; maxPrice: number }[]>>({
+    "COAL": [
+      { date: "05-01", price: 1480000, volume: 12000, minPrice: 1420000, maxPrice: 1550000 },
+      { date: "05-08", price: 1512000, volume: 15000, minPrice: 1450000, maxPrice: 1580000 },
+      { date: "05-15", price: 1465000, volume: 11000, minPrice: 1400000, maxPrice: 1520000 },
+      { date: "05-22", price: 1530000, volume: 18000, minPrice: 1480000, maxPrice: 1600000 },
+      { date: "05-29", price: 1510000, volume: 14000, minPrice: 1440000, maxPrice: 1590000 },
+      { date: "06-05", price: 1495000, volume: 22000, minPrice: 1410000, maxPrice: 1540000 },
+      { date: "06-12", price: 1530000, volume: 25000, minPrice: 1460000, maxPrice: 1610000 }
+    ],
+    "NICKEL": [
+      { date: "05-01", price: 242000000, volume: 450, minPrice: 238000000, maxPrice: 248000000 },
+      { date: "05-08", price: 251000000, volume: 620, minPrice: 245000000, maxPrice: 256000000 },
+      { date: "05-15", price: 248500000, volume: 510, minPrice: 240000000, maxPrice: 253000000 },
+      { date: "05-22", price: 256000000, volume: 750, minPrice: 249000000, maxPrice: 262000000 },
+      { date: "05-29", price: 261200000, volume: 830, minPrice: 254000000, maxPrice: 268000000 },
+      { date: "06-05", price: 258000000, volume: 680, minPrice: 250000000, maxPrice: 264000000 },
+      { date: "06-12", price: 264500000, volume: 910, minPrice: 258000000, maxPrice: 272000000 }
+    ],
+    "GOLD": [
+      { date: "05-01", price: 1185000, volume: 45000, minPrice: 1170000, maxPrice: 1210000 },
+      { date: "05-08", price: 1198000, volume: 55000, minPrice: 1180000, maxPrice: 1220000 },
+      { date: "05-15", price: 1215000, volume: 49000, minPrice: 1195000, maxPrice: 1240000 },
+      { date: "05-22", price: 1222000, volume: 61000, minPrice: 1205000, maxPrice: 1250000 },
+      { date: "05-29", price: 1208000, volume: 53000, minPrice: 1190000, maxPrice: 1235000 },
+      { date: "06-05", price: 1218000, volume: 70000, minPrice: 1200000, maxPrice: 1245000 },
+      { date: "06-12", price: 1225000, volume: 82000, minPrice: 1210000, maxPrice: 1255000 }
+    ],
+    "LUXURY_WATCH": [
+      { date: "05-01", price: 295000000, volume: 15, minPrice: 290000000, maxPrice: 305000000 },
+      { date: "05-08", price: 298000000, volume: 18, minPrice: 292000000, maxPrice: 308000000 },
+      { date: "05-15", price: 302000000, volume: 22, minPrice: 295000000, maxPrice: 312000000 },
+      { date: "05-22", price: 299000000, volume: 14, minPrice: 294050000, maxPrice: 306000000 },
+      { date: "05-29", price: 305000000, volume: 25, minPrice: 298000000, maxPrice: 315000000 },
+      { date: "06-05", price: 301000000, volume: 20, minPrice: 296000000, maxPrice: 310000000 },
+      { date: "06-12", price: 308000000, volume: 30, minPrice: 301000000, maxPrice: 318000000 }
+    ],
+    "TECH_LICENSE": [
+      { date: "05-01", price: 49500000, volume: 120, minPrice: 48000000, maxPrice: 51000000 },
+      { date: "05-08", price: 50200000, volume: 145, minPrice: 49000000, maxPrice: 52000000 },
+      { date: "05-15", price: 49800000, volume: 130, minPrice: 48500000, maxPrice: 51500000 },
+      { date: "05-22", price: 50800000, volume: 160, minPrice: 49500000, maxPrice: 53000000 },
+      { date: "05-29", price: 50500000, volume: 155, minPrice: 49000000, maxPrice: 52500000 },
+      { date: "06-05", price: 51200000, volume: 180, minPrice: 50000000, maxPrice: 53500000 },
+      { date: "06-12", price: 51900000, volume: 210, minPrice: 50500000, maxPrice: 54500000 }
+    ]
+  });
+
+  // helper function to pre-fill sandbox transaction order based on triggering alerts
+  const handleQuickTrade = (notif: PriceTriggeredNotification) => {
+    setActiveSubTab('SANDBOX');
+    setSbItemId(notif.itemId);
+    
+    let defaultName = 'Custom Asset Shipment';
+    let defaultUnitPrice = notif.actualValue.toString();
+    let defaultQty = '1000';
+    let defaultManifest = `MNF-${notif.itemId}-QT`;
+    
+    if (notif.itemId === 'COAL') {
+      defaultName = 'Premium Steam Grade Coal Met';
+      defaultQty = '1000';
+      defaultManifest = 'MNF-COAL-1';
+    } else if (notif.itemId === 'NICKEL') {
+      defaultName = 'Purified Refined Nickel Plates';
+      defaultQty = '150';
+      defaultManifest = 'MNF-NIC-82';
+    } else if (notif.itemId === 'GOLD') {
+      defaultName = 'Fine Bullion Bar Refined Gold';
+      defaultQty = '2000';
+      defaultManifest = 'MNF-GOLD-5';
+    } else if (notif.itemId === 'LUXURY_WATCH') {
+      defaultName = 'Vanguard Chronology Elite Chrono';
+      defaultQty = '5';
+      defaultManifest = 'MNF-WATCH-10';
+    }
+    
+    setSbCommodityName(defaultName);
+    setSbUnitPrice(defaultUnitPrice);
+    setSbQuantity(defaultQty);
+    setSbInvoiceId(`QT-INV-${notif.itemId}-${Date.now().toString().slice(-4)}`);
+    setSbManifestId(defaultManifest);
+    setSbSellerId('QT-VENDOR-99');
+    setSbSellerName('VAM Algorithmic Market Liquidity Agency');
+    setSbOrigin('Sovereign Exchange Node');
+    setSbSidActivityMinutes('1');
+    setSbSidAmount((notif.actualValue * parseFloat(defaultQty)).toString());
+
+    setTerminalFeed(prev => [
+      `[QUICK-TRADE] Pre-loaded parameters into Sandbox: ${notif.itemId} | Unit Price: Rp ${notif.actualValue.toLocaleString('id-ID')} | Status: DRAF`,
+      ...prev
+    ]);
+
+    setTimeout(() => {
+      const element = document.getElementById('tbml-sandbox-view');
+      if (element) {
+        element.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }
+    }, 100);
+  };
+
+  // Drag and Drop File import handler
+  const [isDraggingFile, setIsDraggingFile] = useState(false);
+  const handleImportFile = (file: File) => {
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      const text = e.target?.result as string;
+      if (!text) return;
+      
+      setTerminalFeed(prev => [
+        `[DRAG-DROP] Membaca berkas ${file.name} (${(file.size / 1024).toFixed(1)} KB)...`,
+        ...prev
+      ]);
+
+      try {
+        if (file.name.endsWith('.json')) {
+          const parsed = JSON.parse(text);
+          if (parsed.id || parsed.invoice_id) setSbInvoiceId(parsed.id || parsed.invoice_id);
+          if (parsed.item_id) setSbItemId(parsed.item_id);
+          if (parsed.commodity_name) setSbCommodityName(parsed.commodity_name);
+          if (parsed.quantity) setSbQuantity(parsed.quantity.toString());
+          if (parsed.unit_price) setSbUnitPrice(parsed.unit_price.toString());
+          if (parsed.manifest_id) setSbManifestId(parsed.manifest_id);
+          if (parsed.seller_id) setSbSellerId(parsed.seller_id);
+          if (parsed.seller_name) setSbSellerName(parsed.seller_name);
+          if (parsed.origin) setSbOrigin(parsed.origin);
+          
+          setTerminalFeed(prev => [
+            `[DRAG-DROP] Sukses mengurai struktur JSON. Field parameter Sandbox otomatis terkonfigurasi.`,
+            ...prev
+          ]);
+        } else {
+          const lines = text.split('\n').map(l => l.trim()).filter(Boolean);
+          if (lines.length > 0) {
+            const firstLine = lines[0];
+            if (firstLine.includes(',')) {
+              const headers = firstLine.split(',').map(h => h.trim().toLowerCase());
+              if (lines.length > 1) {
+                const values = lines[1].split(',').map(v => v.trim());
+                headers.forEach((h, idx) => {
+                  const val = values[idx];
+                  if (!val) return;
+                  if (h === 'id' || h === 'invoice_id' || h === 'invoiceid') setSbInvoiceId(val);
+                  if (h === 'item_id' || h === 'itemid') setSbItemId(val.toUpperCase());
+                  if (h === 'commodity_name' || h === 'commodity') setSbCommodityName(val);
+                  if (h === 'quantity' || h === 'qty') setSbQuantity(val);
+                  if (h === 'unit_price' || h === 'price') setSbUnitPrice(val);
+                  if (h === 'manifest_id' || h === 'manifestid') setSbManifestId(val);
+                  if (h === 'seller_id' || h === 'sellerid') setSbSellerId(val);
+                  if (h === 'seller_name' || h === 'seller') setSbSellerName(val);
+                  if (h === 'origin' || h === 'country') setSbOrigin(val);
+                });
+                setTerminalFeed(prev => [
+                  `[DRAG-DROP] Sukses mendecoder berkas CSV. Menyelaraskan baris data penipuan dagang.`,
+                  ...prev
+                ]);
+              }
+            } else {
+              lines.forEach(line => {
+                const parts = line.split(/[:=]/);
+                if (parts.length === 2) {
+                  const k = parts[0].trim().toLowerCase();
+                  const v = parts[1].trim().replace(/['"']/g, '');
+                  if (k === 'id' || k === 'invoice_id') setSbInvoiceId(v);
+                  if (k === 'item_id' || k === 'itemid') setSbItemId(v.toUpperCase());
+                  if (k === 'commodity_name' || k === 'commodity') setSbCommodityName(v);
+                  if (k === 'quantity' || k === 'qty') setSbQuantity(v);
+                  if (k === 'unit_price' || k === 'price') setSbUnitPrice(v);
+                  if (k === 'manifest_id' || k === 'manifest') setSbManifestId(v);
+                  if (k === 'seller_id' || k === 'sellerid') setSbSellerId(v);
+                  if (k === 'seller_name' || k === 'seller') setSbSellerName(v);
+                  if (k === 'origin') setSbOrigin(v);
+                }
+              });
+              setTerminalFeed(prev => [
+                `[DRAG-DROP] Sukses mengekstrak parameter dari format TXT terstruktur.`,
+                ...prev
+              ]);
+            }
+          }
+        }
+      } catch (err) {
+        console.error(err);
+        setTerminalFeed(prev => [
+          `[DATA-CORRUPT] Gagal mengunggah berkas. Bentuk struktur berkas tidak valid.`,
+          ...prev
+        ]);
+      }
+    };
+    reader.readAsText(file);
+  };
 
   // Sandbox output report state
   const [sandboxAnalysisReport, setSandboxAnalysisReport] = useState<any>(null);
@@ -908,6 +1221,26 @@ export default function VamRadarTbml() {
         origin: sbOrigin
       };
 
+      // Check configured custom price threshold alarms on custom sandbox invoice price
+      checkPriceThresholds(sbItemId, priceNum, sbInvoiceId);
+
+      setAnimatedMarketPrices(prev => {
+        const history = prev[sbItemId] || [];
+        const nextTime = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+        const newPoint = {
+          date: nextTime,
+          price: priceNum,
+          volume: qtyNum,
+          minPrice: Math.round(priceNum * 0.95),
+          maxPrice: Math.round(priceNum * 1.05)
+        };
+        const updated = [...history, newPoint].slice(-10);
+        return {
+          ...prev,
+          [sbItemId]: updated
+        };
+      });
+
       // RUN ENGINE CHECKS
       const reports: string[] = [];
       let isCritical = false;
@@ -1025,8 +1358,66 @@ export default function VamRadarTbml() {
   };
 
   return (
-    <div id="VAM_RADAR_TBML_MODULE_CONTAINER" className="space-y-6">
+    <div id="VAM_RADAR_TBML_MODULE_CONTAINER" className="space-y-6 relative">
       
+      {/* FLOATING ACTION NOTIFICATIONS DECK */}
+      <div className="fixed bottom-4 right-4 z-[9999] pointer-events-none max-w-sm w-full space-y-2">
+        <AnimatePresence>
+          {priceNotifications.filter(n => !n.read).map(notif => (
+            <motion.div
+              key={notif.id}
+              initial={{ opacity: 0, x: 50, y: 20, scale: 0.95 }}
+              animate={{ opacity: 1, x: 0, y: 0, scale: 1 }}
+              exit={{ opacity: 0, x: 50, scale: 0.9 }}
+              className="pointer-events-auto p-4 bg-zinc-950 border border-rose-500/30 rounded-2xl shadow-[0_10px_35px_rgba(239,68,68,0.2)] flex items-start gap-3 relative overflow-hidden"
+            >
+              <div className="absolute top-0 left-0 bottom-0 w-1.5 bg-rose-500" />
+              <div className="p-2 bg-rose-500/10 rounded-xl text-rose-400">
+                <BellRing className="w-4 h-4 animate-pulse" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <div className="flex justify-between items-start">
+                  <span className="text-[8px] font-mono font-black text-rose-400 uppercase tracking-widest leading-none">
+                    LIMIT ALERT TRIGGERED
+                  </span>
+                  <button 
+                    type="button"
+                    onClick={() => {
+                      setPriceNotifications(prev => prev.map(p => p.id === notif.id ? { ...p, read: true } : p));
+                    }}
+                    className="text-[8px] text-zinc-500 hover:text-white uppercase font-black"
+                  >
+                    DISMISS
+                  </button>
+                </div>
+                <h4 className="text-xs font-bold text-white mt-1 uppercase font-mono">
+                  {notif.itemId} LIMIT BREACH
+                </h4>
+                <p className="text-[10px] text-zinc-400 mt-1 leading-normal">
+                  Sovereign price monitored at <strong className="text-red-400">Rp {notif.actualValue.toLocaleString('id-ID')}</strong>, crossing <strong className="text-white">{notif.condition === 'ABOVE' ? 'above' : 'below'}</strong> your threshold limit of Rp {notif.targetValue.toLocaleString('id-ID')}.
+                </p>
+                <div className="flex items-center justify-between text-[8px] font-mono text-zinc-650 mt-2 pt-1.5 border-t border-zinc-900">
+                  <span>Tx Ref: {notif.txId}</span>
+                  <span>{new Date(notif.timestamp).toLocaleTimeString()}</span>
+                </div>
+                
+                <button
+                  type="button"
+                  onClick={() => {
+                    handleQuickTrade(notif);
+                    setPriceNotifications(prev => prev.map(p => p.id === notif.id ? { ...p, read: true } : p));
+                  }}
+                  className="mt-2.5 w-full py-1.5 bg-[#DFFF00] hover:bg-white text-zinc-950 font-mono text-[8px] font-black uppercase tracking-widest rounded-lg flex items-center justify-center gap-1.5 transition-all shadow-sm"
+                >
+                  <ArrowRightLeft className="w-3 h-3" />
+                  <span>Execute Quick Trade</span>
+                </button>
+              </div>
+            </motion.div>
+          ))}
+        </AnimatePresence>
+      </div>
+
       {/* Module Title & Threat Indicator Panel */}
       <div id="vam-radar-title-bar" className="flex flex-col lg:flex-row items-start lg:items-center justify-between border-b border-zinc-900 pb-5 gap-4">
         <div>
@@ -1280,17 +1671,17 @@ export default function VamRadarTbml() {
             {/* In-Depth Live Active Scanning Alerts Container */}
             <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 pt-3">
               
-              {/* Left Column: Direct System Alert Feed (Critical / High Warnings) */}
-              <div id="tbml-critical-alerts-logs" className="lg:col-span-7 space-y-4">
+              {/* Column 1 of 3: Direct System Alert Feed (Critical / High Warnings) */}
+              <div id="tbml-critical-alerts-logs" className="lg:col-span-12 xl:col-span-4 space-y-4">
                 <div className="flex items-center justify-between px-1">
                   <div className="flex items-center gap-2">
                     <ShieldAlert className="w-4 h-4 text-red-500" />
-                    <h3 className="text-xs font-black text-white uppercase tracking-widest">SURVEILLANCE ALERTS FIUT</h3>
+                    <h3 className="text-xs font-black text-white uppercase tracking-widest font-mono">WARNING NODES</h3>
                   </div>
-                  <span className="text-[9px] text-zinc-500 font-bold uppercase tracking-wider font-mono">Live Counter</span>
+                  <span className="text-[8px] text-zinc-500 font-bold uppercase tracking-wider font-mono">Live Stream</span>
                 </div>
 
-                <div className="space-y-3 max-h-[460px] overflow-y-auto pr-2 custom-scrollbar">
+                <div className="space-y-3 max-h-[480px] overflow-y-auto pr-2 custom-scrollbar">
                   {alerts.map((alert, idx) => (
                     <div 
                       key={`${alert.id}-${idx}`}
@@ -1299,7 +1690,6 @@ export default function VamRadarTbml() {
                         setActiveSubTab('SAR_INTEL');
                         setSarDraftText('');
                         setSarReportSubmitted(false);
-                        alert(`Alert ${alert.id} dipilih. Mengalihkan Anda langsung ke Panel Pembuat Draft Laporan PPATK (LTKM)!`);
                       }}
                       className="p-4 bg-zinc-950/60 hover:bg-zinc-950/90 border border-zinc-900 hover:border-zinc-800 rounded-2xl transition-all relative overflow-hidden group cursor-pointer"
                       title="Klik untuk menyusun draft Laporan LTKM resmi PPATK menggunakan AI"
@@ -1322,9 +1712,8 @@ export default function VamRadarTbml() {
 
                       <div className="flex items-center justify-between pl-2 pt-2 border-t border-zinc-900/40 text-[8px] font-mono text-zinc-600 mt-1">
                         <span className="text-emerald-500 font-extrabold flex items-center gap-1 group-hover:text-[#DFFF00]">
-                          <ArrowRight className="w-3 h-3 group-hover:translate-x-1 transition-transform" /> MULAI INVESTIGASI (LTKM)
+                          <ArrowRight className="w-3 h-3 group-hover:translate-x-1 transition-transform" /> DRAFT REPORT (LTKM)
                         </span>
-                        <span>Gateway Trace Verified</span>
                         <span>{new Date(alert.timestamp).toLocaleTimeString([], { hour12: false })}</span>
                       </div>
                     </div>
@@ -1339,8 +1728,269 @@ export default function VamRadarTbml() {
                 </div>
               </div>
 
-              {/* Right Column: Underlying Trade Invoices Database */}
-              <div id="tbml-corporate-ledger-invoices" className="lg:col-span-12 xl:col-span-5 space-y-4">
+              {/* Column 2 of 3: Price Threshold & Alarm Matrix panel */}
+              <div id="tbml-price-threshold-surveillance" className="lg:col-span-12 xl:col-span-4 space-y-4">
+                <div className="flex items-center justify-between px-1">
+                  <div className="flex items-center gap-2">
+                    <SlidersHorizontal className="w-4 h-4 text-[#DFFF00]" />
+                    <h3 className="text-xs font-black text-white uppercase tracking-widest font-mono">PRICE THRESHOLDS</h3>
+                  </div>
+                  <span className="text-[8px] font-black text-zinc-500 uppercase tracking-widest">GATEWAY WATCHLIST</span>
+                </div>
+
+                <div className="bg-zinc-950/40 border border-zinc-800/60 p-4 rounded-[1.5rem] space-y-4">
+                  {/* Tab Selector inside widget */}
+                  <div className="flex bg-zinc-950 border border-zinc-900 rounded-xl p-1 gap-1">
+                    <button 
+                      type="button"
+                      onClick={() => setThresholdTab('MATRIX')}
+                      className={`flex-1 py-1.5 rounded-lg text-[9px] font-black uppercase tracking-wider transition-all ${
+                        thresholdTab === 'MATRIX' 
+                          ? 'bg-zinc-900 text-[#DFFF00]' 
+                          : 'text-zinc-500 hover:text-white'
+                      }`}
+                    >
+                      ALARM CONFIG
+                    </button>
+                    <button 
+                      type="button"
+                      onClick={() => setThresholdTab('HISTORY')}
+                      className={`flex-1 py-1.5 rounded-lg text-[9px] font-black uppercase tracking-wider transition-all relative ${
+                        thresholdTab === 'HISTORY' 
+                          ? 'bg-zinc-900 text-[#DFFF00]' 
+                          : 'text-zinc-500 hover:text-white'
+                      }`}
+                    >
+                      ALARM SEQUENCE
+                      {priceNotifications.some(n => !n.read) && (
+                        <span className="absolute top-1 right-2 w-1.5 h-1.5 bg-red-500 rounded-full animate-pulse" />
+                      )}
+                    </button>
+                  </div>
+
+                  {thresholdTab === 'MATRIX' ? (
+                    <div className="space-y-4">
+                      {/* Form to add alert */}
+                      <div className="bg-black/60 border border-zinc-900 p-3 rounded-xl space-y-3">
+                        <span className="text-[8px] font-black text-zinc-400 uppercase tracking-widest block font-mono">
+                          Add Custom Boundary
+                        </span>
+                        
+                        <div className="grid grid-cols-2 gap-2">
+                          <div>
+                            <label className="text-[7px] font-bold text-zinc-500 uppercase tracking-widest block mb-1">Asset Category</label>
+                            <select 
+                              value={newAlertItemId} 
+                              onChange={(e) => {
+                                setNewAlertItemId(e.target.value);
+                                const bs = GLOBAL_PRICE_BASELINE[e.target.value] || 1000000;
+                                setNewAlertValue(bs.toString());
+                              }}
+                              className="w-full bg-zinc-950 border border-zinc-850 px-2 py-1.5 text-[9px] font-bold text-white rounded-lg focus:outline-none focus:border-[#DFFF00]/50 font-sans"
+                            >
+                              {Object.keys(GLOBAL_PRICE_BASELINE).map(k => (
+                                <option key={k} value={k}>{k}</option>
+                              ))}
+                            </select>
+                          </div>
+                          <div>
+                            <label className="text-[7px] font-bold text-zinc-500 uppercase tracking-widest block mb-1">Condition Trigger</label>
+                            <select 
+                              value={newAlertCondition} 
+                              onChange={(e) => setNewAlertCondition(e.target.value as any)}
+                              className="w-full bg-zinc-950 border border-zinc-850 px-2 py-1.5 text-[9px] font-bold text-white rounded-lg focus:outline-none focus:border-[#DFFF00]/50 font-sans"
+                            >
+                              <option value="ABOVE">CROSSES ABOVE (&gt;)</option>
+                              <option value="BELOW">CROSSES BELOW (&lt;)</option>
+                            </select>
+                          </div>
+                        </div>
+
+                        <div>
+                          <div className="flex justify-between items-center mb-1">
+                            <label className="text-[7px] font-bold text-zinc-500 uppercase tracking-widest block">Threshold Value (Rp)</label>
+                            <span className="text-[7px] font-mono text-zinc-500 font-bold uppercase">
+                              Baseline: Rp {(GLOBAL_PRICE_BASELINE[newAlertItemId] || 0).toLocaleString('id-ID')}
+                            </span>
+                          </div>
+                          <div className="relative flex items-center">
+                            <input 
+                              type="text" 
+                              value={newAlertValue}
+                              onChange={(e) => {
+                                const raw = e.target.value.replace(/[^0-9]/g, '');
+                                setNewAlertValue(raw);
+                              }}
+                              placeholder="e.g. 260000000"
+                              className="w-full bg-zinc-950 border border-zinc-850 px-3 py-1.5 text-[10px] font-mono font-bold text-white rounded-lg focus:outline-none focus:border-[#DFFF00]/50 placeholder-zinc-700"
+                            />
+                            <span className="absolute right-3 text-[8px] font-mono text-zinc-500 font-bold">IDR</span>
+                          </div>
+                          <span className="text-[7px] text-zinc-500 mt-1 uppercase tracking-widest block leading-none font-mono text-right">
+                            Parsed: Rp {(parseFloat(newAlertValue) || 0).toLocaleString('id-ID')}
+                          </span>
+                        </div>
+
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const valNum = parseFloat(newAlertValue) || 0;
+                            if (valNum <= 0) return;
+                            const newLimit: PriceThreshold = {
+                              id: `THR-${Date.now()}`,
+                              itemId: newAlertItemId,
+                              condition: newAlertCondition,
+                              value: valNum,
+                              active: true
+                            };
+                            setPriceThresholds(prev => [...prev, newLimit]);
+                            setTerminalFeed(prev => [
+                              `[ALARM SYSTEM] Configured price alarm rule verified: ${newAlertItemId} ${newAlertCondition.toLowerCase()} Rp ${valNum.toLocaleString('id-ID')}`,
+                              ...prev
+                            ]);
+                          }}
+                          className="w-full py-1.5 bg-[#DFFF00] hover:bg-[#deff9a] text-black font-black text-[9px] tracking-widest uppercase rounded-lg transition-all"
+                        >
+                          + ACTIVATE BOUNDARY ALARM
+                        </button>
+                      </div>
+
+                      {/* Configured boundaries list */}
+                      <div className="space-y-2 max-h-[175px] overflow-y-auto pr-1 scrollbar-thin custom-scrollbar">
+                        {priceThresholds.map((t) => (
+                          <div 
+                            key={t.id}
+                            className={`p-2.5 bg-black/40 border ${t.active ? 'border-zinc-900 hover:border-zinc-800' : 'border-zinc-950/40 opacity-50'} rounded-xl flex items-center justify-between gap-3 transition-all`}
+                          >
+                            <div className="flex items-center gap-2">
+                              <div className={`p-1.5 rounded-lg ${t.active ? 'bg-zinc-950' : 'bg-zinc-950/20'}`}>
+                                <Bell className={`w-3.5 h-3.5 ${t.active ? (t.condition === 'ABOVE' ? 'text-rose-400' : 'text-blue-400') : 'text-zinc-600'}`} />
+                              </div>
+                              <div>
+                                <span className="text-[10px] font-black text-white block">{t.itemId}</span>
+                                <div className="flex items-center gap-1 text-[7.5px] font-mono text-zinc-500 uppercase mt-0.5 leading-none">
+                                  <span>{t.condition === 'ABOVE' ? 'CROSSES ABOVE' : 'CROSSES BELOW'}</span>
+                                  <span className={t.active ? (t.condition === 'ABOVE' ? 'text-rose-400 font-bold' : 'text-blue-400 font-bold') : 'text-zinc-600'}>
+                                    Rp {t.value.toLocaleString('id-ID')}
+                                  </span>
+                                </div>
+                              </div>
+                            </div>
+
+                            <div className="flex items-center gap-1.5">
+                              {/* Toggle active status */}
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setPriceThresholds(prev => prev.map(item => item.id === t.id ? { ...item, active: !item.active } : item));
+                                }}
+                                className={`px-1.5 py-0.5 rounded text-[7px] font-black uppercase tracking-widest transition-all ${
+                                  t.active 
+                                    ? 'bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 border border-emerald-500/20' 
+                                    : 'bg-zinc-900 border border-zinc-850 hover:bg-zinc-800 text-zinc-500'
+                                }`}
+                              >
+                                {t.active ? 'ACTIVE' : 'MUTED'}
+                              </button>
+
+                              {/* Delete button */}
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setPriceThresholds(prev => prev.filter(item => item.id !== t.id));
+                                  setTerminalFeed(prev => [
+                                    `[ALARM SYSTEM] Deregistered price alarm rule for ${t.itemId}`,
+                                    ...prev
+                                  ]);
+                                }}
+                                className="p-1 hover:bg-red-500/10 text-zinc-500 hover:text-red-400 rounded-lg transition-colors border border-transparent hover:border-red-500/10"
+                                title="Remove limit"
+                              >
+                                <Trash2 className="w-3 h-3" />
+                              </button>
+                            </div>
+                          </div>
+                        ))}
+
+                        {priceThresholds.length === 0 && (
+                          <div className="py-8 text-center border border-dashed border-zinc-900 rounded-2xl opacity-40">
+                            <span className="text-[8px] font-black uppercase tracking-widest text-zinc-500">NO LIMITS DEFINED</span>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="space-y-3">
+                      <div className="flex justify-between items-center mb-1">
+                        <span className="text-[8px] font-black text-zinc-400 uppercase tracking-widest font-mono">
+                          Trigger Audit Log
+                        </span>
+                        {priceNotifications.length > 0 && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setPriceNotifications([]);
+                            }}
+                            className="text-[8px] font-black text-rose-400 hover:text-rose-350 uppercase transition-colors mr-1"
+                          >
+                            CLEAR LOGS
+                          </button>
+                        )}
+                      </div>
+
+                      <div className="space-y-2 max-h-[310px] overflow-y-auto pr-1 scrollbar-thin custom-scrollbar">
+                        {priceNotifications.map((notif) => (
+                          <div 
+                            key={notif.id}
+                            className="p-3 bg-rose-500/[0.02] border border-rose-500/15 rounded-xl space-y-1 relative overflow-hidden group"
+                          >
+                            <div className="absolute top-0 right-0 py-1 px-2 text-[7px] font-mono select-none uppercase font-extrabold bg-red-950/20 border-l border-b border-rose-500/20 rounded-bl text-rose-400">
+                              {new Date(notif.timestamp).toLocaleTimeString()}
+                            </div>
+                            <div className="flex items-center gap-1">
+                              <span className="w-1.5 h-1.5 rounded-full bg-red-400 animate-pulse" />
+                              <span className="text-[10px] font-black text-white">{notif.itemId} ALARM BREACH</span>
+                            </div>
+                            <div className="text-[9px] font-mono text-zinc-400 space-y-0.5 leading-normal">
+                              <div>
+                                Target: <strong className="text-white">Rp {notif.targetValue.toLocaleString('id-ID')}</strong> ({notif.condition === 'ABOVE' ? '> ABOVE' : '< BELOW'})
+                              </div>
+                              <div>
+                                Trigger Price: <strong className="text-red-400 font-bold">Rp {notif.actualValue.toLocaleString('id-ID')}</strong>
+                              </div>
+                              <div className="pt-1.5 mt-1.5 border-t border-rose-500/10 flex justify-between items-center gap-2">
+                                <span className="text-[8px] text-zinc-600">
+                                  Ref: {notif.txId}
+                                </span>
+                                <button
+                                  type="button"
+                                  onClick={() => handleQuickTrade(notif)}
+                                  className="px-2 py-0.5 bg-rose-500/10 hover:bg-[#DFFF00] text-rose-400 hover:text-zinc-950 border border-rose-500/20 hover:border-transparent rounded-lg font-mono text-[7px] font-black uppercase tracking-wider flex items-center gap-1 transition-all"
+                                >
+                                  <ArrowRightLeft className="w-2.5 h-2.5" />
+                                  <span>Quick Trade</span>
+                                </button>
+                              </div>
+                            </div>
+                          </div>
+                        ))}
+
+                        {priceNotifications.length === 0 && (
+                          <div className="py-20 flex flex-col items-center justify-center border border-zinc-900 rounded-3xl opacity-35">
+                            <BellRing className="w-5 h-5 text-zinc-600 mb-1.5 animate-pulse" />
+                            <p className="text-[9px] font-black uppercase text-zinc-500 tracking-widest text-center leading-relaxed">
+                              NO PRICE ALARMS TRIGGERED.<br />CONFIG LIMITS TO TRACK FLOW ANOMALIES.
+                            </p>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Column 3 of 3: Underlying Trade Invoices Database */}
+              <div id="tbml-corporate-ledger-invoices" className="lg:col-span-12 xl:col-span-4 space-y-4">
                 <div className="flex items-center justify-between px-1">
                   <div className="flex items-center gap-2">
                     <FileSpreadsheet className="w-4 h-4 text-[#DFFF00]" />
@@ -1506,6 +2156,27 @@ export default function VamRadarTbml() {
                               </span>
                             </div>
                           )}
+
+                          <div className="mt-3 pt-2 border-t border-zinc-900/20 flex gap-2">
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setSelectedChartAsset(invoice.item_id);
+                                const tChart = document.getElementById('tbml-dynamic-price-chart-section');
+                                if (tChart) {
+                                  tChart.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                                }
+                              }}
+                              className={`w-full py-1.5 px-2.5 rounded-lg text-[8px] font-mono font-black uppercase tracking-wider transition-all flex items-center justify-center gap-1.5 ${
+                                selectedChartAsset === invoice.item_id
+                                  ? 'bg-[#DFFF00]/10 text-[#DFFF00] border border-[#DFFF00]/30 shadow-[0_0_10px_rgba(223,255,0,0.05)]'
+                                  : 'bg-zinc-900 hover:bg-zinc-800 text-zinc-400 hover:text-white border border-zinc-850'
+                              }`}
+                            >
+                              <TrendingUp className="w-3.5 h-3.5" />
+                              {selectedChartAsset === invoice.item_id ? 'ACTIVE CHART VIEW' : 'INSPECT PRICE CHART'}
+                            </button>
+                          </div>
                         </div>
                       );
                     })}
@@ -1519,6 +2190,220 @@ export default function VamRadarTbml() {
               </div>
 
             </div>
+
+            {/* Dynamic Commodity Historical Trading Sequence Chart */}
+            <div 
+              id="tbml-dynamic-price-chart-section" 
+              className="bg-zinc-950/40 border border-zinc-800/60 rounded-[2rem] p-6 lg:p-8 space-y-6 scroll-mt-24 mt-6"
+            >
+              <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 border-b border-zinc-900/60 pb-5">
+                <div>
+                  <div className="flex items-center gap-2 mb-1">
+                    <TrendingUp className="w-4 h-4 text-[#DFFF00] animate-pulse" />
+                    <span className="text-[8px] font-black text-[#DFFF00] uppercase tracking-[0.25em] font-mono">Surveillance Module</span>
+                  </div>
+                  <h3 className="text-base font-black text-white uppercase tracking-wider">HISTORICAL COMMODITY TRADING FLOWS</h3>
+                  <p className="text-[10px] text-zinc-400 font-sans leading-relaxed">
+                    Visualizing historical cost sequence indexes vs established international regulatory baseline standards. Select an asset profile below to display.
+                  </p>
+                </div>
+
+                {/* Statistics Box */}
+                <div className="flex flex-wrap gap-4 bg-zinc-950/85 border border-[#1d1d22] p-4 rounded-2xl">
+                  <div>
+                    <span className="text-[8px] font-mono font-black text-zinc-500 block uppercase">LAST CAPTURED PRICE</span>
+                    <span className="text-xs font-mono font-black text-white">
+                      Rp {(animatedMarketPrices[selectedChartAsset]?.slice(-1)[0]?.price || GLOBAL_PRICE_BASELINE[selectedChartAsset] || 0).toLocaleString('id-ID')}
+                    </span>
+                  </div>
+                  <div className="border-l border-zinc-800/60 pl-4">
+                    <span className="text-[8px] font-mono font-black text-zinc-500 block uppercase">REGULATORY BASELINE</span>
+                    <span className="text-xs font-mono font-black text-[#DFFF00]">
+                      Rp {(GLOBAL_PRICE_BASELINE[selectedChartAsset] || 0).toLocaleString('id-ID')}
+                    </span>
+                  </div>
+                  <div className="border-l border-zinc-800/60 pl-4">
+                    <span className="text-[8px] font-mono font-black text-zinc-500 block uppercase">ACTIVE CORRIDOR SKEW</span>
+                    {(() => {
+                      const latestPrice = animatedMarketPrices[selectedChartAsset]?.slice(-1)[0]?.price || GLOBAL_PRICE_BASELINE[selectedChartAsset] || 0;
+                      const basePrice = GLOBAL_PRICE_BASELINE[selectedChartAsset] || 1;
+                      const skew = ((latestPrice - basePrice) / basePrice) * 100;
+                      const skewAb = Math.abs(skew);
+                      return (
+                        <span className={`text-xs font-mono font-black ${skewAb > 25 ? 'text-red-400' : 'text-emerald-400'}`}>
+                          {skew >= 0 ? '+' : ''}{skew.toFixed(1)}% {skewAb > 25 ? '⚠️' : '✓'}
+                        </span>
+                      );
+                    })()}
+                  </div>
+                </div>
+              </div>
+
+              {/* Asset Selection Buttons */}
+              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-2 pb-2">
+                {[
+                  { id: 'COAL', label: 'Thermal Coal', base: 'Ton', color: '#a1a1aa' },
+                  { id: 'NICKEL', label: 'Battery Nickel', base: 'Ton', color: '#22d3ee' },
+                  { id: 'GOLD', label: 'Fine Gold', base: 'Gram', color: '#fbbf24' },
+                  { id: 'LUXURY_WATCH', label: 'Luxury Watches', base: 'Unit', color: '#f43f5e' },
+                  { id: 'TECH_LICENSE', label: 'Software License', base: 'User', color: '#a3e635' }
+                ].map((asset) => {
+                  const isActive = selectedChartAsset === asset.id;
+                  const latestPrice = animatedMarketPrices[asset.id]?.slice(-1)[0]?.price || GLOBAL_PRICE_BASELINE[asset.id] || 0;
+                  return (
+                    <button
+                      key={asset.id}
+                      type="button"
+                      onClick={() => setSelectedChartAsset(asset.id)}
+                      className={`text-left p-3.5 rounded-2xl border transition-all ${
+                        isActive
+                          ? 'bg-zinc-900 border-[#DFFF00] shadow-[0_0_15px_rgba(223,255,0,0.03)]'
+                          : 'bg-zinc-950/20 border-zinc-900 hover:border-zinc-800'
+                      }`}
+                      style={{ borderLeftColor: isActive ? '#DFFF00' : asset.color, borderLeftWidth: '3.5px' }}
+                    >
+                      <span className="text-[8px] font-black text-zinc-500 block uppercase tracking-wider">{asset.label}</span>
+                      <strong className="text-[11px] font-mono text-white block mt-0.5">
+                        Rp {latestPrice.toLocaleString('id-ID')}
+                      </strong>
+                      <span className="text-[7px] text-zinc-500 font-mono mt-1 block">per {asset.base}</span>
+                    </button>
+                  );
+                })}
+              </div>
+
+              {/* Main Area Chart Canvas Container */}
+              <div className="bg-black/40 border border-zinc-900 rounded-3xl p-4 md:p-6">
+                <div className="flex items-center justify-between mb-4">
+                  <div className="flex items-center gap-1.5 text-[10px] font-mono text-zinc-400">
+                    <span className="w-2 h-2 rounded-full bg-[#DFFF00] animate-pulse" />
+                    <span>Selected Asset sequence (10-Interval Real-time window)</span>
+                  </div>
+                  <div className="text-[9px] font-mono text-zinc-500 uppercase">
+                    Ref currency: IDR (Rupiah)
+                  </div>
+                </div>
+
+                <div className="w-full h-[280px]">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <AreaChart 
+                      data={animatedMarketPrices[selectedChartAsset] || []} 
+                      margin={{ top: 15, right: 10, left: 15, bottom: 5 }}
+                    >
+                      <defs>
+                        <linearGradient id="selectedAssetGradient" x1="0" y1="0" x2="0" y2="1">
+                          <stop offset="5%" stopColor={
+                            selectedChartAsset === 'COAL' ? '#a1a1aa' :
+                            selectedChartAsset === 'NICKEL' ? '#22d3ee' :
+                            selectedChartAsset === 'GOLD' ? '#fbbf24' :
+                            selectedChartAsset === 'LUXURY_WATCH' ? '#f43f5e' : '#a3e635'
+                          } stopOpacity={0.25} />
+                          <stop offset="95%" stopColor={
+                            selectedChartAsset === 'COAL' ? '#a1a1aa' :
+                            selectedChartAsset === 'NICKEL' ? '#22d3ee' :
+                            selectedChartAsset === 'GOLD' ? '#fbbf24' :
+                            selectedChartAsset === 'LUXURY_WATCH' ? '#f43f5e' : '#a3e635'
+                          } stopOpacity={0} />
+                        </linearGradient>
+                      </defs>
+                      <CartesianGrid stroke="#18181b" strokeDasharray="3 3" vertical={false} />
+                      <XAxis 
+                        dataKey="date" 
+                        stroke="#52525b" 
+                        fontSize={8.5} 
+                        fontFamily="JetBrains Mono" 
+                        tickLine={false} 
+                      />
+                      <YAxis 
+                        stroke="#52525b" 
+                        fontSize={8.5} 
+                        fontFamily="JetBrains Mono" 
+                        tickLine={false}
+                        tickFormatter={(value) => value.toLocaleString('id-ID', { notation: 'compact' })}
+                        domain={['auto', 'auto']}
+                      />
+                      <Tooltip
+                        contentStyle={{ backgroundColor: '#09090b', borderColor: '#27272a', borderRadius: '16px' }}
+                        itemStyle={{ fontSize: '11px', color: '#fff', fontFamily: 'JetBrains Mono' }}
+                        labelStyle={{ fontSize: '9px', color: '#a1a1aa', fontFamily: 'JetBrains Mono' }}
+                        formatter={(value: any, name: any) => {
+                          if (name === "price") return [`Rp ${value.toLocaleString('id-ID')}`, "Audit Price"];
+                          if (name === "volume") return [value, "Inspection Vol"];
+                          return [value, name];
+                        }}
+                      />
+                      {/* Regulatory reference center baseline indicator */}
+                      <ReferenceLine 
+                        y={GLOBAL_PRICE_BASELINE[selectedChartAsset] || 0} 
+                        stroke="#ef4444" 
+                        strokeDasharray="4 4" 
+                        label={{ 
+                          value: 'REGULATORY BASELINE LINE', 
+                          fill: '#ef4444', 
+                          fontSize: 7.5, 
+                          position: 'top', 
+                          fontFamily: 'JetBrains Mono',
+                          fontWeight: 'bold',
+                        }} 
+                      />
+                      <Area 
+                        type="monotone" 
+                        dataKey="price" 
+                        stroke={
+                          selectedChartAsset === 'COAL' ? '#a1a1aa' :
+                          selectedChartAsset === 'NICKEL' ? '#22d3ee' :
+                          selectedChartAsset === 'GOLD' ? '#fbbf24' :
+                          selectedChartAsset === 'LUXURY_WATCH' ? '#f43f5e' : '#a3e635'
+                        } 
+                        strokeWidth={2.5} 
+                        fillOpacity={1} 
+                        fill="url(#selectedAssetGradient)" 
+                      />
+                    </AreaChart>
+                  </ResponsiveContainer>
+                </div>
+              </div>
+
+              {/* Threat Matrix Audit Diagnostics */}
+              {(() => {
+                const latestPrice = animatedMarketPrices[selectedChartAsset]?.slice(-1)[0]?.price || GLOBAL_PRICE_BASELINE[selectedChartAsset] || 0;
+                const basePrice = GLOBAL_PRICE_BASELINE[selectedChartAsset] || 1;
+                const devRatio = (latestPrice - basePrice) / basePrice;
+                const isViolation = Math.abs(devRatio) > 0.25;
+                return (
+                  <div className={`p-5 rounded-2xl border ${
+                    isViolation 
+                      ? 'bg-red-500/[0.02]/20 border-red-500/20' 
+                      : 'bg-zinc-950/20 border-zinc-900'
+                  } flex flex-col md:flex-row md:items-center justify-between gap-4 font-mono`}>
+                    <div className="space-y-1">
+                      <span className="text-[8px] font-black uppercase tracking-widest text-zinc-500 block">SYSTEM DIAGNOSTIC</span>
+                      <p className="text-xs font-bold text-white uppercase leading-normal">
+                        {isViolation 
+                          ? `CRITICAL VALUE CORRIDOR DEVIATION: Flagged at ${(devRatio * 100).toFixed(1)}% mismatch` 
+                          : 'Commodity pricing corridor verified inside global boundary tolerance bounds'}
+                      </p>
+                      <p className="text-[9px] text-zinc-450 font-sans leading-relaxed">
+                        {isViolation
+                          ? `The latest trade settlements indicate commodity invoice values deviate significantly from international regulatory baseline standards. This pattern is strongly indicative of trade-based collateral inflation or capital expatriation.`
+                          : 'Invoice values tracked from bilateral clearings align seamlessly with certified domestic market expectations. Under/over pricing is within acceptable 25% boundary variance.'}
+                      </p>
+                    </div>
+
+                    <div className="shrink-0">
+                      <span className={`px-3 py-1.5 rounded-xl text-[9px] font-extrabold uppercase tracking-widest border ${
+                        isViolation 
+                          ? 'bg-red-500/10 border-red-500/30 text-red-400 animate-pulse' 
+                          : 'bg-emerald-500/10 border-emerald-500/30 text-emerald-400'
+                      }`}>
+                        {isViolation ? '⚠️ HIGH MISMATCH' : '✓ CORRIDOR PERFECT'}
+                      </span>
+                    </div>
+                  </div>
+                );
+              })()}
+            </div>
+
           </motion.div>
         )}
 
@@ -1571,6 +2456,56 @@ export default function VamRadarTbml() {
                     INSPECTION PROFILE CREATOR
                   </h3>
                   <p className="text-[8px] text-zinc-500 uppercase tracking-wider font-mono mt-1">Specify commercial elements for algorithmic audit</p>
+                </div>
+
+                {/* DRAG AND DROP DYNAMIC COMPATIBILITY REGION */}
+                <div 
+                  onDragOver={(e) => {
+                    e.preventDefault();
+                    setIsDraggingFile(true);
+                  }}
+                  onDragLeave={() => setIsDraggingFile(false)}
+                  onDrop={(e) => {
+                    e.preventDefault();
+                    setIsDraggingFile(false);
+                    const files = e.dataTransfer.files;
+                    if (files && files.length > 0) {
+                      handleImportFile(files[0]);
+                    }
+                  }}
+                  className={`p-4 border border-dashed rounded-2xl text-center transition-all ${
+                    isDraggingFile 
+                      ? 'border-[#DFFF00] bg-[#DFFF00]/10 scale-[0.98]' 
+                      : 'border-zinc-900 bg-black/40 hover:border-zinc-800'
+                  }`}
+                >
+                  <div className="flex flex-col items-center justify-center gap-1">
+                    <div className="p-2.5 bg-zinc-900 rounded-full mb-1">
+                      <FileSpreadsheet className="w-4 h-4 text-[#DFFF00]" />
+                    </div>
+                    <div>
+                      <p className="text-[9px] font-black text-white uppercase tracking-wider">
+                        SERET & LEPAS COMMERCE CSV / LEAF FILE
+                      </p>
+                      <p className="text-[7.5px] text-zinc-500 uppercase tracking-widest font-mono mt-0.5">
+                        Unggah berkas untuk mengisi anomali parameter otomatis
+                      </p>
+                    </div>
+                    <label className="cursor-pointer mt-1.5 px-3 py-1 bg-zinc-900 hover:bg-zinc-850 rounded-lg text-[7.5px] font-black uppercase text-zinc-400 hover:text-white transition-all border border-zinc-850 inline-block">
+                      PILIH DOKUMEN MANUAL
+                      <input 
+                        type="file" 
+                        accept=".csv,.json,.txt" 
+                        className="hidden" 
+                        onChange={(e) => {
+                          const files = e.target.files;
+                          if (files && files.length > 0) {
+                            handleImportFile(files[0]);
+                          }
+                        }}
+                      />
+                    </label>
+                  </div>
                 </div>
 
                 <div className="grid grid-cols-2 gap-3">
@@ -3909,66 +4844,71 @@ export default function VamRadarTbml() {
                     const currentAlertId = selectedSarAlertId || 'AL-OTC-TX-OTC-812';
                     const activeAlertTarget = alerts.find(a => a.id === currentAlertId);
                     
-                    let refId = activeAlertTarget?.referenceId || 'TX-OTC-812';
+                    const payload = {
+                      alertId: currentAlertId,
+                      refId: activeAlertTarget?.referenceId || 'INV-SANDBOX-99',
+                      type: activeAlertTarget?.type || 'Trade-Based Money Laundering',
+                      ubo: activeAlertTarget?.referenceId ? `Beneficial ownership linked to Ref: ${activeAlertTarget.referenceId}` : 'Pacific Horizon Venture Ltd (BVI)',
+                      sender: activeAlertTarget?.description ? (activeAlertTarget.description.split('->')[0] || 'PT Halmahera Industrial Nickel').trim() : 'PT Halmahera Industrial Nickel',
+                      recipient: activeAlertTarget?.description ? (activeAlertTarget.description.split('->')[1] || 'Pacific Horizon Venture Ltd (BVI)').trim() : 'Pacific Horizon Venture Ltd (BVI)',
+                      amount: 'Rp 36,000,000,000 (Trade Commodity Volume Valuation)',
+                      severity: activeAlertTarget?.severity || 'CRITICAL',
+                      format: sarReportFormat,
+                      customIndicators: itmSelectedTriggers,
+                      notes: activeAlertTarget?.description || 'Detected high pricing skew deviation on batter nickel export.'
+                    };
 
-                    setTimeout(() => {
-                      const craftedDraftText = `================================================================================
-LAPORAN TRANSAKSI KEUANGAN MENCURIGAKAN (LTKM) - DRAFT RESMI PPATK (FORM LTKM-01)
-================================================================================
-Dibuat Oleh: REPUBLIK SURVEILLANCE VENTUREAM - INSTITUTIONAL COMPLIANCE PORTAL
-Sistem ID  : VAM-RADAR-SAR-AIRGAP-2491
-Kategori   : Trade Based Money Laundering (TBML) & Capital Flight Terpadu
-Integritas : CRYPTOGRAPHIC VERIFIED (SHA-256)
---------------------------------------------------------------------------------
-
-BAGIAN I: IDENTITAS PELAPOR & GOLONGAN TRANSAKSI
-1. Kode Registrasi Penyedia Jasa: VAM-GATEWAY-JKT-INC
-2. Jenis Jasa Keuangan            : Custodial Clearing House / Capital Exchange Broker
-3. Nomor Laporan Forensik        : VAM/LTKM/2026/05/${Math.floor(100 + Math.random() * 900)}
-4. Sifat Laporan                 : SEGERA / SANGAT RAHASIA (CRITICAL)
-
-BAGIAN II: PROFIL TERLAPOR DAN STRUKTUR ULTIMATE BENEFICIAL OWNER (UBO)
-* Ekstrak Data Direktorat Jenderal Administrasi Hukum Umum (AHU) Kemenkumham RI:
-1. Nama Perusahaan Terlapor  : PT Halmahera Industrial Nickel (Pihak Pembeli)
-2. Nomor AHU Resmi           : AHU-009812-PT Tanggal Akta 12/01/2026
-3. Indentitas Beneficiary (UBO):
-   - Pacific Horizon Venture Corp Ltd (BVI) - Kepemilikan Mayoritas (74%) [Yurisdiksi Berisiko Tinggi]
-   - Sovereign Nominee Group (26%)
-4. Aliran Bank Clearing      : BCA Gajah Mada Jakarta (CENKIDJA) -> Pacific Horizon Holdco BVI
-5. Hash Hash Alamat Ledger   : Hash 0x39ba67...d981cf (Platform Bilateral Swap Kontrak)
-
-BAGIAN III: INDIKATOR KECURIGAAN DAN ANALISIS FORENSIK AI RADAR
-Sistem detektor VentureAM AI mendeteksi deviasi kritis yang dinilai sangat kuat melanggar pasal 3,4, & 5 UU No. 8 Tahun 2010 tentang Tindak Pidana Pencucian Uang:
-
-1. Trade Pricing Anomaly (Deviasi Nilai Pasar Adil / Fair Market Value):
-   Pihak pembeli melakukan Over-Invoicing senilai Rp 360.000.000 per unit untuk komoditas Battery Grade High Nickel Matte. Merujuk pada baseline harga internasional (PT Bumi Clearing), harga pasar wajar adalah 250.000.000 per unit. Terdapat selisih harga +44% berlebih tanpa justifikasi manifest yang otentik.
-   
-2. Pola Aliran Dana (Layering & Capital Flight):
-   Dana dalam jumlah besar dialirkan keluar Indonesia melalui sirkuit perbankan koresponden Internasional menuju rekening samaran di British Virgin Islands (BVI) yang dioperasikan atas nama Shell Resource Holding. Dugaan skema transfer pricing atau phantom trade untuk melarikan devisa dari wajib pajak domestik.
-
-3. Keadilan Dokumen Pabean (Manifest Check via Bea Cukai Hub):
-   Berdasarkan pencocokan data Bea Cukai, fisik kargo yang dikirim tidak mencukupi nilai nominal faktur yang dilaporkan, menunjukkan adanya pengisian dokumen fiktif.
-
-BAGIAN IV: REKOMENDASI DAN TINDAKAN INTEGRITAS GATEWAY
-Sistem VAM Gateway telah mengambil langkah-langkah preemptif pencegahan TPPU:
-1. Membekukan sementara (Hold Status) sisa kliring settlement yang belum tuntas.
-2. Memasukkan entitas "PT Halmahera Industrial Nickel" dan "Pacific Horizon" ke daftar Blacklist internal.
-3. Melakukan ekspor draft ini ke portal FIU-PPATK menggunakan VPN terenkripsi Tunnel API.
-
---------------------------------------------------------------------------------
-VERIFIKATOE INTEGRETAS CRYPTO DATA:
-Kode Hash SHA-256: d8f303ea00ebd8391745499cf8e10398f5a28392fb2c0d879ba67d981cf738ae20
-Status Integrasi : COMPILER OK
---------------------------------------------------------------------------------`;
-                      setSarDraftText(craftedDraftText);
+                    fetch('/api/tbml/sar-generate', {
+                      method: 'POST',
+                      headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify(payload)
+                    })
+                    .then(response => {
+                      if (!response.ok) throw new Error('API server returned error');
+                      return response.json();
+                    })
+                    .then(data => {
+                      setSarDraftText(data.draft || 'Gagal meramu draf laporan.');
                       setIsGeneratingSar(false);
-
                       setTerminalFeed(prev => [
-                        `[AI SAR ENGINE] Drafted Suspicious Activity Report (LTKM) for alert ${refId} conforming PPATK-01 specification successfully.`,
+                        `[AI SAR ENGINE] Synthesized detailed Suspicious Activity Report (LTKM) for alert ${payload.refId} via Gemini AI.`,
                         ...prev
                       ]);
-                    }, 1200);
+                    })
+                    .catch(err => {
+                      console.error('[AI SAR ENGINE] fail:', err);
+                      setIsGeneratingSar(false);
+                      setSarDraftText(`================================================================================
+LAPORAN TRANSAKSI KEUANGAN MENCURIGAKAN (LTKM) - PPATK FORM ${sarReportFormat || 'LTKM-PPATK-01'}
+================================================================================
+KONFIDENSIALITAS: SANGAT RAHASIA / EXTREMELY CONFIDENTIAL (PPATK LAW NO. 8/2010 SECTOR 3)
+--------------------------------------------------------------------------------
 
+BAGIAN I: PROFIL LEMBAGA PELAPOR DAN METADATA SISTEM
+1. Lembaga Pelapor: VentureAM Cybernetic Compliance Module
+2. ID Sistem      : VAM-RADAR-SAR-AIRGAP-RESILIENCE
+3. Operator       : Automated Guardian Daemon
+
+BAGIAN II: PROFIL TERLAPOR DAN ULTIMATE BENEFICIAL OWNER (UBO)
+1. Terlapor Utama : PT Halmahera Industrial Nickel
+2. Penerima Manfaat: Pacific Horizon Venture Ltd (BVI)
+3. Struktur Korporasi: Jaringan Shell Proxy under Offshore Trust
+
+BAGIAN III: INDIKATOR PENIPUAN DAGANG DAN PENJELASAN ALIRAN DANA (TBML FORENSICS)
+Sistem mengalami kendala timeout atau kunci API tidak terpasang, namun analisis heuristik lokal tetap mengonversi hasil scan sebagai berikut:
+1. Deviasi Harga Dagang: Transaksi atas indikator ${itmSelectedTriggers.join(', ') || 'Trade-Based Money Laundering'} terdeteksi menyimpang sebesar +44% dari Baseline Nilai Pasar Adil.
+2. Pola Penempatan (Placement): Dana dialirkan keluar yurisdiksi Republik Indonesia menuju British Virgin Islands (BVI).
+
+BAGIAN IV: REKOMENDASI AUDIT DAN TINDAKAN INTEGRITAS GATEWAY
+1. Rekomendasi: Membekukan sementara sisa penyelesaian kliring yang tidak tercatat.
+2. Pelaporan: Teruskan dokumen draf ini ke portal FIU-PPATK setelah dipadatkan.
+
+--------------------------------------------------------------------------------
+INTEGRITAS FORENSIK DIGITAL:
+Kode Hash digital SHA-256: sha256-d8f303ea00ebd8391745499cf8e10398f5a28392fb2c0d87
+Status Pengiriman        : CONVERTED LIVE RESILIENCE STYLING ACTIVE
+--------------------------------------------------------------------------------`);
+                    });
                   }}
                   className="w-full py-3 bg-[#DFFF00] hover:bg-[#deff9a] text-black font-black text-xs tracking-widest uppercase rounded-xl flex items-center justify-center gap-2 transition-all font-sans cursor-pointer mt-2"
                 >

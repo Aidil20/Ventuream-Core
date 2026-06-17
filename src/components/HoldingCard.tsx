@@ -47,8 +47,17 @@ export default function HoldingCard({ asset, idx, onClick, showCompactLayout = f
   }, [asset.marketValue, prevPrice]);
 
   const tickerCode = asset.ticker.split('.')[0];
-  const changeValue = typeof asset.change === 'number' ? asset.change : 0;
-  const isUp = changeValue >= 0;
+  const avgPriceDecimal = new Decimal(asset.averagePrice || 0);
+  const currentPriceDecimal = new Decimal(asset.currentPrice || asset.marketPrice || 0);
+  const sinceBuyPercentage = avgPriceDecimal.isZero() 
+    ? new Decimal(0) 
+    : currentPriceDecimal.minus(avgPriceDecimal).div(avgPriceDecimal).times(100);
+
+  const sinceBuyVal = sinceBuyPercentage.toNumber();
+  const isGain = sinceBuyVal >= 0;
+
+  const dailyChangeVal = typeof asset.dailyChange === 'number' ? asset.dailyChange : 0;
+  const isDailyGain = dailyChangeVal >= 0;
 
   // Render sub-elements with dynamic color states based on recent flash triggers
   const getFlashBorderClass = () => {
@@ -130,15 +139,24 @@ export default function HoldingCard({ asset, idx, onClick, showCompactLayout = f
           >
             Rp {typeof asset.marketValue === 'number' ? asset.marketValue.toLocaleString('id-ID') : (asset.marketValue || 'N/A')}
           </motion.p>
-          <div className="flex items-center justify-end gap-1 mt-0.5">
-            {isUp ? (
-              <ArrowUpRight className="w-3 h-3 text-emerald-400" />
-            ) : (
-              <ArrowDownRight className="w-3 h-3 text-red-400" />
-            )}
-            <p className={`text-[10px] font-black font-mono leading-none tracking-tight ${isUp ? 'text-emerald-400' : 'text-red-400'}`}>
-              {isUp ? '+' : ''}{changeValue.toFixed(2)}%
-            </p>
+          <div className="flex flex-col items-end mt-1.5 space-y-1">
+            <div className="flex items-center gap-1">
+              {isGain ? (
+                <ArrowUpRight className="w-2.5 h-2.5 text-emerald-400" />
+              ) : (
+                <ArrowDownRight className="w-2.5 h-2.5 text-red-400" />
+              )}
+              <span className={`text-[9px] font-black font-mono leading-none tracking-tight ${isGain ? 'text-emerald-400' : 'text-red-400'}`}>
+                {isGain ? '+' : ''}{sinceBuyVal.toFixed(2)}%
+              </span>
+              <span className="text-[7px] font-mono tracking-widest text-[#DFFF00] uppercase leading-none bg-[#DFFF00]/10 px-1 py-0.5 rounded ml-1 scale-90 select-none">Buy</span>
+            </div>
+            <div className="flex items-center gap-1">
+              <span className={`text-[9px] font-black font-mono leading-none tracking-tight ${isDailyGain ? 'text-emerald-400' : 'text-red-400'}`}>
+                {isDailyGain ? '+' : ''}{dailyChangeVal.toFixed(2)}%
+              </span>
+              <span className="text-[7px] font-mono tracking-widest text-slate-400 uppercase leading-none bg-slate-950 px-1 py-0.5 rounded ml-1 scale-90 select-none">Day</span>
+            </div>
           </div>
         </div>
       </div>

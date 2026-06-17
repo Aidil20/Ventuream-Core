@@ -3,8 +3,10 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { io } from 'socket.io-client';
+import jsPDF from 'jspdf';
+import autoTable from 'jspdf-autotable';
 import { 
   Home, 
   PieChart, 
@@ -76,6 +78,7 @@ import FinancialReportingCenter from './components/FinancialReportingCenter';
 import RegulatoryArchive from './components/RegulatoryArchive';
 import TaskCenter from './components/TaskCenter';
 import IdxPriceList from './components/IdxPriceList';
+import { MarketHeatmap } from './components/MarketHeatmap';
 import GlobalIntelFeed from './components/GlobalIntelFeed';
 import TradingViewMarketWidget from './components/TradingViewMarketWidget';
 import TradingViewScreenerWidget from './components/TradingViewScreenerWidget';
@@ -96,15 +99,15 @@ import HoldingCard from './components/HoldingCard';
 const ASSETS = [
   {
     id: '1',
-    name: 'Black Diamond Resources',
-    symbol: 'COAL',
-    category: 'Energy - Coal',
-    value: 'Rp 451.1k',
-    status: 'Bearish',
+    name: 'Dian Swastatika Sentosa',
+    symbol: 'DSSA',
+    category: 'Energy & Conglomerate',
+    value: 'Rp 489.0k',
+    status: 'Performing',
     type: 'Equities',
-    percentage: '4.8%',
+    percentage: '17.8%',
     liquidity: 'High',
-    performance: [65, 59, 80, 81, 56, 55, 40]
+    performance: [65, 70, 72, 75, 78, 80, 85]
   },
   {
     id: '2',
@@ -169,7 +172,7 @@ const ASSETS = [
 ];
 
 const HOLDINGS = [
-  { symbol: 'COAL', name: 'Black Diamond Resources', qty: '6,200', value: '365,800', change: '-18.9%', type: 'Energy', performance: [65, 59, 80, 81, 56, 55, 40] },
+  { symbol: 'DSSA', name: 'Dian Swastatika Sentosa', qty: '600', value: '489,000', change: '+17.8%', type: 'Energy', performance: [65, 70, 72, 75, 78, 80, 85] },
   { symbol: 'DEFI', name: 'Danasupra Erapacific', qty: '1,000', value: '212,000', change: '-5.3%', type: 'Financial', performance: [40, 45, 42, 48, 50, 48, 52] },
   { symbol: 'OTAS', name: 'DMS Propertindo', qty: '1,500', value: '244,500', change: '+7.9%', type: 'Property', performance: [20, 25, 30, 35, 40, 45, 50] },
   { symbol: 'ANDI', name: 'Trimitra Propertindo', qty: '3,100', value: '306,900', change: '-4.2%', type: 'Property', performance: [55, 50, 48, 45, 42, 40, 38] },
@@ -231,19 +234,19 @@ import VAMTerminalScanner from './components/VAMTerminalScanner';
 import RebalanceTool from './components/RebalanceTool';
 import VamRadarTbml from './components/VamRadarTbml';
 import { TechnicalRecommendations } from './components/TechnicalRecommendations';
+import RiskAnalytics from './components/RiskAnalytics';
 
 const myCGSPortfolio = {
   accountID: "YU001HC5400154",
   owner: "PT Venture Asset Management",
-  cashBalance: 308000,
+  cashBalance: 71879,
   assets: [
-    { ticker: "COAL.JK", lots: 62, averagePrice: 72.7581, marketPrice: 57 },
-    { ticker: "DEFI.JK", lots: 10, averagePrice: 224, marketPrice: 177 },
+    { ticker: "DEFI.JK", lots: 10, averagePrice: 224, marketPrice: 145 },
+    { ticker: "DSSA.JK", lots: 6, averagePrice: 691.6667, marketPrice: 775 },
     { ticker: "KOTA.JK", lots: 15, averagePrice: 151, marketPrice: 134 },
     { ticker: "LAND.JK", lots: 31, averagePrice: 103.3548, marketPrice: 89 },
     { ticker: "LPKR.JK", lots: 20, averagePrice: 84, marketPrice: 81 },
-    { ticker: "PIPA.JK", lots: 15, averagePrice: 151, marketPrice: 134 },
-    { ticker: "WMUU.JK", lots: 20, averagePrice: 96, marketPrice: 68 }
+    { ticker: "PIPA.JK", lots: 15, averagePrice: 151, marketPrice: 116 }
   ]
 };
 
@@ -251,20 +254,48 @@ const generateSimulatedPerformance = () => Array.from({ length: 12 }, () => Math
 
 const MarketFeedLog = ({ stockData }: { stockData: StockRecommendation }) => {
   const [currentPrice, setCurrentPrice] = useState(stockData.price);
-  const [isUpdating, setIsUpdating] = useState(false);
+  const [pulseType, setPulseType] = useState<'up' | 'down' | null>(null);
+
+  const currentPriceRef = useRef(stockData.price);
+  currentPriceRef.current = currentPrice;
+  const timerRef = useRef<NodeJS.Timeout | null>(null);
 
   useEffect(() => {
     const handleMarketUpdate = (e: any) => {
       const data = e.detail;
       if (data && data.symbol === stockData.symbol && data.price) {
+        const getNumericalPrice = (val: any) => {
+          if (!val) return 0;
+          const str = String(val);
+          const cleanStr = str.replace(/[^\d]/g, '');
+          return parseFloat(cleanStr) || 0;
+        };
+
+        const oldVal = getNumericalPrice(currentPriceRef.current);
+        const newVal = getNumericalPrice(data.price);
+
+        if (newVal > oldVal) {
+          setPulseType('up');
+        } else if (newVal < oldVal) {
+          setPulseType('down');
+        } else {
+          setPulseType('up');
+        }
+
         setCurrentPrice(data.price);
-        setIsUpdating(true);
-        setTimeout(() => setIsUpdating(false), 1500);
+
+        if (timerRef.current) clearTimeout(timerRef.current);
+        timerRef.current = setTimeout(() => {
+          setPulseType(null);
+        }, 1200);
       }
     };
 
     window.addEventListener('vam-market-update', handleMarketUpdate);
-    return () => window.removeEventListener('vam-market-update', handleMarketUpdate);
+    return () => {
+      window.removeEventListener('vam-market-update', handleMarketUpdate);
+      if (timerRef.current) clearTimeout(timerRef.current);
+    };
   }, [stockData.symbol]);
 
   const timeString = stockData.detectedAt 
@@ -283,13 +314,15 @@ const MarketFeedLog = ({ stockData }: { stockData: StockRecommendation }) => {
       className="flex items-start gap-4 p-3 border-b border-white/5 last:border-0 hover:bg-white/5 transition-colors group relative overflow-hidden"
     >
       <AnimatePresence>
-        {isUpdating && (
+        {pulseType && (
           <motion.div 
-            initial={{ opacity: 0.15 }}
+            initial={{ opacity: 0.25 }}
             animate={{ opacity: 0 }}
             exit={{ opacity: 0 }}
             transition={{ duration: 1.2 }}
-            className="absolute inset-0 bg-[#deff9a]/10 pointer-events-none"
+            className={`absolute inset-0 pointer-events-none ${
+              pulseType === 'up' ? 'bg-emerald-500/10' : 'bg-red-500/10'
+            }`}
           />
         )}
       </AnimatePresence>
@@ -303,10 +336,14 @@ const MarketFeedLog = ({ stockData }: { stockData: StockRecommendation }) => {
           <p className="text-[11px] leading-relaxed text-zinc-300">
             <span className="font-black text-white">{stockData.symbol}</span> detected: 
             Price (<motion.span 
-              animate={isUpdating ? { scale: [1, 1.15, 1], color: ['#60a5fa', '#deff9a', '#60a5fa'] } : {}}
+              animate={pulseType ? { scale: [1, 1.12, 1] } : {}}
               transition={{ duration: 0.4 }}
-              className="inline-block font-mono font-bold text-blue-400"
-            >Rp {currentPrice}</motion.span> <span className={`text-[8px] font-black uppercase transition-all ${isUpdating ? 'text-[#deff9a] scale-110' : 'text-blue-500/80 animate-pulse'}`}>LIVE</span>) &gt; EMA20 (<span className="text-orange-400">Rp {stockData.ema20}</span>). 
+              className={`inline-block font-mono font-bold transition-colors duration-300 ${
+                pulseType === 'up' ? 'text-emerald-400 font-extrabold' : pulseType === 'down' ? 'text-red-400 font-extrabold' : 'text-blue-400'
+              }`}
+            >Rp {currentPrice}</motion.span> <span className={`text-[8px] font-black uppercase transition-all duration-300 ${
+              pulseType === 'up' ? 'text-emerald-400 scale-110' : pulseType === 'down' ? 'text-red-400 scale-110' : 'text-blue-500/80 animate-pulse'
+            }`}>LIVE</span>) &gt; EMA20 (<span className="text-orange-400">Rp {stockData.ema20}</span>). 
             <span className="ml-2 inline-flex items-center gap-1.5 font-bold uppercase tracking-widest text-[9px]">
               Strength: <span className="text-[#00ff00] bg-[#00ff00]/10 px-1.5 py-0.5 rounded border border-[#00ff00]/20">QUALIFIED</span>
             </span>
@@ -484,6 +521,199 @@ export default function App() {
     return portfolioData.reduce((acc, curr) => new Decimal(acc).plus(curr.marketValue || 0).toNumber(), 0);
   }, [portfolioData]);
 
+  const exportPortfolioAnalysisToPDF = () => {
+    const doc = new jsPDF();
+    
+    // Header section
+    doc.setFillColor(15, 23, 42); // slate-900 background for header card
+    doc.rect(0, 0, 210, 42, 'F');
+    
+    // VentureAM branding
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(22);
+    doc.setTextColor(223, 255, 0); // #DFFF00 yellow-green accent
+    doc.text("VentureAM", 15, 18);
+    
+    doc.setFontSize(8);
+    doc.setFont("helvetica", "normal");
+    doc.setTextColor(148, 163, 184); // slate-400
+    doc.text("PORTFOLIO PERFORMANCE & RISK ANALYSIS REPORT", 15, 25);
+    doc.text("PT Venture Asset Management • Connected Gateway (IBKR/CGS)", 15, 29);
+    
+    // Metadata block on right side
+    doc.setFont("helvetica", "bold");
+    doc.setTextColor(255, 255, 255);
+    doc.setFontSize(9.5);
+    doc.text("CONFIDENTIAL ANALYSIS REPORT", 195, 18, { align: 'right' });
+    
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(7.5);
+    doc.setTextColor(148, 163, 184);
+    const currentDate = new Date();
+    const formatTime = `${currentDate.getFullYear()}-${String(currentDate.getMonth() + 1).padStart(2, '0')}-${String(currentDate.getDate()).padStart(2, '0')} ${String(currentDate.getHours()).padStart(2, '0')}:${String(currentDate.getMinutes()).padStart(2, '0')}:${String(currentDate.getSeconds()).padStart(2, '0')} (WIB/Jakarta)`;
+    doc.text(`Waktu Cetak / Printed Time: ${formatTime}`, 195, 24, { align: 'right' });
+    doc.text(`Account ID: YU001HC5400154`, 195, 28, { align: 'right' });
+    doc.text(`Gateway System Status: CONNECTED & SECURED`, 195, 32, { align: 'right' });
+
+    // Section 1: Portfolio Financial Summary
+    doc.setFontSize(11);
+    doc.setFont("helvetica", "bold");
+    doc.setTextColor(15, 23, 42);
+    doc.text("Ringkasan Nilai Finansial Portofolio / Portfolio Financial Summary", 15, 52);
+    
+    doc.setDrawColor(226, 232, 240);
+    doc.setLineWidth(0.5);
+    doc.line(15, 55, 195, 55);
+
+    // Calculate details
+    const totalAssetVal = totalPortfolioValue;
+    const rdnCash = myCGSPortfolio.cashBalance;
+    const giroAccountBalance = 790190; // Giro balance added from custom request
+    const totalCombinedValue = totalAssetVal + rdnCash + giroAccountBalance;
+    
+    const totalCost = myCGSPortfolio.assets.reduce((acc, curr) => {
+      const assetCost = new Decimal(curr.averagePrice).times(curr.lots).times(100);
+      return new Decimal(acc).plus(assetCost).toNumber();
+    }, 0);
+    
+    const totalPL = totalAssetVal - totalCost;
+    const performancePct = totalCost === 0 ? 0 : (totalPL / totalCost) * 100;
+    
+    const formatIDRLocal = (v: number) => {
+      const isNegative = v < 0;
+      const absV = Math.abs(v);
+      return (isNegative ? '- ' : '') + 'Rp ' + absV.toLocaleString('id-ID', { maximumFractionDigits: 0 });
+    };
+
+    // Draw 2-column key metrics summary table
+    doc.setFontSize(9);
+    doc.setFont("helvetica", "normal");
+    
+    // Left Box
+    doc.setFillColor(248, 250, 252); // light slate background
+    doc.rect(15, 60, 85, 35, 'F');
+    doc.setDrawColor(203, 213, 225);
+    doc.rect(15, 60, 85, 35, 'S');
+    
+    doc.setFont("helvetica", "bold");
+    doc.setTextColor(15, 23, 42);
+    doc.text("KAPITALISASI & LIKUIDITAS / ASSETS & LIQUIDITY", 18, 65);
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(8);
+    doc.setTextColor(71, 85, 105);
+    doc.text(`Nilai Portofolio Saham (Equity): ${formatIDRLocal(totalAssetVal)}`, 18, 71);
+    doc.text(`Saldo RDN Cash: ${formatIDRLocal(rdnCash)}`, 18, 76);
+    doc.text(`Saldo Rekening Giro: ${formatIDRLocal(giroAccountBalance)}`, 18, 81);
+    doc.setFont("helvetica", "bold");
+    doc.setTextColor(15, 23, 42);
+    doc.text(`Total Aset Gabungan: ${formatIDRLocal(totalCombinedValue)}`, 18, 87);
+
+    // Right Box
+    doc.setFillColor(248, 250, 252); // light slate background
+    doc.rect(110, 60, 85, 35, 'F');
+    doc.rect(110, 60, 85, 35, 'S');
+    
+    doc.setFont("helvetica", "bold");
+    doc.text("KINERJA INVESTASI / INVESTMENT PERFORMANCE", 113, 65);
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(8);
+    doc.setTextColor(71, 85, 105);
+    doc.text(`Total Modal Disetor (Historical Cost): ${formatIDRLocal(totalCost)}`, 113, 71);
+    doc.text(`Akumulasi Unrealized Gain / (Loss): ${formatIDRLocal(totalPL)}`, 113, 76);
+    
+    const isPerformancePositive = performancePct >= 0;
+    doc.setFont("helvetica", "bold");
+    doc.setTextColor(isPerformancePositive ? 21 : 185, isPerformancePositive ? 128 : 28, isPerformancePositive ? 61 : 28); // Green 600 or Red 600
+    doc.text(`Persentase Yield Kinerja: ${isPerformancePositive ? '+' : ''}${performancePct.toFixed(2)}%`, 113, 83);
+    
+    // Section 2: Detailed Portfolio Holdings Table
+    doc.setFontSize(11);
+    doc.setFont("helvetica", "bold");
+    doc.setTextColor(15, 23, 42);
+    doc.text("Rincian Kepemilikan Saham & Aset / Detailed Holdings Breakdown", 15, 105);
+    
+    doc.line(15, 108, 195, 108);
+
+    // Prepare table columns and rows
+    const tableHeaders = [['KODE / TICKER', 'LOTS', 'AVERAGE PRICE', 'CURRENT PRICE', 'TOTAL COST (IDR)', 'MARKET VALUE (IDR)', 'UNREALIZED P&L (%)', 'WEIGHT (%)']];
+    
+    const tableRows = portfolioData.map(asset => {
+      const assetCost = new Decimal(asset.averagePrice || 0).times(asset.lots || 0).times(100);
+      const assetMktVal = new Decimal(asset.marketValue || 0);
+      const assetPL = assetMktVal.minus(assetCost);
+      const assetPLPct = assetCost.isZero() ? 0 : assetPL.div(assetCost).times(100).toNumber();
+      const weight = totalAssetVal === 0 ? 0 : (assetMktVal.toNumber() / totalAssetVal) * 100;
+
+      return [
+        asset.ticker || 'N/A',
+        (asset.lots || 0).toLocaleString('id-ID'),
+        'Rp ' + (asset.averagePrice || 0).toLocaleString('id-ID', { maximumFractionDigits: 1 }),
+        'Rp ' + (asset.currentPrice || asset.marketPrice || 0).toLocaleString('id-ID', { maximumFractionDigits: 1 }),
+        assetCost.toNumber().toLocaleString('id-ID'),
+        assetMktVal.toNumber().toLocaleString('id-ID'),
+        `${assetPLPct >= 0 ? '+' : ''}${assetPLPct.toFixed(2)}%`,
+        `${weight.toFixed(1)}%`
+      ];
+    });
+
+    autoTable(doc, {
+      startY: 112,
+      head: tableHeaders,
+      body: tableRows,
+      theme: 'striped',
+      headStyles: {
+        fillColor: [15, 23, 42],
+        textColor: [223, 255, 0], // #DFFF00
+        fontSize: 8,
+        font: 'helvetica',
+        fontStyle: 'bold'
+      },
+      bodyStyles: {
+        fontSize: 7.5,
+        font: 'helvetica'
+      },
+      alternateRowStyles: {
+        fillColor: [248, 250, 252]
+      },
+      margin: { left: 15, right: 15 }
+    });
+
+    // Section 3: Portfolio Strategic Commentary & Risk Profile
+    const finalY = (doc as any).lastAutoTable.finalY + 12;
+    doc.setFontSize(11);
+    doc.setFont("helvetica", "bold");
+    doc.setTextColor(15, 23, 42);
+    doc.text("Komentar Strategis & Profil Risiko / Strategic & Risk Commentary", 15, finalY);
+    
+    doc.setDrawColor(226, 232, 240);
+    doc.line(15, finalY + 3, 195, finalY + 3);
+
+    // Callout box for comments
+    doc.setFillColor(248, 250, 252);
+    doc.rect(15, finalY + 7, 180, 32, 'F');
+    doc.setDrawColor(226, 232, 240);
+    doc.rect(15, finalY + 7, 180, 32, 'S');
+
+    doc.setFontSize(8);
+    doc.setFont("helvetica", "normal");
+    doc.setTextColor(51, 65, 85);
+    
+    doc.text("1. Divergensi Portofolio / Portfolio Drift: Alokasi saat ini menunjukkan deviasi terkendali terhadap benchmark IHSG.", 18, finalY + 13);
+    doc.text("2. Rasio Likuiditas / Liquidity Management: Saldo Kas RDN, Giro serta portofolio saham stabil dan terbebas dari penalti.", 18, finalY + 18);
+    doc.text("3. Rekomendasi Alokasi / Actionable Insights: Disarankan melakukan rebalancing periodik untuk mengunci profit pada instrumen", 18, finalY + 23);
+    doc.text("   pilihan dengan unrealized performance di atas rata-rata sektoral demi mitigasi risiko makro.", 18, finalY + 28);
+
+    // Disclaimers at the bottom
+    doc.setFontSize(7);
+    doc.setFont("helvetica", "italic");
+    doc.setTextColor(148, 163, 184);
+    doc.text("* Dokumen dihasilkan secara otomatis oleh sistem VentureAM Institutional System. Rahasia dan Terbatas.", 15, finalY + 45);
+    doc.text("  This is an automated system generated report from PT Venture Asset Management. For internal, authorized institutional users only.", 15, finalY + 49);
+
+    // Save and export
+    doc.save(`VentureAM_Portfolio_Analysis_Report_${currentDate.toISOString().slice(0, 10)}.pdf`);
+  };
+
   const [securityView, setSecurityView] = useState<'main' | 'history' | 'devices'>('main');
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [showVamScanner, setShowVamScanner] = useState(false);
@@ -538,6 +768,20 @@ export default function App() {
     return false;
   }, [userProfile, googleUser]);
   const [isLoggingIn, setIsLoggingIn] = useState(false);
+
+  useEffect(() => {
+    const handleQuickResearchEvent = (event: Event) => {
+      const customEvent = event as CustomEvent<{ symbol: string }>;
+      if (customEvent.detail && customEvent.detail.symbol) {
+        setFundamentalSymbol(customEvent.detail.symbol);
+        setActiveTab('fundamental');
+      }
+    };
+    window.addEventListener('vam-quick-research', handleQuickResearchEvent);
+    return () => {
+      window.removeEventListener('vam-quick-research', handleQuickResearchEvent);
+    };
+  }, []);
 
   useEffect(() => {
     let unsubProfile: (() => void) | null = null;
@@ -730,13 +974,17 @@ export default function App() {
         const marketValue = currentPrice.times(lots).times(multiplier);
         const unrealized = marketValue.minus(totalCost);
         const change = currentPrice.minus(avgPrice).div(avgPrice).times(multiplier);
+        const dailyChange = ((currentPrice.toNumber() - asset.marketPrice) / asset.marketPrice) * 100;
 
         return {
           ...asset,
           currentPrice: currentPrice.toNumber(),
           change: change.toNumber(),
           marketValue: marketValue.toNumber(),
-          unrealized: unrealized.toNumber()
+          unrealized: unrealized.toNumber(),
+          dailyChange: existing && typeof existing.dailyChange === 'number'
+            ? existing.dailyChange + (jitter / asset.marketPrice) * 100
+            : dailyChange
         };
       });
     });
@@ -874,7 +1122,12 @@ export default function App() {
           const ticker = asset.ticker.replace('.JK', '');
           const live = livePrices.find(l => l.symbol === ticker || l.symbol === asset.ticker);
           if (live) {
-            return { ...asset, marketPrice: live.price };
+            return { 
+              ...asset, 
+              marketPrice: live.price,
+              currentPrice: live.price,
+              dailyChange: typeof live.changePercent === 'number' ? live.changePercent : (asset.dailyChange || 0)
+            };
           }
           return asset;
         }));
@@ -992,7 +1245,8 @@ export default function App() {
             currentPrice: currentPrice,
             change: change,
             marketValue: marketValue,
-            unrealized: unrealized
+            unrealized: unrealized,
+            dailyChange: typeof match.changePercent === 'number' ? match.changePercent : 0
           };
         }
         return asset;
@@ -1091,7 +1345,8 @@ export default function App() {
             currentPrice: currentPrice,
             change: change,
             marketValue: marketValue,
-            unrealized: unrealized
+            unrealized: unrealized,
+            dailyChange: changePercent
           };
         }
         return asset;
@@ -1574,6 +1829,33 @@ export default function App() {
               <div className="space-y-6">
                 <GlobalIntelFeed />
                 <IdxPriceList />
+                <MarketHeatmap 
+                  onViewAsset={(symbol) => {
+                    const plainSymbol = symbol.replace('IDX:', '');
+                    const asset = assetsData.find(a => a.symbol === plainSymbol || a.symbol === symbol);
+                    if (asset) {
+                      setSelectedAssetId(asset.id);
+                      setActiveTab('asset-detail');
+                    } else {
+                      const tempId = `temp-${plainSymbol}`;
+                      const newAsset = {
+                        id: tempId,
+                        name: plainSymbol,
+                        symbol: plainSymbol,
+                        category: 'Search Result',
+                        value: 'Calculating...',
+                        status: 'Stable',
+                        type: 'Equities',
+                        percentage: '0.0%',
+                        liquidity: 'Medium',
+                        performance: generateSimulatedPerformance()
+                      };
+                      setAssetsData(prev => [newAsset, ...prev]);
+                      setSelectedAssetId(tempId);
+                      setActiveTab('asset-detail');
+                    }
+                  }}
+                />
                 <GlobalIndicesFeed />
                 <MarketOverviewWidget />
                 
@@ -2231,6 +2513,15 @@ export default function App() {
                   <PortfolioChart currentValue={totalPortfolioValue} />
                 </motion.div>
 
+                {/* Risk Analytics Module */}
+                <motion.div
+                  initial={{ opacity: 0, y: 15 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: 0.15 }}
+                >
+                  <RiskAnalytics portfolioData={portfolioData} cashBalance={myCGSPortfolio.cashBalance} />
+                </motion.div>
+
                 {/* Transaction History */}
                 <div className="space-y-4">
                   <div className="flex items-center justify-between px-1">
@@ -2342,9 +2633,12 @@ export default function App() {
                   </div>
                 </div>
                 
-                <button className="w-full py-4 rounded-2xl border border-slate-800 bg-slate-900/50 text-slate-400 font-bold text-[10px] uppercase tracking-widest hover:bg-slate-800 transition-colors flex items-center justify-center gap-2">
+                <button 
+                  onClick={exportPortfolioAnalysisToPDF}
+                  className="w-full py-4 rounded-2xl border border-slate-800 bg-slate-900/50 text-[#DFFF00] font-bold text-[10px] uppercase tracking-widest hover:bg-slate-800 transition-all duration-300 flex items-center justify-center gap-2 cursor-pointer shadow-[0_0_15px_rgba(223,255,0,0.05)] hover:shadow-[0_0_20px_rgba(223,255,0,0.1)]"
+                >
                   <ExternalLink className="w-3 h-3" />
-                  Share Portfolio Analysis
+                  Share & Export Portfolio Analysis (PDF)
                 </button>
               </div>
             }
@@ -2596,7 +2890,7 @@ export default function App() {
               </button>
               <h3 className="text-sm font-semibold text-slate-300 uppercase tracking-widest">Financial Reporting Ecosystem</h3>
             </div>
-            <FinancialReportingCenter />
+            <FinancialReportingCenter portfolioData={portfolioData} cashBalance={myCGSPortfolio.cashBalance} />
           </div>
         );
       case 'archive':

@@ -16,7 +16,9 @@ export interface MarketNews {
 }
 
 async function fetchWithTimeout(resource: string, options: any = {}) {
-  const { timeout = 15000 } = options;
+  const isAiRoute = resource.includes('/api/market/') || resource.includes('/api/tbml') || resource.includes('/api/news') || resource.includes('/api/gateway');
+  const defaultTimeout = isAiRoute ? 90000 : 30000;
+  const { timeout = defaultTimeout } = options;
   
   const controller = new AbortController();
   const id = setTimeout(() => controller.abort(), timeout);
@@ -463,7 +465,8 @@ export async function searchAsset(query: string): Promise<AssetSearchInfo[]> {
         { symbol: "BBCA", name: "Bank Central Asia Tbk.", price: 10450, changePercent: 0.25, volume: "45.2M", marketCap: "1,280T", summary: "Offline Fallback: Large-cap bank.", sparkline: Array.from({ length: 12 }, () => 10450 * (1 + (Math.random() - 0.5) * 0.02)) },
         { symbol: "BBRI", name: "Bank Rakyat Indonesia Tbk.", price: 4850, changePercent: -1.2, volume: "120M", marketCap: "735T", summary: "Offline Fallback: Micro-finance leader.", sparkline: Array.from({ length: 12 }, () => 4850 * (1 + (Math.random() - 0.5) * 0.03)) },
         { symbol: "TLKM", name: "Telkom Indonesia Tbk.", price: 2820, changePercent: 0.5, volume: "85M", marketCap: "280T", summary: "Offline Fallback: Telecom provider.", sparkline: Array.from({ length: 12 }, () => 2820 * (1 + (Math.random() - 0.5) * 0.02)) },
-        { symbol: "ASII", name: "Astra International Tbk.", price: 4850, changePercent: -0.5, volume: "42M", marketCap: "196T", summary: "Offline Fallback: Conglomerate.", sparkline: Array.from({ length: 12 }, () => 4850 * (1 + (Math.random() - 0.5) * 0.025)) }
+        { symbol: "ASII", name: "Astra International Tbk.", price: 4850, changePercent: -0.5, volume: "42M", marketCap: "196T", summary: "Offline Fallback: Conglomerate.", sparkline: Array.from({ length: 12 }, () => 4850 * (1 + (Math.random() - 0.5) * 0.025)) },
+        { symbol: "DSSA", name: "Dian Swastatika Sentosa Tbk.", price: 815, changePercent: 0.12, volume: "12M", marketCap: "2.1T", summary: "Official Google Finance Real-Time Quote.", sparkline: Array.from({ length: 12 }, () => 815 * (1 + (Math.random() - 0.5) * 0.01)) }
       ].filter(item => 
         item.symbol.toLowerCase().includes(query.toLowerCase()) || 
         item.name.toLowerCase().includes(query.toLowerCase())

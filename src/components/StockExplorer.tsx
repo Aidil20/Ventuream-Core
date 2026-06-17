@@ -53,7 +53,7 @@ export const StockExplorer: React.FC<StockExplorerProps> = ({
   const [stockInfo, setStockInfo] = useState<AssetSearchInfo | null>(null);
   const [searchResults, setSearchResults] = useState<AssetSearchInfo[]>([]);
   const [isSearching, setIsSearching] = useState(false);
-  const [watchlist, setWatchlist] = useState<string[]>(['BBCA', 'TLKM', 'ADRO']);
+  const [watchlist, setWatchlist] = useState<string[]>(['BBCA', 'TLKM', 'ADRO', 'DSSA']);
   const [news, setNews] = useState<StockNews[]>([]);
   const [isNewsLoading, setIsNewsLoading] = useState(false);
   const [sentimentAnalysis, setSentimentAnalysis] = useState<NewsSentimentAnalysis | null>(null);
@@ -837,6 +837,17 @@ export const StockExplorer: React.FC<StockExplorerProps> = ({
                     Go to Asset
                   </button>
                 )}
+                <a 
+                  href={selectedStock!.toUpperCase() === 'COMPOSITE' || selectedStock!.toUpperCase() === 'JCI' || selectedStock!.toUpperCase() === 'IHSG' 
+                    ? 'https://www.google.com/finance/quote/COMPOSITE:INDEXIDX' 
+                    : `https://www.google.com/finance/quote/${selectedStock!.replace('IDX:', '').toUpperCase()}:IDX`}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="flex items-center gap-2 px-4 py-2 rounded-2xl bg-zinc-900 border border-zinc-800 text-slate-300 hover:text-[#DFFF00] hover:border-[#DFFF00]/50 font-black text-[11px] uppercase tracking-widest hover:bg-zinc-850 transition-all"
+                >
+                  <ExternalLink className="w-4 h-4 text-[#DFFF00]" />
+                  Google Finance
+                </a>
                 <button 
                   onClick={() => toggleWatchlist(selectedStock!)}
                   className={`flex items-center gap-2 px-4 py-2 rounded-2xl border font-black text-[11px] uppercase tracking-widest transition-all ${
@@ -1532,7 +1543,7 @@ export const StockExplorer: React.FC<StockExplorerProps> = ({
             </form>
 
             <div className="flex flex-wrap justify-center gap-3 pt-4">
-               {['BBCA', 'TLKM', 'ADRO', 'GOTO', 'BMRI'].map(symbol => (
+               {['BBCA', 'TLKM', 'ADRO', 'GOTO', 'BMRI', 'DSSA'].map(symbol => (
                  <button
                    key={symbol}
                    onClick={() => {

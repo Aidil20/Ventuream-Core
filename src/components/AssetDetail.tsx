@@ -21,7 +21,8 @@ import {
   Users,
   Target,
   Briefcase,
-  Star
+  Star,
+  ExternalLink
 } from 'lucide-react';
 import { Sparkline } from './Sparkline';
 import { fetchCorrelationScore, CorrelationResult, fetchMarketNews, MarketNews } from '../services/marketService';
@@ -212,13 +213,25 @@ export function AssetDetail({ asset, onBack }: AssetDetailProps) {
         <div className="relative z-10">
           <div className="flex justify-between items-start mb-6">
             <div>
-              <div className="flex items-center gap-2 mb-1">
+              <div className="flex flex-wrap items-center gap-2 mb-1">
                 <span className="text-[9px] px-2 py-0.5 rounded-lg bg-slate-950 text-slate-500 font-black border border-slate-800 uppercase tracking-widest">
                   {asset.symbol}
                 </span>
                 <span className="text-[9px] px-2 py-0.5 rounded-lg bg-blue-900/20 text-blue-400 font-black border border-blue-800/20 uppercase tracking-widest">
                   {asset.type}
                 </span>
+                <a 
+                  href={asset.symbol.toUpperCase() === 'COMPOSITE' || asset.symbol.toUpperCase() === 'JCI' || asset.symbol.toUpperCase() === 'IHSG' 
+                    ? 'https://www.google.com/finance/quote/COMPOSITE:INDEXIDX' 
+                    : `https://www.google.com/finance/quote/${asset.symbol.replace('IDX:', '').toUpperCase()}:IDX`}
+                  target="_blank"
+                  rel="noreferrer"
+                  title="View on Google Finance for real-time validation"
+                  className="text-[8px] px-2 py-0.5 rounded-lg bg-zinc-950 text-[#DFFF00] hover:bg-[#DFFF00] hover:text-black font-black border border-zinc-800 hover:border-transparent uppercase tracking-wider flex items-center gap-1 transition-all"
+                >
+                  <ExternalLink className="w-2.5 h-2.5 text-[#DFFF00] group-hover:text-black" />
+                  <span>Google Finance</span>
+                </a>
               </div>
               <h2 className="text-2xl font-black text-white uppercase tracking-tight leading-tight">
                 {asset.name}
