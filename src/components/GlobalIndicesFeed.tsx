@@ -42,7 +42,9 @@ function GlobalIndicesFeed() {
         const change = (Math.random() - 0.48) * 0.16;
         const nextVix = Math.max(12.00, Math.min(22.00, Number((prev + change).toFixed(2))));
         const relativeChange = ((nextVix - dailyOpen) / dailyOpen) * 100;
-        setVixChange(Number(relativeChange.toFixed(2)));
+        setTimeout(() => {
+          setVixChange(Number(relativeChange.toFixed(2)));
+        }, 0);
         return nextVix;
       });
     }, 4000);

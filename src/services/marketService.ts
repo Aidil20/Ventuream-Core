@@ -323,9 +323,10 @@ export async function fetchLivePrices(symbols: string[]): Promise<LivePrice[]> {
   const TTL_PRICE = 10000; // 10 seconds cache for live prices
   const result: LivePrice[] = [];
   const missingSymbols: string[] = [];
+  const source = localStorage.getItem('vam-feed-source') || 'googlefinance';
 
   for (const s of symbols) {
-    const key = `live_price_${s}`;
+    const key = `live_price_${source}_${s}`;
     const cached = MarketApiCache.get<LivePrice>(key);
     if (cached) {
       result.push(cached);
@@ -338,12 +339,12 @@ export async function fetchLivePrices(symbols: string[]): Promise<LivePrice[]> {
   if (missingSymbols.length > 0) {
     try {
       const tickersString = missingSymbols.map(s => s.replace('.JK', '')).join(',');
-      const fetchKey = `live_price_batch_${tickersString}`;
+      const fetchKey = `live_price_batch_${source}_${tickersString}`;
       
       const prices = await MarketApiCache.fetch<LivePrice[]>(
         fetchKey,
         async () => {
-          const response = await fetchWithRetry(`/api/market/live-prices?symbols=${tickersString}`, {}, 1);
+          const response = await fetchWithRetry(`/api/market/live-prices?symbols=${tickersString}&source=${source}`, {}, 1);
           if (!response.ok) throw new Error("Price API response not warning-free");
           const data = await response.json();
           if (Array.isArray(data)) {
@@ -361,13 +362,13 @@ export async function fetchLivePrices(symbols: string[]): Promise<LivePrice[]> {
 
       for (const item of prices) {
         // Cache individual symbol
-        MarketApiCache.set(`live_price_${item.symbol}`, item, TTL_PRICE, false);
+        MarketApiCache.set(`live_price_${source}_${item.symbol}`, item, TTL_PRICE, false);
         
         // Match user requested symbol (including possible .JK suffix)
         const matchedReq = missingSymbols.find(s => s === item.symbol || s.replace('.JK', '') === item.symbol);
         if (matchedReq) {
           if (matchedReq !== item.symbol) {
-             MarketApiCache.set(`live_price_${matchedReq}`, item, TTL_PRICE, false);
+             MarketApiCache.set(`live_price_${source}_${matchedReq}`, item, TTL_PRICE, false);
           }
           result.push({ ...item, symbol: matchedReq });
         }
@@ -393,7 +394,7 @@ export async function fetchLivePrices(symbols: string[]): Promise<LivePrice[]> {
           changePercent: (Math.random() - 0.5) * 2
         };
 
-        MarketApiCache.set(`live_price_${s}`, simulated, TTL_PRICE, false);
+        MarketApiCache.set(`live_price_${source}_${s}`, simulated, TTL_PRICE, false);
         result.push(simulated);
       }
     }

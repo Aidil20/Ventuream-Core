@@ -79,6 +79,7 @@ import RegulatoryArchive from './components/RegulatoryArchive';
 import TaskCenter from './components/TaskCenter';
 import IdxPriceList from './components/IdxPriceList';
 import { MarketHeatmap } from './components/MarketHeatmap';
+import { MarketSentimentBanner } from './components/MarketSentimentBanner';
 import GlobalIntelFeed from './components/GlobalIntelFeed';
 import TradingViewMarketWidget from './components/TradingViewMarketWidget';
 import TradingViewScreenerWidget from './components/TradingViewScreenerWidget';
@@ -235,6 +236,7 @@ import RebalanceTool from './components/RebalanceTool';
 import VamRadarTbml from './components/VamRadarTbml';
 import { TechnicalRecommendations } from './components/TechnicalRecommendations';
 import RiskAnalytics from './components/RiskAnalytics';
+import { ManualRebalanceForm } from './components/ManualRebalanceForm';
 
 const myCGSPortfolio = {
   accountID: "YU001HC5400154",
@@ -407,6 +409,88 @@ export default function App() {
   const [activeScannerModule, setActiveScannerModule] = useState<string | null>(null);
   const [expandedMarket, setExpandedMarket] = useState<string | null>(null);
   const [portfolioData, setPortfolioData] = useState<PortfolioAsset[]>([]);
+  const [cgsAssets, setCgsAssets] = useState(() => [
+    { ticker: "DEFI.JK", lots: 10, averagePrice: 224, marketPrice: 145 },
+    { ticker: "DSSA.JK", lots: 6, averagePrice: 691.6667, marketPrice: 775 },
+    { ticker: "KOTA.JK", lots: 15, averagePrice: 151, marketPrice: 134 },
+    { ticker: "LAND.JK", lots: 31, averagePrice: 103.3548, marketPrice: 89 },
+    { ticker: "LPKR.JK", lots: 20, averagePrice: 84, marketPrice: 81 },
+    { ticker: "PIPA.JK", lots: 15, averagePrice: 151, marketPrice: 116 }
+  ]);
+  const [cgsCashBalance, setCgsCashBalance] = useState(71879);
+
+  const handleUpdatePortfolio = useCallback((ticker: string, action: 'BUY' | 'SELL', price: number, lots: number) => {
+    const cost = price * lots * 100;
+    
+    setCgsCashBalance(prev => {
+      if (action === 'BUY') {
+        return prev - cost;
+      } else {
+        return prev + cost;
+      }
+    });
+
+    setCgsAssets(prevAssets => {
+      const existingIdx = prevAssets.findIndex(a => a.ticker.toUpperCase() === ticker.toUpperCase());
+      
+      if (existingIdx >= 0) {
+        const existing = prevAssets[existingIdx];
+        if (action === 'BUY') {
+          const totalLots = existing.lots + lots;
+          const totalValue = (existing.averagePrice * existing.lots) + (price * lots);
+          const newAvgPrice = totalValue / totalLots;
+          
+          const updated = [...prevAssets];
+          updated[existingIdx] = {
+            ...existing,
+            lots: totalLots,
+            averagePrice: newAvgPrice,
+            marketPrice: price
+          };
+          return updated;
+        } else {
+          const remainingLots = existing.lots - lots;
+          if (remainingLots <= 0) {
+            return prevAssets.filter((_, i) => i !== existingIdx);
+          } else {
+            const updated = [...prevAssets];
+            updated[existingIdx] = {
+              ...existing,
+              lots: remainingLots,
+              marketPrice: price
+            };
+            return updated;
+          }
+        }
+      } else {
+        if (action === 'BUY') {
+          return [
+            ...prevAssets,
+            {
+              ticker: ticker.toUpperCase(),
+              lots,
+              averagePrice: price,
+              marketPrice: price
+            }
+          ];
+        }
+        return prevAssets;
+      }
+    });
+  }, []);
+
+  const handleResetPortfolio = useCallback(() => {
+    setCgsAssets([
+      { ticker: "DEFI.JK", lots: 10, averagePrice: 224, marketPrice: 145 },
+      { ticker: "DSSA.JK", lots: 6, averagePrice: 691.6667, marketPrice: 775 },
+      { ticker: "KOTA.JK", lots: 15, averagePrice: 151, marketPrice: 134 },
+      { ticker: "LAND.JK", lots: 31, averagePrice: 103.3548, marketPrice: 89 },
+      { ticker: "LPKR.JK", lots: 20, averagePrice: 84, marketPrice: 81 },
+      { ticker: "PIPA.JK", lots: 15, averagePrice: 151, marketPrice: 116 }
+    ]);
+    setCgsCashBalance(71879);
+  }, []);
+
   const [selectedStudies, setSelectedStudies] = useState<string[]>(["MASimple@tv-basicstudies", "MAExp@tv-basicstudies"]);
   const [livePrices, setLivePrices] = useState<Record<string, number>>({});
   
@@ -567,11 +651,11 @@ export default function App() {
 
     // Calculate details
     const totalAssetVal = totalPortfolioValue;
-    const rdnCash = myCGSPortfolio.cashBalance;
+    const rdnCash = cgsCashBalance;
     const giroAccountBalance = 790190; // Giro balance added from custom request
     const totalCombinedValue = totalAssetVal + rdnCash + giroAccountBalance;
     
-    const totalCost = myCGSPortfolio.assets.reduce((acc, curr) => {
+    const totalCost = cgsAssets.reduce((acc, curr) => {
       const assetCost = new Decimal(curr.averagePrice).times(curr.lots).times(100);
       return new Decimal(acc).plus(assetCost).toNumber();
     }, 0);
@@ -955,46 +1039,79 @@ export default function App() {
   };
 
   const updateCGSPrices = useCallback(async () => {
-    // Simulate fetching live data based on CGS iTrade images with minimal jitter
-    setPortfolioData(prevPortfolio => {
-      return myCGSPortfolio.assets.map(asset => {
-        // Use existing currentPrice if available for continuity
-        const existing = prevPortfolio.find(p => p.ticker === asset.ticker);
-        const basePrice = existing ? existing.currentPrice : asset.marketPrice;
-        
-        const voltMult = isMarketSyncingRef.current ? 0.005 : 0.002;
-        const jitter = (Math.random() - 0.5) * (basePrice * voltMult);
-        const currentPrice = new Decimal(basePrice).plus(jitter);
-        
-        const lots = new Decimal(asset.lots);
-        const avgPrice = new Decimal(asset.averagePrice);
-        const multiplier = new Decimal(100);
+    try {
+      const activeSource = localStorage.getItem('vam-feed-source') || 'googlefinance';
+      const rawSymbols = cgsAssets.map(a => a.ticker.replace('.JK', '')).join(',');
+      const response = await fetch(`/api/market/live-prices?symbols=${rawSymbols}&source=${activeSource}`);
+      
+      if (response.ok) {
+        const liveDataList = await response.json();
+        const liveMap: Record<string, { price: number; changePercent: number }> = {};
+        liveDataList.forEach((item: any) => {
+          liveMap[item.symbol.toUpperCase()] = {
+            price: item.price,
+            changePercent: item.changePercent
+          };
+        });
 
-        const totalCost = avgPrice.times(lots).times(multiplier);
-        const marketValue = currentPrice.times(lots).times(multiplier);
-        const unrealized = marketValue.minus(totalCost);
-        const change = currentPrice.minus(avgPrice).div(avgPrice).times(multiplier);
-        const dailyChange = ((currentPrice.toNumber() - asset.marketPrice) / asset.marketPrice) * 100;
+        setPortfolioData(() => {
+          return cgsAssets.map(asset => {
+            const cleanTicker = asset.ticker.replace('.JK', '').toUpperCase();
+            const liveMatch = liveMap[cleanTicker];
+            
+            // Fallback price if not found in live data response
+            const currentPrice = liveMatch ? liveMatch.price : asset.marketPrice;
+            const changePercentFromSource = liveMatch ? liveMatch.changePercent : 0;
 
-        return {
-          ...asset,
-          currentPrice: currentPrice.toNumber(),
-          change: change.toNumber(),
-          marketValue: marketValue.toNumber(),
-          unrealized: unrealized.toNumber(),
-          dailyChange: existing && typeof existing.dailyChange === 'number'
-            ? existing.dailyChange + (jitter / asset.marketPrice) * 100
-            : dailyChange
-        };
-      });
-    });
-  }, []);
+            const lots = new Decimal(asset.lots);
+            const avgPrice = new Decimal(asset.averagePrice);
+            const multiplier = new Decimal(100);
+
+            const totalCost = avgPrice.times(lots).times(multiplier);
+            const marketValue = new Decimal(currentPrice).times(lots).times(multiplier);
+            const unrealized = marketValue.minus(totalCost);
+            const change = new Decimal(currentPrice).minus(avgPrice).div(avgPrice).times(multiplier);
+
+            return {
+              ...asset,
+              currentPrice: currentPrice,
+              change: change.toNumber(),
+              marketValue: marketValue.toNumber(),
+              unrealized: unrealized.toNumber(),
+              dailyChange: changePercentFromSource
+            };
+          });
+        });
+      }
+    } catch (err) {
+      console.error("Failed to sync portfolio prices with market API:", err);
+    }
+  }, [cgsAssets]);
+
+  const updatePricesRef = useRef(updateCGSPrices);
+  useEffect(() => {
+    updatePricesRef.current = updateCGSPrices;
+  }, [updateCGSPrices]);
 
   useEffect(() => {
-    updateCGSPrices();
-    const portfolioInterval = setInterval(updateCGSPrices, 30000); // Background sync fallback
-    return () => clearInterval(portfolioInterval);
-  }, [updateCGSPrices]);
+    updatePricesRef.current();
+    const portfolioInterval = setInterval(() => {
+      updatePricesRef.current();
+    }, 15000); // Live sync every 15 seconds
+    
+    // Listen to manual or automatic feed source updates
+    const handleSourceChange = () => {
+      updatePricesRef.current();
+    };
+    window.addEventListener('vam-feed-source-changed', handleSourceChange);
+    window.addEventListener('vam-force-market-refresh', handleSourceChange);
+    
+    return () => {
+      clearInterval(portfolioInterval);
+      window.removeEventListener('vam-feed-source-changed', handleSourceChange);
+      window.removeEventListener('vam-force-market-refresh', handleSourceChange);
+    };
+  }, []);
 
   const updateInsights = useCallback(async () => {
     if (isFetchingRef.current) return;
@@ -1438,14 +1555,10 @@ export default function App() {
     updateInsights();
     updateMarketNews();
     updateStocks();
-  }, [updateInsights, updateMarketNews, updateStocks]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
-  useEffect(() => {
-    updateCGSPrices();
-    // Only low-frequency sync for non-streamed items (e.g. portfolio data not on standard exchange)
-    const portfolioInterval = setInterval(updateCGSPrices, 30000); 
-    return () => clearInterval(portfolioInterval);
-  }, [updateCGSPrices]);
+
 
   useEffect(() => {
     // The high-freq tick and sync logic is now handled by the WebSocket stream in the previous useEffect.
@@ -1459,7 +1572,8 @@ export default function App() {
     }, 120000); // 2 minutes
     
     return () => clearInterval(backgroundSyncInterval);
-  }, [updateStocks, updateMarketNews]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // Handle custom manual market refresh requested from child components
   useEffect(() => {
@@ -1467,8 +1581,13 @@ export default function App() {
       syncMarketConnectivity();
     };
     window.addEventListener('vam-force-market-refresh', handleForceRefresh);
-    return () => window.removeEventListener('vam-force-market-refresh', handleForceRefresh);
-  }, [syncMarketConnectivity]);
+    window.addEventListener('vam-feed-source-changed', handleForceRefresh);
+    return () => {
+      window.removeEventListener('vam-force-market-refresh', handleForceRefresh);
+      window.removeEventListener('vam-feed-source-changed', handleForceRefresh);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // Security Strategy: Context Menu Protection
   useEffect(() => {
@@ -1827,6 +1946,7 @@ export default function App() {
               </div>
             ) : (
               <div className="space-y-6">
+                <MarketSentimentBanner news={marketNews} isLoading={isFetchingNews} />
                 <GlobalIntelFeed />
                 <IdxPriceList />
                 <MarketHeatmap 
@@ -2519,7 +2639,7 @@ export default function App() {
                   animate={{ opacity: 1, y: 0 }}
                   transition={{ delay: 0.15 }}
                 >
-                  <RiskAnalytics portfolioData={portfolioData} cashBalance={myCGSPortfolio.cashBalance} />
+                  <RiskAnalytics portfolioData={portfolioData} cashBalance={cgsCashBalance} />
                 </motion.div>
 
                 {/* Transaction History */}
@@ -2533,6 +2653,14 @@ export default function App() {
                   </div>
                   <TransactionTable data={history} />
                 </div>
+
+                {/* Embedded Manual Rebalancer Entry */}
+                <ManualRebalanceForm
+                  portfolioAssets={cgsAssets}
+                  cashBalance={cgsCashBalance}
+                  onUpdatePortfolio={handleUpdatePortfolio}
+                  onResetPortfolio={handleResetPortfolio}
+                />
 
                 {/* Holdings List */}
                 <div className="space-y-4">
@@ -2585,7 +2713,7 @@ export default function App() {
                     </h2>
                     <div className="mt-4 flex flex-wrap items-center gap-4">
                       {(() => {
-                        const totalCost = myCGSPortfolio.assets.reduce((acc, curr) => {
+                        const totalCost = cgsAssets.reduce((acc, curr) => {
                           const assetCost = new Decimal(curr.averagePrice).times(curr.lots).times(100);
                           return new Decimal(acc).plus(assetCost).toNumber();
                         }, 0);
@@ -2601,7 +2729,7 @@ export default function App() {
                       })()}
                       <div className="flex items-center gap-2 px-3 py-1 bg-slate-900/80 rounded-full border border-slate-800">
                         <span className="text-[9px] text-slate-500 font-black uppercase">RDN Cash:</span>
-                        <span className="text-[10px] text-[#DFFF00] font-mono font-bold">Rp {typeof myCGSPortfolio.cashBalance === 'number' ? myCGSPortfolio.cashBalance.toLocaleString('id-ID') : (myCGSPortfolio.cashBalance || 'N/A')}</span>
+                        <span className="text-[10px] text-[#DFFF00] font-mono font-bold">Rp {typeof cgsCashBalance === 'number' ? cgsCashBalance.toLocaleString('id-ID') : (cgsCashBalance || 'N/A')}</span>
                       </div>
                     </div>
                   </div>
@@ -2846,7 +2974,10 @@ export default function App() {
             </div>
             <RebalanceTool 
               portfolioData={portfolioData} 
-              cashBalance={myCGSPortfolio.cashBalance} 
+              cashBalance={cgsCashBalance} 
+              portfolioAssets={cgsAssets}
+              onUpdatePortfolio={handleUpdatePortfolio}
+              onResetPortfolio={handleResetPortfolio}
             />
           </div>
         );
@@ -2890,7 +3021,7 @@ export default function App() {
               </button>
               <h3 className="text-sm font-semibold text-slate-300 uppercase tracking-widest">Financial Reporting Ecosystem</h3>
             </div>
-            <FinancialReportingCenter portfolioData={portfolioData} cashBalance={myCGSPortfolio.cashBalance} />
+            <FinancialReportingCenter portfolioData={portfolioData} cashBalance={cgsCashBalance} />
           </div>
         );
       case 'archive':

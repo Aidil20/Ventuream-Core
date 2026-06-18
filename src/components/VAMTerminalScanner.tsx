@@ -170,7 +170,7 @@ const VAMTerminalScanner: React.FC<VAMTerminalScannerProps> = ({
                 handleStartScan(activeModule);
             }
         }
-    }, [defaultTab, activeMarket, activeModule, subActiveTab, marketType, selectedScanner, handleStartScan]);
+    }, [defaultTab, activeMarket, activeModule, handleStartScan]);
 
     return (
         <div className="bg-[#050505] min-h-screen font-sans relative">

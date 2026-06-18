@@ -2,6 +2,7 @@ import React, { useEffect, useState, useRef } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { Decimal } from 'decimal.js';
 import { TrendingUp, TrendingDown, ArrowUpRight, ArrowDownRight } from 'lucide-react';
+import Sparkline from './Sparkline';
 
 interface PortfolioAsset {
   ticker: string;
@@ -21,6 +22,39 @@ interface HoldingCardProps {
   showCompactLayout?: boolean;
   key?: string | number;
 }
+
+const getPerformanceArray = (ticker: string): number[] => {
+  const clean = ticker.replace('.JK', '').toUpperCase();
+  const staticPerformanceMap: Record<string, number[]> = {
+    'DSSA': [65, 70, 72, 75, 78, 80, 85],
+    'DEFI': [40, 45, 42, 48, 50, 48, 52],
+    'LPKR': [30, 32, 28, 30, 29, 31, 30],
+    'OTAS': [20, 25, 30, 35, 40, 45, 50],
+    'ANDI': [55, 50, 48, 45, 42, 40, 38],
+    'IPAC': [40, 38, 35, 32, 30, 28, 25],
+    'KOTA': [35, 42, 40, 47, 45, 51, 48],
+    'LAND': [22, 25, 20, 28, 24, 31, 29],
+    'PIPA': [18, 22, 19, 25, 23, 27, 26]
+  };
+  
+  if (staticPerformanceMap[clean]) {
+    return staticPerformanceMap[clean];
+  }
+  
+  // Deterministic performance based on tickers hash so it doesn't shuffle on every render
+  let hash = 0;
+  for (let i = 0; i < clean.length; i++) {
+    hash = clean.charCodeAt(i) + ((hash << 5) - hash);
+  }
+  const result = [];
+  let currentVal = 50 + (Math.abs(hash) % 35);
+  for (let i = 0; i < 8; i++) {
+    const change = ((hash >> i) & 1) ? 4 : -4;
+    currentVal += change + (i % 2 === 0 ? 1 : -1);
+    result.push(Math.max(15, currentVal));
+  }
+  return result;
+};
 
 export default function HoldingCard({ asset, idx, onClick, showCompactLayout = false }: HoldingCardProps) {
   const [prevPrice, setPrevPrice] = useState<number>(asset.marketValue);
@@ -44,7 +78,7 @@ export default function HoldingCard({ asset, idx, onClick, showCompactLayout = f
     return () => {
       if (timerRef.current) clearTimeout(timerRef.current);
     };
-  }, [asset.marketValue, prevPrice]);
+  }, [asset.marketValue]);
 
   const tickerCode = asset.ticker.split('.')[0];
   const avgPriceDecimal = new Decimal(asset.averagePrice || 0);
@@ -72,6 +106,15 @@ export default function HoldingCard({ asset, idx, onClick, showCompactLayout = f
     return 'text-slate-200';
   };
 
+  const rawPerf = asset.performance || getPerformanceArray(asset.ticker);
+  const lastRawVal = rawPerf[rawPerf.length - 1] || 1;
+  const unitPrice = asset.currentPrice || asset.marketPrice || 100;
+
+  // Scale performance array to reflect exact stock prices
+  const scaledPerformancePrices = rawPerf.map((val: number) => {
+    return (val / lastRawVal) * unitPrice;
+  });
+
   return (
     <motion.div
       initial={{ opacity: 0, y: 12 }}
@@ -79,7 +122,7 @@ export default function HoldingCard({ asset, idx, onClick, showCompactLayout = f
       exit={{ opacity: 0, scale: 0.95 }}
       transition={{ duration: 0.35, delay: Math.min(idx * 0.04, 0.4), ease: 'easeOut' }}
       onClick={onClick}
-      className={`p-4 rounded-2xl border flex justify-between items-center group cursor-pointer transition-all duration-500 relative overflow-hidden ${getFlashBorderClass()}`}
+      className={`p-4 rounded-2xl border flex justify-between items-center group cursor-pointer transition-all duration-500 relative overflow-visible ${getFlashBorderClass()}`}
     >
       {/* Background feedback light waves */}
       <AnimatePresence>
@@ -96,7 +139,7 @@ export default function HoldingCard({ asset, idx, onClick, showCompactLayout = f
         )}
       </AnimatePresence>
 
-      <div className="flex items-center gap-3 relative z-10">
+      <div className="flex items-center gap-3 relative z-10 w-1/3 min-w-[120px]">
         <div className={`w-10 h-10 rounded-xl bg-slate-800 flex items-center justify-center text-[10px] font-bold text-slate-400 border transition-all duration-300 group-hover:bg-slate-750 ${
           pulseType === 'up' ? 'border-emerald-500/40 text-emerald-400' :
           pulseType === 'down' ? 'border-red-500/40 text-red-400' :
@@ -130,7 +173,19 @@ export default function HoldingCard({ asset, idx, onClick, showCompactLayout = f
         </div>
       </div>
 
-      <div className="flex items-center gap-6 relative z-10 text-right">
+      {/* Sparkline Visualizer Segment with Stop Propagation */}
+      <div 
+        className="flex-1 px-3 max-w-[170px] h-9 relative z-20 overflow-visible"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <Sparkline 
+          data={scaledPerformancePrices} 
+          color={isDailyGain ? '#10b981' : '#f43f5e'} 
+          height={32} 
+        />
+      </div>
+
+      <div className="flex items-center gap-6 relative z-10 text-right w-1/3 justify-end min-w-[110px]">
         <div>
           <motion.p 
             animate={pulseType ? { scale: [1, 1.05, 1] } : {}}

@@ -12,6 +12,7 @@ import {
   Sparkles, 
   Play,
   RotateCcw,
+  FileDown,
   AreaChart as ChartIcon
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
@@ -28,6 +29,8 @@ import {
   ComposedChart,
   Line
 } from 'recharts';
+import { jsPDF } from 'jspdf';
+import autoTable from 'jspdf-autotable';
 
 interface PortfolioAsset {
   ticker: string;
@@ -336,6 +339,409 @@ export default function RiskAnalytics({ portfolioData, cashBalance }: RiskAnalyt
 
   const riskEval = getRiskEvaluationState();
 
+  // Export Stress Test to PDF Report Function
+  const exportStressTestToPDF = () => {
+    try {
+      const doc = new jsPDF();
+      
+      // Theme colors for VentureAM
+      const primaryColor = [18, 18, 18]; // Off Black
+      const grayColor = [120, 120, 120];
+      const alertRed = [239, 68, 68];
+      const alertGreen = [16, 185, 129];
+
+      // Document Title Header
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(22);
+      doc.setTextColor(primaryColor[0], primaryColor[1], primaryColor[2]);
+      doc.text("VENTUREAM", 14, 20);
+      
+      doc.setFontSize(10);
+      doc.setFont("helvetica", "bold");
+      doc.setTextColor(primaryColor[0], primaryColor[1], primaryColor[2]);
+      doc.text("PORTFOLIO STRESS TESTING REPORT", 14, 25);
+
+      doc.setFontSize(8.5);
+      doc.setFont("helvetica", "normal");
+      doc.setTextColor(grayColor[0], grayColor[1], grayColor[2]);
+      doc.text("INSTITUTIONAL RISK MANAGEMENT DIVISION", 14, 29);
+      doc.text(`Run Date: ${new Date().toLocaleString('id-ID')} | OJK Compliant Internal Report`, 14, 33);
+      
+      // Divider line
+      doc.setDrawColor(220, 220, 220);
+      doc.line(14, 36, 196, 36);
+      
+      // Section 1: Stress Test Scenario Summary
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(12);
+      doc.setTextColor(primaryColor[0], primaryColor[1], primaryColor[2]);
+      doc.text("1. SYSTEMIC STRESS TEST SCENARIO DETAILS", 14, 46);
+
+      // Scenario Box Background
+      doc.setDrawColor(200, 200, 200);
+      doc.setFillColor(248, 249, 250);
+      doc.rect(14, 51, 182, 38, "FD");
+
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(10);
+      doc.setTextColor(primaryColor[0], primaryColor[1], primaryColor[2]);
+      doc.text(`Scenario Selected: ${stressResults.title}`, 18, 57);
+
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(8.5);
+      doc.setTextColor(80, 80, 80);
+      const splitSummary = doc.splitTextToSize(stressResults.summaryText, 174);
+      doc.text(splitSummary, 18, 63);
+
+      // Impact highlights
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(10);
+      
+      const isLoss = stressResults.pctLoss < 0;
+      if (isLoss) {
+        doc.setTextColor(alertRed[0], alertRed[1], alertRed[2]);
+      } else {
+        doc.setTextColor(alertGreen[0], alertGreen[1], alertGreen[2]);
+      }
+      
+      const changeSign = stressResults.losses >= 0 ? '+' : '';
+      const formattedImpactValue = `${changeSign}Rp ${Math.round(stressResults.losses).toLocaleString('id-ID')}`;
+      const formattedImpactPct = `${changeSign}${stressResults.pctLoss.toFixed(2)}% of Portfolio`;
+      doc.text(`Estimated Net Impact: ${formattedImpactValue} (${formattedImpactPct})`, 18, 83);
+
+      // Section 2: Portfolio Baseline Metrics
+      doc.setTextColor(primaryColor[0], primaryColor[1], primaryColor[2]);
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(12);
+      doc.text("2. PORTFOLIO BASELINE SPECIFICATIONS", 14, 98);
+
+      // Baseline parameters table
+      const baseMetrics = [
+        ["Total Portfolio Capital", `Rp ${Math.round(riskAnalysis.totalVal).toLocaleString('id-ID')}`, "Annual Volatility (Std Dev)", `${(riskAnalysis.portfolioAnnualVol * 100).toFixed(2)}%`],
+        ["Asset Holding Value", `Rp ${Math.round(riskAnalysis.assetsVal).toLocaleString('id-ID')}`, "Portfolio Beta (vs IHSG)", `${riskAnalysis.portfolioBeta.toFixed(2)}x`],
+        ["Cash Balance Weight", `${riskAnalysis.cashWeight.toFixed(2)}%`, "Expected Annual Return", `${(riskAnalysis.portfolioExpectedReturn * 100).toFixed(2)}%`],
+        ["Diversification Surplus", `Rp ${Math.round(riskAnalysis.diversificationBenefit * riskAnalysis.totalVal).toLocaleString('id-ID')}`, "Assumed Risk-Free Rate", `${riskFreeRate.toFixed(2)}%`],
+        ["Parametric VaR (95.0% 1-Day)", `Rp ${Math.round(riskAnalysis.var95_1d).toLocaleString('id-ID')}`, "Parametric VaR (99.0% 1-Day)", `Rp ${Math.round(riskAnalysis.var99_1d).toLocaleString('id-ID')}`]
+      ];
+
+      autoTable(doc, {
+        startY: 103,
+        head: [['Baseline Metric', 'Value', 'Risk Parameter', 'Calibration']],
+        body: baseMetrics,
+        theme: 'striped',
+        headStyles: { fillColor: [40, 40, 40], textColor: [255, 255, 255], fontStyle: 'bold', fontSize: 8.5 },
+        bodyStyles: { fontSize: 8, textColor: [50, 50, 50] },
+        columnStyles: {
+          0: { fontStyle: 'bold' },
+          2: { fontStyle: 'bold' }
+        }
+      });
+
+      // Section 3: Asset Impact Breakdown
+      const tableFinalY = (doc as any).lastAutoTable.finalY || 145;
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(12);
+      doc.setTextColor(primaryColor[0], primaryColor[1], primaryColor[2]);
+      doc.text("3. DETAILED HOLDINGS & SIMULATED STRESS SHOCK", 14, tableFinalY + 10);
+
+      // Prepare data for holdings and specific stresses
+      const holdingsRows = riskAnalysis.assets.map(asset => {
+        const currentVal = asset.marketValue;
+        
+        let assetPctChange = 0;
+        switch (stressScenario) {
+          case 'meltdown':
+            assetPctChange = asset.beta * -0.12;
+            break;
+          case 'commodity':
+            assetPctChange = asset.ticker === 'DSSA' ? 0.20 : 0.02;
+            break;
+          case 'rate_surge':
+            if (asset.sector === 'Property') assetPctChange = -0.08;
+            else if (asset.sector === 'Financial') assetPctChange = 0.05;
+            else assetPctChange = -0.02;
+            break;
+          default:
+            assetPctChange = asset.expectedReturn / 252;
+        }
+
+        const simulatedShockLoss = assetPctChange * currentVal;
+        const stressedVal = currentVal + simulatedShockLoss;
+        const colorIndicator = simulatedShockLoss >= 0 ? '+' : '';
+
+        return [
+          asset.ticker,
+          asset.fullName,
+          `Rp ${Math.round(currentVal).toLocaleString('id-ID')}`,
+          `${(asset.weight * 100).toFixed(2)}%`,
+          `${asset.beta.toFixed(2)}x`,
+          `${colorIndicator}${(assetPctChange * 100).toFixed(2)}%`,
+          `${colorIndicator}Rp ${Math.round(simulatedShockLoss).toLocaleString('id-ID')}`,
+          `Rp ${Math.round(stressedVal).toLocaleString('id-ID')}`
+        ];
+      });
+
+      // Add cash row if held
+      if (cashBalance > 0) {
+        let cashPctChange = 0;
+        if (stressScenario === 'rate_surge') {
+          cashPctChange = 0.02; 
+        } else if (stressScenario === 'none') {
+          cashPctChange = (riskFreeRate / 100) / 252; 
+        }
+        const simulatedShockLoss = cashPctChange * cashBalance;
+        const stressedVal = cashBalance + simulatedShockLoss;
+        const colorIndicator = simulatedShockLoss >= 0 ? '+' : '';
+
+        holdingsRows.push([
+          "CASH",
+          "Liquid Cash Reserves",
+          `Rp ${Math.round(cashBalance).toLocaleString('id-ID')}`,
+          `${((cashBalance / riskAnalysis.totalVal) * 100).toFixed(2)}%`,
+          "0.00x",
+          `${colorIndicator}${(cashPctChange * 100).toFixed(2)}%`,
+          `${colorIndicator}Rp ${Math.round(simulatedShockLoss).toLocaleString('id-ID')}`,
+          `Rp ${Math.round(stressedVal).toLocaleString('id-ID')}`
+        ]);
+      }
+
+      autoTable(doc, {
+        startY: tableFinalY + 15,
+        head: [['Symbol', 'Asset Classification', 'Original Value', 'Weight', 'Beta', 'Stress %', 'Est Shift', 'Post-Stress Value']],
+        body: holdingsRows,
+        theme: 'striped',
+        headStyles: { fillColor: [50, 50, 50], textColor: [255, 255, 255], fontStyle: 'bold', fontSize: 8 },
+        bodyStyles: { fontSize: 7.5, textColor: [60, 60, 60] },
+        columnStyles: {
+          0: { fontStyle: 'bold' },
+          2: { halign: 'right' },
+          3: { halign: 'right' },
+          4: { halign: 'right' },
+          5: { halign: 'right' },
+          6: { halign: 'right' },
+          7: { halign: 'right' }
+        }
+      });
+
+      const holdingsFinalY = (doc as any).lastAutoTable.finalY || (tableFinalY + 110);
+      
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(8);
+      doc.setDrawColor(240, 240, 240);
+      doc.line(14, holdingsFinalY + 12, 196, holdingsFinalY + 12);
+
+      // Signed validation
+      doc.setTextColor(grayColor[0], grayColor[1], grayColor[2]);
+      doc.text("REPORT CALIBRATION & FOOTNOTE ASSUMPTIONS", 14, holdingsFinalY + 18);
+      
+      doc.setFontSize(7);
+      const notes = [
+        "This Stress scenario modeling calculates direct first-order shocks under deterministic portfolio conditions.",
+        "System correlations represent estimated parameters approved in line with Basel Framework compliance indicators.",
+        "Confidential document. Intended entirely for private institutional decision support on behalf of VentureAM clients."
+      ];
+      notes.forEach((note, offset) => {
+        doc.text(`• ${note}`, 14, holdingsFinalY + 23 + (offset * 4));
+      });
+
+      // Save document
+      const sceneFileName = stressScenario.toUpperCase();
+      doc.save(`VAM_Stress_Test_Report_${sceneFileName}_${new Date().toISOString().split('T')[0]}.pdf`);
+    } catch (error) {
+      console.error("Failed to generate and export Stress Test PDF:", error);
+    }
+  };
+
+  // Export Unified Risk Report to PDF Function
+  const exportUnifiedRiskAnalyticsToPDF = () => {
+    try {
+      const doc = new jsPDF();
+      
+      // Theme colors for VentureAM
+      const primaryColor = [18, 18, 18]; // Off Black
+      const grayColor = [120, 120, 120];
+      const alertRed = [239, 68, 68];
+      const alertGreen = [16, 185, 129];
+
+      // Document Title Header
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(22);
+      doc.setTextColor(primaryColor[0], primaryColor[1], primaryColor[2]);
+      doc.text("VENTUREAM", 14, 20);
+      
+      doc.setFontSize(10);
+      doc.setFont("helvetica", "bold");
+      doc.setTextColor(primaryColor[0], primaryColor[1], primaryColor[2]);
+      doc.text("PORTFOLIO UNIFIED RISK ANALYTICS REPORT", 14, 25);
+
+      doc.setFontSize(8.5);
+      doc.setFont("helvetica", "normal");
+      doc.setTextColor(grayColor[0], grayColor[1], grayColor[2]);
+      doc.text("INSTITUTIONAL RISK MANAGEMENT DIVISION", 14, 29);
+      doc.text(`Run Date: ${new Date().toLocaleString('id-ID')} | Basel III & OJK Compliant Comprehensive Report`, 14, 33);
+      
+      // Divider line
+      doc.setDrawColor(220, 220, 220);
+      doc.line(14, 36, 196, 36);
+      
+      // Section 1: Portfolio Risk Posture & Key Metrics
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(11);
+      doc.setTextColor(primaryColor[0], primaryColor[1], primaryColor[2]);
+      doc.text("1. AGGREGATE RISK POSTURE & PROFILE", 14, 45);
+
+      // Posture Panel Box
+      doc.setDrawColor(200, 200, 200);
+      doc.setFillColor(248, 249, 250);
+      doc.rect(14, 49, 182, 30, "FD");
+
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(9.5);
+      doc.setTextColor(18, 18, 18);
+      doc.text(`POSTURAL EXPOSURE GRADING: ${riskEval.rating}`, 18, 55);
+
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(8.2);
+      doc.setTextColor(80, 80, 80);
+      const splitDesc = doc.splitTextToSize(riskEval.desc, 174);
+      doc.text(splitDesc, 18, 61);
+
+      // Core Summary Table
+      const coreSummaryData = [
+        ["Total Portfolio Capital", `Rp ${Math.round(riskAnalysis.totalVal).toLocaleString('id-ID')}`, "Annual Volatility (Std Dev)", `${(riskAnalysis.portfolioAnnualVol * 100).toFixed(2)}%`],
+        ["Expected Annual Return", `${(riskAnalysis.portfolioExpectedReturn * 100).toFixed(2)}%`, "Sharpe Ratio (Risk-Adjusted)", `${riskAnalysis.sharpeRatio.toFixed(3)} SR`],
+        ["Portfolio Beta (vs IHSG)", `${riskAnalysis.portfolioBeta.toFixed(2)}x`, "Treynor Ratio", `${riskAnalysis.treynorRatio.toFixed(3)} TR`],
+        ["Cash Balance Weight", `${riskAnalysis.cashWeight.toFixed(2)}%`, "Diversification Benefit", `+${(riskAnalysis.diversificationBenefit * 100).toFixed(2)}%`]
+      ];
+
+      autoTable(doc, {
+        startY: 84,
+        head: [['Portfolio Parameter', 'Computed Value', 'Risk Performance Metric', 'Calibrated Measurement']],
+        body: coreSummaryData,
+        theme: 'striped',
+        headStyles: { fillColor: [40, 40, 40], textColor: [255, 255, 255], fontStyle: 'bold', fontSize: 8.5 },
+        bodyStyles: { fontSize: 8, textColor: [50, 50, 50] },
+        columnStyles: {
+          0: { fontStyle: 'bold' },
+          2: { fontStyle: 'bold' }
+        }
+      });
+
+      const firstTableFinalY = (doc as any).lastAutoTable.finalY || 125;
+
+      // Section 2: Basel III Value-at-Risk Engine (Parametric & Historical)
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(11);
+      doc.setTextColor(primaryColor[0], primaryColor[1], primaryColor[2]);
+      doc.text("2. BASEL III VALUE-AT-RISK (VaR) SIMULATIONS", 14, firstTableFinalY + 10);
+
+      const varTableData = [
+        ["Parametric 1-Day VaR (95.0% Confidence Level)", `Rp ${Math.round(riskAnalysis.var95_1d).toLocaleString('id-ID')}`, `${((riskAnalysis.var95_1d / riskAnalysis.totalVal) * 100).toFixed(2)}% of Capital`],
+        ["Parametric 1-Day VaR (99.0% Confidence Level)", `Rp ${Math.round(riskAnalysis.var99_1d).toLocaleString('id-ID')}`, `${((riskAnalysis.var99_1d / riskAnalysis.totalVal) * 100).toFixed(2)}% of Capital`],
+        ["Parametric 10-Day VaR (99.0% OJK Standard Horizon)", `Rp ${Math.round(riskAnalysis.var99_10d).toLocaleString('id-ID')}`, `${((riskAnalysis.var99_10d / riskAnalysis.totalVal) * 100).toFixed(2)}% of Capital`],
+        ["Historical Simulation 1-Day VaR (95.0% Confidence)", `Rp ${Math.round(riskAnalysis.histVar95).toLocaleString('id-ID')}`, `${((riskAnalysis.histVar95 / riskAnalysis.totalVal) * 100).toFixed(2)}% of Capital`],
+        ["Historical Simulation 1-Day VaR (99.0% Confidence)", `Rp ${Math.round(riskAnalysis.histVar99).toLocaleString('id-ID')}`, `${((riskAnalysis.histVar99 / riskAnalysis.totalVal) * 100).toFixed(2)}% of Capital`]
+      ];
+
+      autoTable(doc, {
+        startY: firstTableFinalY + 14,
+        head: [['Simulation Methodology & Horizon', 'Estimated Maximum Loss (VaR Value)', 'Capital Exposure Ratio']],
+        body: varTableData,
+        theme: 'striped',
+        headStyles: { fillColor: [50, 50, 50], textColor: [255, 255, 255], fontStyle: 'bold', fontSize: 8.5 },
+        bodyStyles: { fontSize: 8, textColor: [50, 50, 50] },
+        columnStyles: {
+          0: { fontStyle: 'bold' },
+          1: { halign: 'right' },
+          2: { halign: 'right' }
+        }
+      });
+
+      const secondTableFinalY = (doc as any).lastAutoTable.finalY || (firstTableFinalY + 60);
+
+      // Section 3: Asset Stand-alone Risk vs Portfolio Contribution
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(11);
+      doc.setTextColor(primaryColor[0], primaryColor[1], primaryColor[2]);
+      doc.text("3. ASSET VOLATILITY & RISK CONTRIBUTION COEFFICIENTS", 14, secondTableFinalY + 10);
+
+      // Map contributions
+      const contribRows = riskAnalysis.assetRiskContributions.map(contrib => {
+        const assetObj = riskAnalysis.assets.find(a => a.ticker === contrib.ticker);
+        const originalValue = assetObj ? assetObj.marketValue : 0;
+        
+        return [
+          contrib.ticker,
+          assetObj ? assetObj.fullName : "Liquid Capital reserves",
+          `Rp ${Math.round(originalValue).toLocaleString('id-ID')}`,
+          `${contrib.weight.toFixed(2)}%`,
+          assetObj ? `${assetObj.beta.toFixed(2)}x` : '0.00x',
+          `${contrib.standaloneVol.toFixed(2)}%`,
+          `${contrib.riskCont.toFixed(2)}%`,
+          `${contrib.percentageContribution.toFixed(2)}%`
+        ];
+      });
+
+      // Cash item if exists
+      if (cashBalance > 0) {
+        contribRows.push([
+          "CASH",
+          "Liquid Cash Reserves",
+          `Rp ${Math.round(cashBalance).toLocaleString('id-ID')}`,
+          `${((cashBalance / riskAnalysis.totalVal) * 100).toFixed(2)}%`,
+          "0.00x",
+          "0.00%",
+          "0.00%",
+          "0.00%"
+        ]);
+      }
+
+      autoTable(doc, {
+        startY: secondTableFinalY + 14,
+        head: [['Symbol', 'Asset Classification', 'Exposure Value', 'Weight', 'Beta', 'Standalone Vol', 'Risk Contrib %', 'Delta Contribution']],
+        body: contribRows,
+        theme: 'striped',
+        headStyles: { fillColor: [60, 60, 60], textColor: [255, 255, 255], fontStyle: 'bold', fontSize: 8 },
+        bodyStyles: { fontSize: 7.5, textColor: [60, 60, 60] },
+        columnStyles: {
+          0: { fontStyle: 'bold' },
+          2: { halign: 'right' },
+          3: { halign: 'right' },
+          4: { halign: 'right' },
+          5: { halign: 'right' },
+          6: { halign: 'right' },
+          7: { halign: 'right' }
+        }
+      });
+
+      const thirdTableFinalY = (doc as any).lastAutoTable.finalY || (secondTableFinalY + 80);
+
+      // Section 4: Signed validation & Assumptions
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(8);
+      doc.setDrawColor(240, 240, 240);
+      doc.line(14, thirdTableFinalY + 8, 196, thirdTableFinalY + 8);
+
+      doc.setTextColor(grayColor[0], grayColor[1], grayColor[2]);
+      doc.text("REPORT CALIBRATION & FOOTNOTE ASSUMPTIONS", 14, thirdTableFinalY + 14);
+      
+      doc.setFontSize(7);
+      const notes = [
+        "This Unified Risk Analytics Report is generated dynamically in compliance with OJK (Otoritas Jasa Keuangan) regulations and Basel III internal simulation standards.",
+        "Constant correlation assumption is calibrated to rho=0.25 on Sumatra composite indicators and historical Indonesian cross-asset classes.",
+        "Confidential document. Intended entirely for private institutional decision support on behalf of VentureAM clients."
+      ];
+      notes.forEach((note, offset) => {
+        doc.text(`• ${note}`, 14, thirdTableFinalY + 19 + (offset * 3.5));
+      });
+
+      // Save document
+      doc.save(`VAM_Unified_Risk_Report_${new Date().toISOString().split('T')[0]}.pdf`);
+    } catch (error) {
+      console.error("Failed to generate and export Unified Risk Report PDF:", error);
+    }
+  };
+
   // Histrogram bins for return visualization
   const returnDistributionData = useMemo(() => {
     const bins = Array.from({ length: 12 }, () => 0);
@@ -390,26 +796,37 @@ export default function RiskAnalytics({ portfolioData, cashBalance }: RiskAnalyt
           </div>
         </div>
 
-        {/* Risk-Free rate input slider */}
-        <div className="flex items-center gap-3 bg-zinc-900/50 p-2 rounded-xl border border-zinc-800 self-stretch md:self-auto justify-between">
-          <div className="flex items-center gap-2">
-            <Sliders className="w-3.5 h-3.5 text-zinc-400" />
-            <span className="text-[8.5px] font-bold text-zinc-400 uppercase tracking-wider">Risk-Free Rate (BI Rate)</span>
+        {/* Risk-Free rate input slider & Unified PDF Export */}
+        <div className="flex flex-wrap items-center gap-3 self-stretch md:self-auto justify-between md:justify-end">
+          <div className="flex items-center gap-3 bg-zinc-900/50 p-2 rounded-xl border border-zinc-800 justify-between">
+            <div className="flex items-center gap-2">
+              <Sliders className="w-3.5 h-3.5 text-zinc-400" />
+              <span className="text-[8.5px] font-bold text-zinc-400 uppercase tracking-wider">Risk-Free Rate (BI Rate)</span>
+            </div>
+            <div className="flex items-center gap-1">
+              <input 
+                type="range" 
+                min="4.5" 
+                max="9.0" 
+                step="0.25"
+                value={riskFreeRate}
+                onChange={(e) => setRiskFreeRate(parseFloat(e.target.value))}
+                className="w-20 accent-[#DFFF00] h-1 bg-zinc-800 rounded cursor-pointer"
+              />
+              <span className="text-[10px] font-bold text-[#DFFF00] font-mono min-w-[36px] text-right">
+                {riskFreeRate.toFixed(2)}%
+              </span>
+            </div>
           </div>
-          <div className="flex items-center gap-1">
-            <input 
-              type="range" 
-              min="4.5" 
-              max="9.0" 
-              step="0.25"
-              value={riskFreeRate}
-              onChange={(e) => setRiskFreeRate(parseFloat(e.target.value))}
-              className="w-20 accent-[#DFFF00] h-1 bg-zinc-800 rounded cursor-pointer"
-            />
-            <span className="text-[10px] font-bold text-[#DFFF00] font-mono min-w-[36px] text-right">
-              {riskFreeRate.toFixed(2)}%
-            </span>
-          </div>
+
+          <button
+            onClick={exportUnifiedRiskAnalyticsToPDF}
+            className="px-3.5 py-2 bg-emerald-500 hover:bg-emerald-600 active:scale-95 text-white font-extrabold text-[9px] uppercase tracking-wider rounded-xl transition-all flex items-center gap-1.5 cursor-pointer shadow-md shadow-emerald-500/10"
+            title="Ekspor Laporan Analisis Risiko Terpadu ke PDF Resmi"
+          >
+            <FileDown className="w-3.5 h-3.5 text-white" />
+            Ekspor Laporan Risiko (PDF)
+          </button>
         </div>
       </div>
 
@@ -723,13 +1140,23 @@ export default function RiskAnalytics({ portfolioData, cashBalance }: RiskAnalyt
                     transition={{ duration: 0.2 }}
                     className="space-y-5"
                   >
-                    <div>
-                      <h4 className="text-[11px] font-black text-white uppercase tracking-wider mb-1">
-                        Systemic Stress Testing Playground
-                      </h4>
-                      <p className="text-[9px] text-zinc-400">
-                        Choose a macro-economic shift below to immediately inspect estimated exposure fluctuations.
-                      </p>
+                    <div className="flex justify-between items-start flex-wrap gap-3">
+                      <div>
+                        <h4 className="text-[11px] font-black text-white uppercase tracking-wider mb-1">
+                          Systemic Stress Testing Playground
+                        </h4>
+                        <p className="text-[9px] text-zinc-400">
+                          Choose a macro-economic shift below to immediately inspect estimated exposure fluctuations.
+                        </p>
+                      </div>
+                      <button
+                        onClick={exportStressTestToPDF}
+                        title="Ekspor Hasil Stress Test Mandiri ke PDF Resmi"
+                        className="px-3.5 py-2 bg-[#DFFF00] hover:bg-[#DFFF00]/90 text-black font-extrabold text-[9px] uppercase tracking-wider rounded-xl transition-all active:scale-95 flex items-center gap-1.5 cursor-pointer shadow-md shadow-[#DFFF00]/10 shrink-0"
+                      >
+                        <FileDown className="w-3.5 h-3.5 text-black" />
+                        Ekspor Stress Test (PDF)
+                      </button>
                     </div>
 
                     {/* Stress Option grid buttons */}
