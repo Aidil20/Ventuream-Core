@@ -62,7 +62,8 @@ const MARKET_SYMBOLS: Record<string, Record<string, string>> = {
     "BUKA": "Bukalapak.com Tbk",
     "MEDC": "Medco Energi Internasional Tbk",
     "DEWA": "Darma Henwa Tbk",
-    "DSSA": "Dian Swastatika Sentosa Tbk"
+    "DSSA": "Dian Swastatika Sentosa Tbk",
+    "BUMI": "PT Bumi Resources Tbk"
   },
   SGX: {
     "DBS": "DBS Group Holdings Ltd",
@@ -656,8 +657,7 @@ export const IdxPriceList = () => {
             </tr>
           </thead>
           <tbody className="divide-y divide-zinc-900/30">
-            <AnimatePresence mode="popLayout" initial={false}>
-              {processedSymbols.map((symbol) => {
+            {processedSymbols.map((symbol) => {
                 const data = prices[symbol];
                 const isPositive = data ? data.changePercent >= 0 : true;
                 const flash = priceFlash[symbol];
@@ -796,7 +796,8 @@ export const IdxPriceList = () => {
                     {isExpanded && (
                       <tr className="bg-zinc-950/70">
                         <td colSpan={4} className="p-4 border-l border-r border-[#deff9a]/20 bg-zinc-950/90 overflow-hidden">
-                          <motion.div
+                          <AnimatePresence>
+                            <motion.div
                             initial={{ opacity: 0, height: 0 }}
                             animate={{ opacity: 1, height: 'auto' }}
                             exit={{ opacity: 0, height: 0 }}
@@ -914,13 +915,13 @@ export const IdxPriceList = () => {
                               </div>
                             </div>
                           </motion.div>
-                        </td>
-                      </tr>
-                    )}
+                        </AnimatePresence>
+                      </td>
+                    </tr>
+                  )}
                   </React.Fragment>
                 );
               })}
-            </AnimatePresence>
           </tbody>
         </table>
       </div>

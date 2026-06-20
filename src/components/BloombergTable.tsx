@@ -10,6 +10,7 @@ interface PortfolioItem {
     change: number;
     marketValue: number;
     unrealized: number;
+    dailyChange?: number;
 }
 
 interface BloombergTableProps {
@@ -33,14 +34,15 @@ const BloombergTable: React.FC<BloombergTableProps> = ({ portfolioData, onSelect
             </div>
 
             <div className="overflow-x-auto">
-                <table className="portfolio-table">
+                <table className="portfolio-table border-collapse w-full">
                     <thead>
                         <tr className="border-b border-zinc-900">
                             <th className="text-zinc-500 text-[10px] font-black tracking-widest uppercase">Security</th>
                             <th className="text-zinc-500 text-[10px] font-black tracking-widest uppercase">Position</th>
                             <th className="text-zinc-500 text-[10px] font-black tracking-widest uppercase">Avg Price</th>
                             <th className="text-zinc-500 text-[10px] font-black tracking-widest uppercase">Last Price</th>
-                            <th className="text-zinc-500 text-[10px] font-black tracking-widest uppercase">Change %</th>
+                            <th className="text-zinc-500 text-[10px] font-black tracking-widest uppercase">Since Buy %</th>
+                            <th className="text-zinc-500 text-[10px] font-black tracking-widest uppercase">Compare with Yesterday</th>
                             <th className="text-zinc-500 text-[10px] font-black tracking-widest uppercase">Mkt Value (IDR)</th>
                             <th className="text-right text-zinc-500 text-[10px] font-black tracking-widest uppercase">Unrealized P&L</th>
                             <th className="text-center text-zinc-500 text-[10px] font-black tracking-widest uppercase">Audit</th>
@@ -50,6 +52,13 @@ const BloombergTable: React.FC<BloombergTableProps> = ({ portfolioData, onSelect
                         {portfolioData.map((item) => {
                             const plPercentage = (item.unrealized / (item.averagePrice * item.lots * 100)) * 100;
                             const ticker = item.ticker.replace('.JK', '');
+                            
+                            // Compare with Yesterday Calculations
+                            const dailyChg = typeof item.dailyChange === 'number' ? item.dailyChange : 0;
+                            const yesterdayMktVal = dailyChg === -100 ? 0 : item.marketValue / (1 + (dailyChg / 100));
+                            const mktValDiff = item.marketValue - yesterdayMktVal;
+                            const isDailyGain = dailyChg >= 0;
+
                             return (
                                 <tr key={item.ticker} className="border-b border-zinc-900/40 hover:bg-white/[0.01]">
                                     <td 
@@ -70,6 +79,17 @@ const BloombergTable: React.FC<BloombergTableProps> = ({ portfolioData, onSelect
                                         <div className="flex items-center gap-1">
                                             {item.change >= 0 ? '▲' : '▼'}
                                             {Math.abs(item.change).toFixed(2)}%
+                                        </div>
+                                    </td>
+                                    <td className={`font-mono text-[11px] py-3 ${isDailyGain ? "text-emerald-400" : "text-rose-400"}`}>
+                                        <div className="flex flex-col justify-center">
+                                            <div className="flex items-center gap-1 font-bold">
+                                                {isDailyGain ? '▲' : '▼'}
+                                                {isDailyGain ? '+' : ''}{dailyChg.toFixed(2)}%
+                                            </div>
+                                            <span className="text-[9px] text-zinc-400 font-medium">
+                                                {mktValDiff >= 0 ? '+' : ''}{Math.round(mktValDiff).toLocaleString('id-ID')} IDR
+                                            </span>
                                         </div>
                                     </td>
                                     <td className="font-mono text-[#deff9a] font-bold py-3">
@@ -96,8 +116,33 @@ const BloombergTable: React.FC<BloombergTableProps> = ({ portfolioData, onSelect
                     </tbody>
                     <tfoot className="border-t border-zinc-800">
                         <tr>
-                            <td colSpan={6} className="py-4 font-black text-[#DFFF00] text-[10px] uppercase tracking-[0.2em]">Total Portfolio Aggregation</td>
-                            <td className="font-mono font-bold text-[#deff9a] py-4 text-right">
+                            <td colSpan={5} className="py-4 font-black text-[#DFFF00] text-[10px] uppercase tracking-[0.2em]">Total Portfolio Aggregation</td>
+                            <td className="font-mono py-4">
+                                {(() => {
+                                    const totalYesterdayMktVal = portfolioData.reduce((acc, curr) => {
+                                        const dailyChg = typeof curr.dailyChange === 'number' ? curr.dailyChange : 0;
+                                        const yesterdayVal = dailyChg === -100 ? 0 : curr.marketValue / (1 + (dailyChg / 100));
+                                        return acc + yesterdayVal;
+                                    }, 0);
+                                    const totalCurrentMktVal = portfolioData.reduce((acc, curr) => acc + curr.marketValue, 0);
+                                    const totalMktValDiff = totalCurrentMktVal - totalYesterdayMktVal;
+                                    const totalYesterdayPercent = totalYesterdayMktVal === 0 ? 0 : (totalMktValDiff / totalYesterdayMktVal) * 105; // Weighted proxy or arithmetic
+                                    const overallDailyChgPct = totalYesterdayMktVal === 0 ? 0 : (totalMktValDiff / totalYesterdayMktVal) * 100;
+                                    const isAggrGain = totalMktValDiff >= 0;
+
+                                    return (
+                                        <div className={`flex flex-col text-left ${isAggrGain ? "text-emerald-400" : "text-rose-400"}`}>
+                                            <span className="font-bold text-[11px]">
+                                                {isAggrGain ? '▲' : '▼'} {isAggrGain ? '+' : ''}{overallDailyChgPct.toFixed(2)}%
+                                            </span>
+                                            <span className="text-[9px] text-zinc-400 font-medium">
+                                                {isAggrGain ? '+' : ''}{Math.round(totalMktValDiff).toLocaleString('id-ID')} IDR
+                                            </span>
+                                        </div>
+                                    );
+                                })()}
+                            </td>
+                            <td className="font-mono font-bold text-[#deff9a] py-4 text-left">
                                 {(() => {
                                     const total = portfolioData.reduce((acc, curr) => acc + curr.marketValue, 0);
                                     return typeof total === 'number' ? total.toLocaleString('id-ID') : '0';
@@ -109,6 +154,7 @@ const BloombergTable: React.FC<BloombergTableProps> = ({ portfolioData, onSelect
                                     return (totalPL >= 0 ? '+' : '') + (typeof totalPL === 'number' ? totalPL.toLocaleString('id-ID') : '0');
                                 })()}
                             </td>
+                            <td></td>
                         </tr>
                     </tfoot>
                 </table>

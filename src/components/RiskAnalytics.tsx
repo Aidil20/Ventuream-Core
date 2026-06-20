@@ -52,6 +52,7 @@ interface RiskAnalyticsProps {
 const TICKER_RISK_METADATA: Record<string, { name: string; dailyVol: number; expectedReturn: number; beta: number; sector: string }> = {
   'DEFI': { name: "DEFI (Financial Services)", dailyVol: 0.046, expectedReturn: 0.22, beta: 1.65, sector: "Financial" },
   'DSSA': { name: "DSSA (Energy Conglo)", dailyVol: 0.021, expectedReturn: 0.12, beta: 0.85, sector: "Energy" },
+  'BUMI': { name: "BUMI (Bumi Resources Tbk)", dailyVol: 0.038, expectedReturn: 0.15, beta: 1.45, sector: "Energy" },
   'KOTA': { name: "KOTA (Service & Logistics)", dailyVol: 0.052, expectedReturn: 0.18, beta: 1.75, sector: "Service" },
   'LAND': { name: "LAND (Property & Dev)", dailyVol: 0.035, expectedReturn: 0.14, beta: 1.30, sector: "Property" },
   'LPKR': { name: "LPKR (Lippo Karawaci)", dailyVol: 0.025, expectedReturn: 0.10, beta: 1.10, sector: "Property" },
@@ -78,6 +79,8 @@ export default function RiskAnalytics({ portfolioData, cashBalance }: RiskAnalyt
         assets: [],
         portfolioDailyVol: 0,
         portfolioAnnualVol: 0,
+        recentPortfolioDailyVol: 0,
+        recentPortfolioAnnualVol: 0,
         portfolioExpectedReturn: 0,
         sharpeRatio: 0,
         portfolioBeta: 0,
@@ -86,6 +89,9 @@ export default function RiskAnalytics({ portfolioData, cashBalance }: RiskAnalyt
         var95_1d: 0,
         var99_1d: 0,
         var99_10d: 0,
+        ewmaVar95_1d: 0,
+        ewmaVar99_1d: 0,
+        ewmaVar99_10d: 0,
         histReturnSamples: [],
         histVar95: 0,
         histVar99: 0,
@@ -100,13 +106,21 @@ export default function RiskAnalytics({ portfolioData, cashBalance }: RiskAnalyt
       const cleanTicker = asset.ticker.replace('.JK', '');
       const meta = TICKER_RISK_METADATA[cleanTicker] || TICKER_RISK_METADATA.DEFAULT;
       const weight = asset.marketValue / totalPortfolioValue;
+
+      // Calculate EWMA Volatility (lambda = 0.94) based on recent realized daily change %
+      const dailyReturnFrac = (asset.change || 0) / 100;
+      const ewmaDailyVol = Math.sqrt(0.06 * Math.pow(dailyReturnFrac, 2) + 0.94 * Math.pow(meta.dailyVol, 2));
+      const recentVol = Math.max(meta.dailyVol * 0.4, Math.min(meta.dailyVol * 2.5, ewmaDailyVol));
+
       return {
         ticker: cleanTicker,
         fullName: meta.name,
         marketValue: asset.marketValue,
         weight: weight,
         dailyVol: meta.dailyVol,
+        recentVol: recentVol,
         annualVol: meta.dailyVol * Math.sqrt(252),
+        recentAnnualVol: recentVol * Math.sqrt(252),
         expectedReturn: meta.expectedReturn,
         beta: meta.beta,
         sector: meta.sector
@@ -117,11 +131,13 @@ export default function RiskAnalytics({ portfolioData, cashBalance }: RiskAnalyt
     // cash has 0 volatility, 0 correlation
     const rho = 0.25;
     let portfolioVariance = 0;
+    let recentPortfolioVariance = 0;
 
     // Single-Index Portfolio Volatility Formula with pairs
     assetsWithWeights.forEach((a) => {
       // variance term: w_i^2 * s_i^2
       portfolioVariance += Math.pow(a.weight, 2) * Math.pow(a.dailyVol, 2);
+      recentPortfolioVariance += Math.pow(a.weight, 2) * Math.pow(a.recentVol, 2);
     });
 
     for (let i = 0; i < assetsWithWeights.length; i++) {
@@ -130,11 +146,15 @@ export default function RiskAnalytics({ portfolioData, cashBalance }: RiskAnalyt
         const b = assetsWithWeights[j];
         // covariance term: 2 * w_i * w_j * cov_ij
         portfolioVariance += 2 * a.weight * b.weight * rho * a.dailyVol * b.dailyVol;
+        recentPortfolioVariance += 2 * a.weight * b.weight * rho * a.recentVol * b.recentVol;
       }
     }
 
     const portfolioDailyVol = Math.sqrt(portfolioVariance);
     const portfolioAnnualVol = portfolioDailyVol * Math.sqrt(252);
+
+    const recentPortfolioDailyVol = Math.sqrt(recentPortfolioVariance);
+    const recentPortfolioAnnualVol = recentPortfolioDailyVol * Math.sqrt(252);
 
     // Standalone risk sum to calculate diversification benefit
     const sumStandaloneAnnualVol = assetsWithWeights.reduce((acc, curr) => acc + (curr.weight * curr.annualVol), 0);
@@ -163,6 +183,11 @@ export default function RiskAnalytics({ portfolioData, cashBalance }: RiskAnalyt
     const var95_1d = 1.645 * portfolioDailyVol * totalPortfolioValue;
     const var99_1d = 2.326 * portfolioDailyVol * totalPortfolioValue;
     const var99_10d = Math.sqrt(10) * var99_1d;
+
+    // Volatility-Scaled VaR (EWMA 0.94 Decay model based on live volatility)
+    const ewmaVar95_1d = 1.645 * recentPortfolioDailyVol * totalPortfolioValue;
+    const ewmaVar99_1d = 2.326 * recentPortfolioDailyVol * totalPortfolioValue;
+    const ewmaVar99_10d = Math.sqrt(10) * ewmaVar99_1d;
 
     // Calculate Asset Risk Marginal Contribution (MCTR approximation)
     const assetRiskContributions = assetsWithWeights.map(a => {
@@ -248,6 +273,8 @@ export default function RiskAnalytics({ portfolioData, cashBalance }: RiskAnalyt
       assets: assetsWithWeights,
       portfolioDailyVol,
       portfolioAnnualVol,
+      recentPortfolioDailyVol,
+      recentPortfolioAnnualVol,
       portfolioExpectedReturn,
       sharpeRatio,
       portfolioBeta,
@@ -256,6 +283,9 @@ export default function RiskAnalytics({ portfolioData, cashBalance }: RiskAnalyt
       var95_1d,
       var99_1d,
       var99_10d,
+      ewmaVar95_1d,
+      ewmaVar99_1d,
+      ewmaVar99_10d,
       histReturnSamples,
       histVar95,
       histVar99,
@@ -952,6 +982,37 @@ export default function RiskAnalytics({ portfolioData, cashBalance }: RiskAnalyt
                 </p>
               </div>
 
+              {/* Volatility-Scaled Value at Risk Card */}
+              <div className="bg-zinc-900/30 border border-[#DFFF00]/10 p-4 rounded-2xl flex flex-col gap-2">
+                <div className="flex justify-between items-center">
+                  <span className="text-[8.5px] font-black text-[#DFFF00] uppercase tracking-widest">VOL-SCALE EWMA VaR (99% 1-DAY)</span>
+                  <ShieldAlert className="w-3.5 h-3.5 text-[#DFFF00]" />
+                </div>
+                <div className="flex items-baseline gap-2 mt-1">
+                  <span className="text-xl font-black font-mono tracking-tighter text-white">
+                    Rp {Math.round(riskAnalysis.ewmaVar99_1d).toLocaleString('id-ID')}
+                  </span>
+                  <span className="text-[9px] text-[#DFFF00] font-bold font-mono">
+                    {((riskAnalysis.ewmaVar99_1d / riskAnalysis.totalVal) * 100).toFixed(2)}%
+                  </span>
+                </div>
+                <div className="flex justify-between items-center text-[7.5px] font-bold font-mono uppercase text-zinc-500">
+                  <span>Standard Parametric:</span>
+                  <span className="text-zinc-400">Rp {Math.round(riskAnalysis.var99_1d).toLocaleString('id-ID')}</span>
+                </div>
+                <div className="mt-1 border-t border-zinc-800/60 pt-1 text-[8.5px] font-semibold uppercase leading-normal">
+                  {riskAnalysis.ewmaVar99_1d > riskAnalysis.var99_1d ? (
+                    <span className="text-amber-400">
+                      ▲ Volatility Expansion (+{(((riskAnalysis.ewmaVar99_1d - riskAnalysis.var99_1d) / riskAnalysis.var99_1d) * 100).toFixed(1)}%). Swings expanded drawdown risk.
+                    </span>
+                  ) : (
+                    <span className="text-emerald-400">
+                      ▼ Volatility Contraction (-{(((riskAnalysis.var99_1d - riskAnalysis.ewmaVar99_1d) / riskAnalysis.var99_1d) * 100).toFixed(1)}%). Smooth current market regime.
+                    </span>
+                  )}
+                </div>
+              </div>
+
             </div>
 
             {/* RIGHT SIDE DETAILS: Dynamic depending on Active Tab */}
@@ -1010,6 +1071,61 @@ export default function RiskAnalytics({ portfolioData, cashBalance }: RiskAnalyt
                         <div className="flex justify-between items-center text-[9px] font-bold font-mono text-red-500/80 mt-1 uppercase scale-95 origin-left">
                           <span>10D Horizon Target:</span>
                           <span>{((riskAnalysis.var99_10d / riskAnalysis.totalVal) * 100).toFixed(2)}%</span>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* EWMA Section Container */}
+                    <div className="mt-4 pt-4 border-t border-zinc-900/80 space-y-4">
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <div>
+                          <h4 className="text-[11px] font-black text-white uppercase tracking-wider mb-1">
+                            JP Morgan RiskMetrics™ Vol-Scaled Value-at-Risk (EWMA)
+                          </h4>
+                          <p className="text-[9px] text-zinc-400">
+                            Variance decay adjustment ($\lambda = 0.94$) matching recent realized volatility of holdings.
+                          </p>
+                        </div>
+                        <div className="bg-[#DFFF00]/10 border border-[#DFFF00]/20 px-2 py-0.5 rounded text-[8px] font-mono text-[#DFFF00] font-bold uppercase tracking-wider">
+                          Vol-Weighted Recency
+                        </div>
+                      </div>
+
+                      <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                        {/* EWMA 1D 95% */}
+                        <div className="bg-zinc-950 p-4 border border-zinc-905 rounded-xl">
+                          <span className="text-[8px] text-zinc-500 font-extrabold uppercase tracking-widest block">EWMA 1-Day VaR (95% CI)</span>
+                          <span className="text-xl font-black font-mono text-zinc-100 block mt-1.5">
+                            Rp {Math.round(riskAnalysis.ewmaVar95_1d).toLocaleString('id-ID')}
+                          </span>
+                          <div className="flex justify-between items-center text-[9px] font-bold font-mono text-zinc-400 mt-1 uppercase scale-95 origin-left">
+                            <span>Adjusted (95%):</span>
+                            <span>{((riskAnalysis.ewmaVar95_1d / riskAnalysis.totalVal) * 100).toFixed(2)}%</span>
+                          </div>
+                        </div>
+
+                        {/* EWMA 1D 99% */}
+                        <div className="bg-zinc-950 p-4 border border-zinc-905 rounded-xl">
+                          <span className="text-[8px] text-zinc-500 font-extrabold uppercase tracking-widest block">EWMA 1-Day VaR (99% CI)</span>
+                          <span className="text-xl font-black font-mono text-[#DFFF00] block mt-1.5">
+                            Rp {Math.round(riskAnalysis.ewmaVar99_1d).toLocaleString('id-ID')}
+                          </span>
+                          <div className="flex justify-between items-center text-[9px] font-bold font-mono text-[#DFFF00]/80 mt-1 uppercase scale-95 origin-left">
+                            <span>Adjusted Tail Event:</span>
+                            <span>{((riskAnalysis.ewmaVar99_1d / riskAnalysis.totalVal) * 100).toFixed(2)}%</span>
+                          </div>
+                        </div>
+
+                        {/* EWMA 10D 99% */}
+                        <div className="bg-zinc-950 p-4 border border-zinc-905 rounded-xl">
+                          <span className="text-[8px] text-zinc-500 font-extrabold uppercase tracking-widest block">EWMA 10-Day VaR (Horizon)</span>
+                          <span className="text-xl font-black font-mono text-amber-400 block mt-1.5">
+                            Rp {Math.round(riskAnalysis.ewmaVar99_10d).toLocaleString('id-ID')}
+                          </span>
+                          <div className="flex justify-between items-center text-[9px] font-bold font-mono text-amber-400/80 mt-1 uppercase scale-95 origin-left">
+                            <span>Horizon Target:</span>
+                            <span>{((riskAnalysis.ewmaVar99_10d / riskAnalysis.totalVal) * 100).toFixed(2)}%</span>
+                          </div>
                         </div>
                       </div>
                     </div>

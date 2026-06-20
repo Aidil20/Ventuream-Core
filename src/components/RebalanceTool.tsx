@@ -53,6 +53,7 @@ const STRATEGY_TARGETS: Record<Strategy, Record<string, number>> = {
 
 const TICKER_TO_SECTOR: Record<string, string> = {
   'COAL.JK': 'Energy',
+  'BUMI.JK': 'Energy',
   'DEFI.JK': 'Financial',
   'DSSA.JK': 'Energy',
   'KOTA.JK': 'Service',

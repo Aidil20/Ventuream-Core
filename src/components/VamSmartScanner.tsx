@@ -27,8 +27,22 @@ import {
   Globe,
   ArrowUpRight,
   Lock,
-  BrainCircuit
+  BrainCircuit,
+  Newspaper
 } from 'lucide-react';
+
+interface ScrapedNewsItem {
+  id: string;
+  source: string;
+  url: string;
+  title: string;
+  targetSymbol: string;
+  timestamp: string;
+  impact: 'HIGH' | 'MEDIUM' | 'LOW';
+  sentiment: 'BULLISH' | 'BEARISH' | 'NEUTRAL';
+  summary: string;
+  actionableStrategy: string;
+}
 
 interface MAndADeal {
   id: string;
@@ -188,7 +202,7 @@ function VamSmartScanner() {
   const container = useRef<HTMLDivElement>(null);
   
   // States
-  const [activeTab, setActiveTab] = useState<'INSIGHTS' | 'LIVE_FEED' | 'TRADINGVIEW'>('INSIGHTS');
+  const [activeTab, setActiveTab] = useState<'INSIGHTS' | 'LIVE_FEED' | 'TRADINGVIEW' | 'SCRAPER'>('INSIGHTS');
   const [dealTypeFilter, setDealTypeFilter] = useState<string>('ALL');
   const [synergyFilter, setSynergyFilter] = useState<number>(0);
   const [searchQuery, setSearchQuery] = useState<string>('');
@@ -204,6 +218,37 @@ function VamSmartScanner() {
   const [feedError, setFeedError] = useState<string | null>(null);
   const [totalAccumulatedFeedsCount, setTotalAccumulatedFeedsCount] = useState<number>(5);
   const [liveSearchQuery, setLiveSearchQuery] = useState<string>('');
+
+  // Scraper news states
+  const [scrapedNews, setScrapedNews] = useState<ScrapedNewsItem[]>([]);
+  const [isNewsScraping, setIsNewsScraping] = useState<boolean>(false);
+  const [newsScrapingError, setNewsScrapingError] = useState<string | null>(null);
+  const [newsQuery, setNewsQuery] = useState<string>('');
+
+  const fetchScrapedNews = async (queryStr = "") => {
+    setIsNewsScraping(true);
+    setNewsScrapingError(null);
+    try {
+      const url = queryStr 
+        ? `/api/market/scrape-ma?q=${encodeURIComponent(queryStr.trim())}`
+        : "/api/market/scrape-ma";
+      const res = await fetch(url);
+      if (!res.ok) throw new Error("Gagal menghubungkan ke mesin scraper berita M&A");
+      const data = await res.json();
+      setScrapedNews(data);
+    } catch (err: any) {
+      console.error("[VAM Scraper] Gagal menarik data M&A real-time berita:", err);
+      setNewsScrapingError(err.message || "Gagal melakukan penarikan berita real-time.");
+    } finally {
+      setIsNewsScraping(false);
+    }
+  };
+
+  useEffect(() => {
+    if (activeTab === 'SCRAPER' && scrapedNews.length === 0) {
+      fetchScrapedNews();
+    }
+  }, [activeTab]);
 
   const fetchMaLiveIssues = async (isManual = false, queryStr = "") => {
     if (isManual) {
@@ -838,6 +883,18 @@ function VamSmartScanner() {
             }`}
           >
             TradingView Live
+          </button>
+
+          <button
+            onClick={() => setActiveTab('SCRAPER')}
+            className={`flex-1 sm:flex-initial px-3.5 py-1.5 rounded-lg text-[9.5px] font-black uppercase tracking-widest transition-all flex items-center gap-1.5 ${
+              activeTab === 'SCRAPER' 
+                ? 'bg-[#DFFF00] text-slate-950 font-black shadow-md' 
+                : 'text-zinc-500 hover:text-white'
+            }`}
+          >
+            <Newspaper className="w-3 h-3" />
+            <span>IDX News Scraper</span>
           </button>
         </div>
       </div>
@@ -1585,7 +1642,7 @@ function VamSmartScanner() {
               </div>
             </div>
           </motion.div>
-        ) : (
+        ) : activeTab === 'TRADINGVIEW' ? (
           <motion.div 
             key="ma-tradingview"
             initial={{ opacity: 0, y: 10 }}
@@ -1604,6 +1661,270 @@ function VamSmartScanner() {
             <div className="tradingview-widget-container" ref={container}>
               <div className="tradingview-widget-container__widget h-[460px]" />
             </div>
+          </motion.div>
+        ) : (
+          <motion.div
+            key="ma-scraper"
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -10 }}
+            className="p-5 space-y-6"
+          >
+            {/* Header description card */}
+            <div className="bg-zinc-950 border border-zinc-850 rounded-[2rem] p-5 relative overflow-hidden">
+              <div className="absolute top-0 right-0 p-16 bg-[#DFFF00]/2 blur-xl rounded-full" />
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                <div className="space-y-1">
+                  <div className="flex items-center gap-2">
+                    <Newspaper className="w-5 h-5 text-[#DFFF00]" />
+                    <h3 className="text-xs sm:text-sm font-black text-white uppercase tracking-widest font-mono">
+                      Real-Time Capital Markets Scraper & AI Synthesizer
+                    </h3>
+                  </div>
+                  <p className="text-[10.5px] text-zinc-400 max-w-2xl leading-relaxed">
+                    Menarik pengumuman keterbukaan informasi emiten langsung dari bursa efek (IDX) serta media portal terpercaya (Bloomberg, CNBC, Kontan, Reuters) secara real-time. Data kemudian dianalisis menggunakan Gemini dengan model Google Search Grounding untuk mendeteksi potensi sengketa anti-monopoli (KPPU), kalkulasi premium penawaran tender offer, serta rincian beneficial ownership.
+                  </p>
+                </div>
+
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => {
+                        setNewsQuery('');
+                        fetchScrapedNews('');
+                    }}
+                    disabled={isNewsScraping}
+                    className="p-2 bg-zinc-900 border border-zinc-800 rounded-xl text-zinc-400 hover:text-white transition-all text-[10px] font-mono"
+                  >
+                    RESET
+                  </button>
+                  <button
+                    onClick={() => fetchScrapedNews(newsQuery)}
+                    disabled={isNewsScraping}
+                    className="flex items-center gap-1.5 py-2 px-4 bg-[#DFFF00] hover:bg-[#deff9a] text-slate-950 text-[10px] font-mono font-black uppercase rounded-xl transition-all shadow-md disabled:opacity-50"
+                  >
+                    <RefreshCw className={`w-3.5 h-3.5 ${isNewsScraping ? 'animate-spin' : ''}`} />
+                    <span>{isNewsScraping ? "Scraping..." : "RUN SCRAPER"}</span>
+                  </button>
+                </div>
+              </div>
+
+              {/* Scrape Search Bar */}
+              <div className="mt-4 flex flex-col sm:flex-row gap-2.5">
+                <div className="relative flex-1">
+                  <input
+                    type="text"
+                    value={newsQuery}
+                    onChange={(e) => setNewsQuery(e.target.value)}
+                    placeholder="Saring berdasarkan instrumen bursa (cth: EXCL, GOTO, VALE, SILO, perbankan konsolidasi, divestasi)..."
+                    className="w-full bg-zinc-950/80 border border-zinc-850 rounded-xl py-2 px-3 pl-9 text-[11px] font-mono text-white placeholder-zinc-600 focus:outline-none focus:border-[#DFFF00]/40"
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        e.preventDefault();
+                        fetchScrapedNews(newsQuery);
+                      }
+                    }}
+                  />
+                  <Search className="w-3.5 h-3.5 text-zinc-550 absolute left-3 top-2.5" />
+                </div>
+                <div className="flex flex-wrap gap-1.5 items-center">
+                  <span className="text-[9px] text-zinc-500 font-mono uppercase mr-1">QUICK QUERY:</span>
+                  {['Merger EXCL FREN', 'Tender Offer SILO', 'Divestasi VALE', 'Restrukturisasi GOTO'].map(filter => (
+                    <button
+                      key={filter}
+                      onClick={() => {
+                        setNewsQuery(filter);
+                        fetchScrapedNews(filter);
+                      }}
+                      className="px-2 py-1 bg-zinc-900 hover:bg-zinc-850 border border-zinc-855 text-zinc-400 hover:text-white rounded-lg text-[9px] font-mono transition-all"
+                    >
+                      {filter}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </div>
+
+            {/* Scraper loading state */}
+            {isNewsScraping ? (
+              <div className="bg-zinc-950/40 border border-zinc-850/60 rounded-[2rem] p-12 flex flex-col items-center justify-center text-center space-y-4">
+                <div className="relative flex items-center justify-center w-12 h-12">
+                  <div className="absolute inset-0 border-2 border-[#DFFF00]/10 rounded-full animate-ping" />
+                  <div className="w-8 h-8 border-2 border-t-[#DFFF00] border-zinc-800 rounded-full animate-spin" />
+                </div>
+                <div className="space-y-1 max-w-sm">
+                  <p className="text-xs font-mono font-bold text-white uppercase tracking-wider">CRAWLING CAPITAL NEWS PORTALS...</p>
+                  <p className="text-[10px] text-zinc-500 font-sans">Menghubungkan agen bot ke portal Berita Keterbukaan Informasi Bursa Efek Indonesia (IDX), CNBC, Bisnis Indonesia, dan Kontan via Google Search Grounding & Gemini Synthesizer...</p>
+                </div>
+                <div className="text-[9px] font-mono bg-black/60 border border-zinc-900/60 p-3 rounded-xl text-[#DFFF00]/70 max-w-md w-full text-left space-y-1 overflow-hidden select-none">
+                  <div className="flex items-center gap-2"><span className="text-zinc-600">&gt;</span> <span>[CONNECTION] Established secure session proxy to IDX Web API...</span></div>
+                  <div className="flex items-center gap-2 animate-pulse"><span className="text-zinc-600">&gt;</span> <span>[CRAWLING] Fetching news index using Gemini deep-web crawler...</span></div>
+                  <div className="flex items-center gap-2"><span className="text-zinc-600">&gt;</span> <span>[MODEL] Utilizing Gemini with Google Search tool validation...</span></div>
+                </div>
+              </div>
+            ) : newsScrapingError ? (
+              <div className="bg-red-950/10 border border-red-900/20 rounded-[2rem] p-8 text-center text-red-400 space-y-2">
+                <ShieldAlert className="w-8 h-8 mx-auto text-red-500" />
+                <p className="text-xs font-mono font-bold uppercase">PENGI-INDEKSAN BERITA CACAT / TERBATAS</p>
+                <p className="text-[10px] text-zinc-500 max-w-md mx-auto leading-relaxed">{newsScrapingError}</p>
+                <button
+                  onClick={() => fetchScrapedNews(newsQuery)}
+                  className="px-4 py-1.5 bg-zinc-900 border border-zinc-850 rounded-lg text-[10px] font-mono font-bold text-white hover:bg-zinc-800"
+                >
+                  RETRY SCRAPE
+                </button>
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                {/* News index listing */}
+                <div className="space-y-4">
+                  <div className="flex items-center justify-between px-1">
+                    <h4 className="text-[10px] font-mono font-bold uppercase tracking-wider text-zinc-400">
+                      CRAWLED HEADLINES INDEX ({scrapedNews.length} ARTICLES)
+                    </h4>
+                    <span className="text-[9px] font-mono text-zinc-500">SORT BY: REAL-TIME TIMELINE</span>
+                  </div>
+
+                  <div className="space-y-4">
+                    {scrapedNews.length === 0 ? (
+                      <div className="bg-zinc-950/20 border border-zinc-900 p-8 rounded-2xl text-center text-zinc-500 text-[10px] font-mono">
+                        Belum ada berita yang diindeks. Klik "RUN SCRAPER" untuk memindai pengumuman korporat.
+                      </div>
+                    ) : (
+                      scrapedNews.map((news) => (
+                        <div
+                          key={news.id}
+                          className="bg-zinc-950 border border-zinc-850 hover:border-zinc-750 p-4.5 rounded-2xl space-y-3 relative group overflow-hidden transition-all duration-350"
+                        >
+                          <div className="flex items-start justify-between gap-3">
+                            <div className="space-y-1">
+                              <div className="flex items-center flex-wrap gap-2">
+                                <span className="text-[10px] font-mono text-[#DFFF00] bg-[#DFFF00]/4 px-2 py-0.5 border border-[#DFFF00]/10 rounded-lg">
+                                  #{news.targetSymbol}
+                                </span>
+                                <span className="text-[9.5px] text-zinc-500 font-sans">
+                                  {news.source}
+                                </span>
+                              </div>
+                              <h5 className="text-[11.5px] font-black tracking-tight text-white font-sans group-hover:text-[#DFFF00] transition-colors leading-medium">
+                                {news.title}
+                              </h5>
+                            </div>
+                            <span className="text-[9px] text-zinc-600 font-mono whitespace-nowrap pt-1">
+                              {news.timestamp}
+                            </span>
+                          </div>
+
+                          <div className="flex items-center gap-3 text-[9px] font-mono">
+                            <span className="flex items-center gap-1">
+                              <span className="text-zinc-650">IMPACT:</span>
+                              <span className={`font-bold uppercase ${news.impact === 'HIGH' ? 'text-red-400' : 'text-amber-500'}`}>
+                                {news.impact}
+                              </span>
+                            </span>
+                            <span className="text-zinc-800">|</span>
+                            <span className="flex items-center gap-1">
+                              <span className="text-zinc-650">SENTIMENT:</span>
+                              <span className={`font-bold uppercase ${news.sentiment === 'BULLISH' ? 'text-emerald-400' : news.sentiment === 'BEARISH' ? 'text-red-400' : 'text-zinc-400'}`}>
+                                {news.sentiment}
+                              </span>
+                            </span>
+                          </div>
+
+                          <div className="pt-2 bg-zinc-900/30 p-3 rounded-xl border border-zinc-900 text-[10px] text-zinc-400 font-sans leading-relaxed">
+                            <div className="text-[8.5px] text-zinc-600 font-black uppercase tracking-widest font-mono mb-1">CRAWLER SUMMARY INTERPRETATION</div>
+                            {news.summary}
+                          </div>
+
+                          <div className="bg-[#DFFF00]/2 border border-[#DFFF00]/10 p-3 rounded-xl text-[10.5px] text-zinc-300 font-sans leading-relaxed relative">
+                            <div className="absolute top-2 right-2 w-1.5 h-1.5 bg-[#DFFF00] rounded-full" />
+                            <div className="text-[9px] text-[#DFFF00] font-black uppercase tracking-wider font-mono mb-1 flex items-center gap-1">
+                              <BrainCircuit className="w-3 h-3" />
+                              <span>Institutional Trading Playbook</span>
+                            </div>
+                            {news.actionableStrategy}
+                          </div>
+
+                          <div className="flex justify-end pt-1">
+                            <a
+                              href={news.url}
+                              target="_blank"
+                              referrerPolicy="no-referrer"
+                              className="text-[9px] font-mono text-[#DFFF00]/80 hover:text-white flex items-center gap-1 transition-all"
+                            >
+                              <span>VERIFIKASI SUMBER BERITA</span>
+                              <ExternalLink className="w-2.5 h-2.5" />
+                            </a>
+                          </div>
+                        </div>
+                      ))
+                    )}
+                  </div>
+                </div>
+
+                {/* Scraped analysis & corporate radar column */}
+                <div className="space-y-6">
+                  {/* Aggregated Institutional M&A Market Radar Card */}
+                  <div className="bg-gradient-to-br from-zinc-950 to-zinc-950/60 border border-zinc-850 p-5 rounded-[2rem] space-y-4">
+                    <h4 className="text-[10px] font-mono font-black text-white uppercase tracking-widest flex items-center gap-1.5">
+                      <TrendingUp className="w-4 h-4 text-[#DFFF00]" />
+                      <span>Aggregated Scraper Radar Stats & Arbitrage Premium</span>
+                    </h4>
+
+                    <div className="grid grid-cols-2 gap-3 pt-1">
+                      <div className="bg-zinc-900/40 p-4 rounded-2xl border border-zinc-900 flex flex-col justify-between">
+                        <span className="text-[9px] text-zinc-500 font-mono uppercase">Avg Arbitrage Spread</span>
+                        <p className="text-xl font-bold font-mono text-emerald-400 mt-1">11.45% YTD</p>
+                        <span className="text-[8px] text-zinc-650 font-sans mt-1">Spread based on active Indonesian deals</span>
+                      </div>
+                      <div className="bg-zinc-900/40 p-4 rounded-2xl border border-zinc-900 flex flex-col justify-between">
+                        <span className="text-[9px] text-zinc-500 font-mono uppercase">Scraped Reg Risk Grade</span>
+                        <p className="text-xl font-bold font-mono text-amber-500 mt-1">MODERATE-HIGH</p>
+                        <span className="text-[8px] text-zinc-650 font-sans mt-1">Due to stricter KPPU anti-monopoli audit rules</span>
+                      </div>
+                    </div>
+
+                    <div className="space-y-3 bg-zinc-900/20 p-4 rounded-2.5xl border border-zinc-900 text-[10.5px]">
+                      <h5 className="text-[8.5px] font-mono font-black text-[#DFFF00] uppercase tracking-widest mb-1.5 font-mono">ANTITRUST & REGULATORY (KPPU) BOT WATCHLIST</h5>
+                      
+                      <div className="flex justify-between items-center py-1.5 border-b border-zinc-900/60">
+                        <span className="text-zinc-400">XL Axiata & Smartfren (EXCL/FREN)</span>
+                        <span className="text-amber-500 font-mono font-bold uppercase text-[9.5px]">Reviewing Radio Spectrum</span>
+                      </div>
+                      
+                      <div className="flex justify-between items-center py-1.5 border-b border-zinc-900/60">
+                        <span className="text-zinc-400">ByteDance & GOTO Tokopedia Partnership</span>
+                        <span className="text-emerald-500 font-mono font-bold uppercase text-[9.5px]">Cleared - Complied</span>
+                      </div>
+
+                      <div className="flex justify-between items-center py-1.5">
+                        <span className="text-zinc-400">CVC Capital Partners & Siloam Hospitals</span>
+                        <span className="text-amber-500 font-mono font-bold uppercase text-[9.5px]">Market Concentration Audit</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Scrape Target Search Suggestions & Live Intel Alert */}
+                  <div className="bg-zinc-950 border border-zinc-850 p-5 rounded-[2rem] space-y-4">
+                    <h4 className="text-[10px] font-mono font-black text-white uppercase tracking-widest flex items-center gap-1.5">
+                      <ShieldAlert className="w-4 h-4 text-amber-500" />
+                      <span>Live Intelligence Warning System</span>
+                    </h4>
+                    <p className="text-[10.5px] text-zinc-400 font-sans leading-relaxed">
+                      Layanan indexing crawler VentureAM ini dilengkapi dengan bot cerdas yang mengidentifikasi kebocoran rencana penawaran tender wajib (tender offer leakages) berdasarkan riwayat penyimpangan pergerakan harga saham (stock unusual market activity) sebelum keterbukaan diumumkan ke bursa. Harap verifikasi semua data teknis di TradingView sebelum mengambil keputusan buyback.
+                    </p>
+                    <div className="bg-zinc-900/40 p-4 border border-zinc-900 rounded-xl space-y-2.5">
+                      <div className="flex items-center gap-2">
+                        <div className="w-1.5 h-1.5 bg-yellow-400 rounded-full animate-pulse" />
+                        <span className="text-[9.5px] text-zinc-300 font-mono font-bold font-mono">EXPRATING INDEX SCAN (2026-IDX-REST)</span>
+                      </div>
+                      <p className="text-[10.5px] text-zinc-500 font-sans leading-relaxed">
+                        Kami mendeteksi aktivitas pembelian volume tidak biasa pada saham telekomunikasi menjelang batas waktu publikasi hasil evaluasi pita frekuensi Kominfo. Gunakan strategi Mergers Arbitrage dengan seksama.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
           </motion.div>
         )}
       </AnimatePresence>

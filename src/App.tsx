@@ -410,15 +410,74 @@ export default function App() {
   const [activeScannerModule, setActiveScannerModule] = useState<string | null>(null);
   const [expandedMarket, setExpandedMarket] = useState<string | null>(null);
   const [portfolioData, setPortfolioData] = useState<PortfolioAsset[]>([]);
-  const [cgsAssets, setCgsAssets] = useState(() => [
-    { ticker: "DEFI.JK", lots: 10, averagePrice: 224, marketPrice: 145 },
-    { ticker: "DSSA.JK", lots: 6, averagePrice: 691.6667, marketPrice: 775 },
-    { ticker: "KOTA.JK", lots: 15, averagePrice: 151, marketPrice: 134 },
-    { ticker: "LAND.JK", lots: 31, averagePrice: 103.3548, marketPrice: 89 },
-    { ticker: "LPKR.JK", lots: 20, averagePrice: 84, marketPrice: 81 },
-    { ticker: "PIPA.JK", lots: 15, averagePrice: 151, marketPrice: 116 }
-  ]);
-  const [cgsCashBalance, setCgsCashBalance] = useState(71879);
+  const [cgsAssets, setCgsAssets] = useState(() => {
+    try {
+      const saved = localStorage.getItem('cgsAssets');
+      if (saved) return JSON.parse(saved);
+    } catch (e) {
+      console.error("Failed to parse cgsAssets from local storage", e);
+    }
+    return [
+      { ticker: "DEFI.JK", lots: 10, averagePrice: 224, marketPrice: 145 },
+      { ticker: "DSSA.JK", lots: 6, averagePrice: 691.6667, marketPrice: 775 },
+      { ticker: "KOTA.JK", lots: 15, averagePrice: 151, marketPrice: 134 },
+      { ticker: "LAND.JK", lots: 31, averagePrice: 103.3548, marketPrice: 89 },
+      { ticker: "LPKR.JK", lots: 20, averagePrice: 84, marketPrice: 81 },
+      { ticker: "PIPA.JK", lots: 15, averagePrice: 151, marketPrice: 116 }
+    ];
+  });
+  const [cgsCashBalance, setCgsCashBalance] = useState(() => {
+    try {
+      const saved = localStorage.getItem('cgsCashBalance');
+      if (saved !== null) {
+        const parsed = parseFloat(saved);
+        if (!isNaN(parsed)) return parsed;
+      }
+    } catch (e) {
+      console.error("Failed to parse cgsCashBalance", e);
+    }
+    return 71879;
+  });
+  const [cgsRealizedPnL, setCgsRealizedPnL] = useState(() => {
+    try {
+      const saved = localStorage.getItem('cgsRealizedPnL');
+      if (saved !== null) {
+        const parsed = parseFloat(saved);
+        if (!isNaN(parsed)) return parsed;
+      }
+    } catch (e) {
+      console.error("Failed to parse cgsRealizedPnL", e);
+    }
+    return 0;
+  });
+  const [cgsTotalFees, setCgsTotalFees] = useState(() => {
+    try {
+      const saved = localStorage.getItem('cgsTotalFees');
+      if (saved !== null) {
+        const parsed = parseFloat(saved);
+        if (!isNaN(parsed)) return parsed;
+      }
+    } catch (e) {
+      console.error("Failed to parse cgsTotalFees", e);
+    }
+    return 0;
+  });
+
+  useEffect(() => {
+    localStorage.setItem('cgsAssets', JSON.stringify(cgsAssets));
+  }, [cgsAssets]);
+
+  useEffect(() => {
+    localStorage.setItem('cgsCashBalance', cgsCashBalance.toString());
+  }, [cgsCashBalance]);
+
+  useEffect(() => {
+    localStorage.setItem('cgsRealizedPnL', cgsRealizedPnL.toString());
+  }, [cgsRealizedPnL]);
+
+  useEffect(() => {
+    localStorage.setItem('cgsTotalFees', cgsTotalFees.toString());
+  }, [cgsTotalFees]);
 
   const { history, recordTransaction } = useTransactionManager();
 
@@ -435,6 +494,8 @@ export default function App() {
         return prev + balanceAdjustment;
       }
     });
+
+    setCgsTotalFees(prev => prev + fee);
 
     setCgsAssets(prevAssets => {
       const existingIdx = prevAssets.findIndex(a => a.ticker.toUpperCase() === ticker.toUpperCase());
@@ -455,6 +516,9 @@ export default function App() {
           };
           return updated;
         } else {
+          const pnlValue = (price - existing.averagePrice) * lots * 100;
+          setCgsRealizedPnL(prev => prev + pnlValue);
+
           const remainingLots = existing.lots - lots;
           if (remainingLots <= 0) {
             return prevAssets.filter((_, i) => i !== existingIdx);
@@ -508,6 +572,12 @@ export default function App() {
       { ticker: "PIPA.JK", lots: 15, averagePrice: 151, marketPrice: 116 }
     ]);
     setCgsCashBalance(71879);
+    setCgsRealizedPnL(0);
+    setCgsTotalFees(0);
+    localStorage.removeItem('cgsAssets');
+    localStorage.removeItem('cgsCashBalance');
+    localStorage.removeItem('cgsRealizedPnL');
+    localStorage.removeItem('cgsTotalFees');
   }, []);
 
   const [selectedStudies, setSelectedStudies] = useState<string[]>(["MASimple@tv-basicstudies", "MAExp@tv-basicstudies"]);
@@ -815,6 +885,80 @@ export default function App() {
 
     // Save and export
     doc.save(`VentureAM_Portfolio_Analysis_Report_${currentDate.toISOString().slice(0, 10)}.pdf`);
+  };
+
+  const exportPortfolioAnalysisToCSV = () => {
+    const rdnCash = cgsCashBalance;
+    const giroAccountBalance = 790190;
+    const totalAssetVal = totalPortfolioValue;
+    const totalCombinedValue = totalAssetVal + rdnCash + giroAccountBalance;
+    const totalCost = cgsAssets.reduce((acc, curr) => {
+      const assetCost = new Decimal(curr.averagePrice).times(curr.lots).times(100);
+      return new Decimal(acc).plus(assetCost).toNumber();
+    }, 0);
+    const totalPL = totalAssetVal - totalCost;
+    const performancePct = totalCost === 0 ? 0 : (totalPL / totalCost) * 100;
+
+    const currentDate = new Date();
+    const formatTime = currentDate.toISOString().replace('T', ' ').slice(0, 19);
+
+    const escapeCSV = (val: string | number) => {
+      const s = String(val).replace(/"/g, '""');
+      if (s.includes(',') || s.includes('"') || s.includes('\n')) {
+        return `"${s}"`;
+      }
+      return s;
+    };
+
+    const csvRows: string[] = [];
+    csvRows.push('VENTUREAM INSTITUTIONAL SYSTEM - PORTFOLIO PERFORMANCE & RISK ANALYSIS');
+    csvRows.push(`Printed Time,${escapeCSV(formatTime)}`);
+    csvRows.push('Account ID,YU001HC5400154');
+    csvRows.push('Gateway System Status,CONNECTED & SECURED');
+    csvRows.push('');
+    
+    csvRows.push('PORTFOLIO FINANCIAL SUMMARY');
+    csvRows.push(`Equity Value (IDR),${totalAssetVal}`);
+    csvRows.push(`Cash RDN Balance (IDR),${rdnCash}`);
+    csvRows.push(`Giro Account Balance (IDR),${giroAccountBalance}`);
+    csvRows.push(`Total Combined Value (IDR),${totalCombinedValue}`);
+    csvRows.push(`Total Deposited Capital (IDR),${totalCost}`);
+    csvRows.push(`Accumulated Unrealized PnL (IDR),${totalPL}`);
+    csvRows.push(`Performance Yield (%),${performancePct.toFixed(2)}`);
+    csvRows.push('');
+
+    csvRows.push('DETAILED PORTFOLIO BREAKDOWN');
+    csvRows.push('Ticker,Lots,Average Price (IDR),Current Price (IDR),Total Cost (IDR),Market Value (IDR),Unrealized PnL (IDR),Unrealized PnL (%),Weight (%)');
+
+    portfolioData.forEach(asset => {
+      const assetCost = new Decimal(asset.averagePrice || 0).times(asset.lots || 0).times(100).toNumber();
+      const assetMktVal = new Decimal(asset.marketValue || 0).toNumber();
+      const assetPL = assetMktVal - assetCost;
+      const assetPLPct = assetCost === 0 ? 0 : (assetPL / assetCost) * 100;
+      const weight = totalAssetVal === 0 ? 0 : (assetMktVal / totalAssetVal) * 100;
+
+      csvRows.push([
+        escapeCSV(asset.ticker || 'N/A'),
+        asset.lots || 0,
+        asset.averagePrice || 0,
+        asset.currentPrice || asset.marketPrice || 0,
+        assetCost,
+        assetMktVal,
+        assetPL,
+        assetPLPct.toFixed(2),
+        weight.toFixed(2)
+      ].join(','));
+    });
+
+    const csvContent = "\uFEFF" + csvRows.join('\r\n'); // BOM encoding
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.setAttribute('href', url);
+    link.setAttribute('download', `VentureAM_Portfolio_Analysis_Report_${currentDate.toISOString().slice(0, 10)}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
   };
 
   const [securityView, setSecurityView] = useState<'main' | 'history' | 'devices'>('main');
@@ -2778,13 +2922,22 @@ export default function App() {
                   </div>
                 </div>
                 
-                <button 
-                  onClick={exportPortfolioAnalysisToPDF}
-                  className="w-full py-4 rounded-2xl border border-slate-800 bg-slate-900/50 text-[#DFFF00] font-bold text-[10px] uppercase tracking-widest hover:bg-slate-800 transition-all duration-300 flex items-center justify-center gap-2 cursor-pointer shadow-[0_0_15px_rgba(223,255,0,0.05)] hover:shadow-[0_0_20px_rgba(223,255,0,0.1)]"
-                >
-                  <ExternalLink className="w-3 h-3" />
-                  Share & Export Portfolio Analysis (PDF)
-                </button>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 w-full">
+                  <button 
+                    onClick={exportPortfolioAnalysisToPDF}
+                    className="py-4 px-4 rounded-2xl border border-slate-800 bg-slate-900/50 text-[#DFFF00] font-bold text-[10px] uppercase tracking-widest hover:bg-slate-800 transition-all duration-300 flex items-center justify-center gap-2 cursor-pointer shadow-[0_0_15px_rgba(223,255,0,0.05)] hover:shadow-[0_0_20px_rgba(223,255,0,0.1)]"
+                  >
+                    <ExternalLink className="w-3 h-3" />
+                    Export PDF Report
+                  </button>
+                  <button 
+                    onClick={exportPortfolioAnalysisToCSV}
+                    className="py-4 px-4 rounded-2xl border border-slate-800 bg-slate-900/50 text-sky-400 font-bold text-[10px] uppercase tracking-widest hover:bg-slate-800 transition-all duration-300 flex items-center justify-center gap-2 cursor-pointer shadow-[0_0_15px_rgba(56,189,248,0.05)] hover:shadow-[0_0_20px_rgba(56,189,248,0.1)]"
+                  >
+                    <FileText className="w-3 h-3" />
+                    Export CSV Data
+                  </button>
+                </div>
               </div>
             }
           />
@@ -3038,7 +3191,7 @@ export default function App() {
               </button>
               <h3 className="text-sm font-semibold text-slate-300 uppercase tracking-widest">Financial Reporting Ecosystem</h3>
             </div>
-            <FinancialReportingCenter portfolioData={portfolioData} cashBalance={cgsCashBalance} />
+            <FinancialReportingCenter portfolioData={portfolioData} cashBalance={cgsCashBalance} realizedPnL={cgsRealizedPnL} totalFees={cgsTotalFees} />
           </div>
         );
       case 'archive':
@@ -3546,21 +3699,24 @@ export default function App() {
         {/* Mobile Overlay Sidebar - Keep for small screen menu */}
         <AnimatePresence>
           {isSidebarOpen && (
-            <>
-              <motion.div 
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                exit={{ opacity: 0 }}
-                onClick={() => setIsSidebarOpen(false)}
-                className="fixed inset-0 bg-black/80 backdrop-blur-sm z-[60] lg:hidden"
-              />
-              <motion.aside
-                initial={{ x: '-100%' }}
-                animate={{ x: 0 }}
-                exit={{ x: '-100%' }}
-                transition={{ type: 'spring', damping: 25, stiffness: 200 }}
-                className="fixed inset-y-0 left-0 w-4/5 max-w-[320px] bg-black border-r border-slate-800 z-[70] p-6 flex flex-col lg:hidden"
-              >
+            <motion.div 
+              key="sidebar-overlay"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setIsSidebarOpen(false)}
+              className="fixed inset-0 bg-black/80 backdrop-blur-sm z-[60] lg:hidden"
+            />
+          )}
+          {isSidebarOpen && (
+            <motion.aside
+              key="sidebar-aside-menu"
+              initial={{ x: '-100%' }}
+              animate={{ x: 0 }}
+              exit={{ x: '-100%' }}
+              transition={{ type: 'spring', damping: 25, stiffness: 200 }}
+              className="fixed inset-y-0 left-0 w-4/5 max-w-[320px] bg-black border-r border-slate-800 z-[70] p-6 flex flex-col lg:hidden"
+            >
                 <div className="flex justify-between items-center mb-8">
                   <div>
                     <h2 className="text-xl font-black text-[#deff9a] tracking-tight">VentureAM</h2>
@@ -3672,7 +3828,6 @@ export default function App() {
                 })}
                 </nav>
               </motion.aside>
-            </>
           )}
         </AnimatePresence>
         {/* PRICE ALERTS OVERLAY */}

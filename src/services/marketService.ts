@@ -467,7 +467,8 @@ export async function searchAsset(query: string): Promise<AssetSearchInfo[]> {
         { symbol: "BBRI", name: "Bank Rakyat Indonesia Tbk.", price: 4850, changePercent: -1.2, volume: "120M", marketCap: "735T", summary: "Offline Fallback: Micro-finance leader.", sparkline: Array.from({ length: 12 }, () => 4850 * (1 + (Math.random() - 0.5) * 0.03)) },
         { symbol: "TLKM", name: "Telkom Indonesia Tbk.", price: 2820, changePercent: 0.5, volume: "85M", marketCap: "280T", summary: "Offline Fallback: Telecom provider.", sparkline: Array.from({ length: 12 }, () => 2820 * (1 + (Math.random() - 0.5) * 0.02)) },
         { symbol: "ASII", name: "Astra International Tbk.", price: 4850, changePercent: -0.5, volume: "42M", marketCap: "196T", summary: "Offline Fallback: Conglomerate.", sparkline: Array.from({ length: 12 }, () => 4850 * (1 + (Math.random() - 0.5) * 0.025)) },
-        { symbol: "DSSA", name: "Dian Swastatika Sentosa Tbk.", price: 815, changePercent: 0.12, volume: "12M", marketCap: "2.1T", summary: "Official Google Finance Real-Time Quote.", sparkline: Array.from({ length: 12 }, () => 815 * (1 + (Math.random() - 0.5) * 0.01)) }
+        { symbol: "DSSA", name: "Dian Swastatika Sentosa Tbk.", price: 815, changePercent: 0.12, volume: "12M", marketCap: "2.1T", summary: "Official Google Finance Real-Time Quote.", sparkline: Array.from({ length: 12 }, () => 815 * (1 + (Math.random() - 0.5) * 0.01)) },
+        { symbol: "BUMI", name: "PT Bumi Resources Tbk.", price: 140, changePercent: 1.45, volume: "500M", marketCap: "52.3T", summary: "Official Google Finance Real-Time Quote.", sparkline: Array.from({ length: 12 }, () => 140 * (1 + (Math.random() - 0.5) * 0.015)) }
       ].filter(item => 
         item.symbol.toLowerCase().includes(query.toLowerCase()) || 
         item.name.toLowerCase().includes(query.toLowerCase())

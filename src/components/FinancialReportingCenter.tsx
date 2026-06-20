@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { 
   BarChart3, 
   PieChart, 
@@ -29,6 +29,7 @@ import Papa from 'papaparse';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import { Decimal } from 'decimal.js';
+import RealizedPnLChart from './RealizedPnLChart';
 
 interface PortfolioAsset {
   ticker: string;
@@ -44,6 +45,8 @@ interface PortfolioAsset {
 interface FinancialReportingCenterProps {
   portfolioData?: PortfolioAsset[];
   cashBalance?: number;
+  realizedPnL?: number;
+  totalFees?: number;
 }
 
 interface Report {
@@ -71,7 +74,7 @@ interface ExtractedLedger {
   confidence: number;
 }
 
-export default function FinancialReportingCenter({ portfolioData, cashBalance }: FinancialReportingCenterProps) {
+export default function FinancialReportingCenter({ portfolioData, cashBalance, realizedPnL = 0, totalFees = 0 }: FinancialReportingCenterProps) {
   const [activeTab, setActiveTabState] = useState<'REPORTS' | 'SECURE_VAULT'>('REPORTS');
   const [kpiMetric, setKpiMetric] = useState<'ROA' | 'ROE' | 'GPM' | 'CR'>('ROA');
   const [isGenerating, setIsGenerating] = useState(false);
@@ -116,46 +119,55 @@ export default function FinancialReportingCenter({ portfolioData, cashBalance }:
   const [financialValues, setFinancialValues] = useState({
     // Balance Sheet (Rp)
     cash26: 2950677,
-    cash25: 989908.69,
+    cash25: 989908.69, // Kas dan Setara Kas (Audit 2025)
     giro26: 790190,
-    giro25: 0,
+    giro25: 262900, // Keuntungan Portofolio Belum Direalisasi (Audit 2025)
     invest26: 1226900,
-    invest25: 1281200,
+    invest25: 1018300, // Investasi Saham At Cost (Audit 2025)
     fixed26: 5950000,
-    fixed25: 6000000,
+    fixed25: 6000000, // PC & Monitor MSI Cost
     shortLiability26: 0,
     shortLiability25: 0,
     paidCapital26: 9300000,
-    paidCapital25: 6196225.05,
+    paidCapital25: 6196225.05, // Modal Disetor (Audit 2025)
     retainedEarnings26: 827577,
-    retainedEarnings25: 2074883.64,
+    retainedEarnings25: 2074883.64, // Laba Komprehensif (Audit 2025)
 
     // Profit Loss (Rp)
     rev26: 456200,
-    rev25: 11319740,
+    rev25: 11319740, // Pendapatan Usaha Penjualan Efek (Audit 2025)
     hpp26: 0,
-    hpp25: -9203333,
+    hpp25: -9203333, // Harga Pokok Penjualan (Audit 2025)
     operatingExpense26: -575000,
-    operatingExpense25: -304838,
+    operatingExpense25: -304838, // Total Beban Operasional (Audit 2025)
     depreciationExpense26: -50000,
     depreciationExpense25: 0,
     interestIncome26: 0,
-    interestIncome25: 414.64,
+    interestIncome25: 414.64, // Bunga RDN & Bagi Hasil Giro (Audit 2025)
     unrealizedSecurities26: -581650,
-    unrealizedSecurities25: 262900,
+    unrealizedSecurities25: 262900, // Keuntungan Portofolio Belum Direalisasi (Audit 2025)
+    realizedSecurities26: 0,
+    realizedSecurities25: 0,
+    tax25: 0,
 
     // Cash Flow (Rp)
     received26: 456200,
-    received25: 0,
+    received25: 11319802.64, // Penerimaan Penjualan Saham & Bagi Hasil (Audit 2025)
     operatingExpenseOut26: -575000,
-    operatingExpenseOut25: 0,
+    operatingExpenseOut25: -9507819, // Pembayaran Pembelian Saham & Biaya (Audit 2025)
     investOut26: -5193450,
-    investOut25: 0,
+    investOut25: -7018300, // Kas Bersih Aktivitas Investasi (Audit 2025)
     proceedsCapital26: 7300000,
-    proceedsCapital25: 0,
-    beginningCash26: 962927,
-    beginningCash25: 0,
+    proceedsCapital25: 6196225.05, // Setoran Modal (Audit 2025)
+    beginningCash26: 989908.69, // Saldo Kas Awal 2026 (Cocok dengan Saldo Akhir 2025)
+    beginningCash25: 0, // Saldo Kas Awal 2025
   });
+
+  // Create a primitive fingerprint digest to avoid array-reference based re-rendering cascades
+  const portfolioFingerprint = useMemo(() => {
+    if (!portfolioData) return '';
+    return portfolioData.map(asset => `${asset.ticker}:${asset.marketValue || 0}:${asset.unrealized || 0}:${asset.currentPrice || 0}`).join('|');
+  }, [portfolioData]);
 
   // Sync with portfolioData and cashBalance props from custom portfolio rebalancing
   useEffect(() => {
@@ -170,23 +182,57 @@ export default function FinancialReportingCenter({ portfolioData, cashBalance }:
       const totalLiabilities26 = 0; // shortLiability26 is 0
       const liveRetainedEarnings26 = netTotalAssets26 - totalLiabilities26 - 9300000; // paidCapital26 is 9300000
 
-      setFinancialValues(prev => ({
-        ...prev,
-        cash26: liveCash26,
-        giro26: liveGiro26,
-        invest26: liveInvest26,
-        unrealizedSecurities26: liveUnrealizedSecurities26,
-        retainedEarnings26: liveRetainedEarnings26,
-        // Also update cash flow metrics corresponding to the live portfolio
-        beginningCash26: 962927,
-      }));
+      // Dynamic Cash Flows to make Balance Sheet always balance with Income & Cash flow logically
+      const liveOpexOut26 = -575000 - totalFees;
+      const liveReceived26 = 456200;
+      const liveBeginningCash26 = 989908.69;
+      const liveCfOperating26 = liveReceived26 + liveOpexOut26; // 456200 - 575000 - totalFees = -118800 - totalFees
+      const liveCfFinancing26 = 7300000;
+      const liveCfInvesting26 = liveCash26 - liveBeginningCash26 - liveCfOperating26 - liveCfFinancing26;
+
+      setFinancialValues(prev => {
+        // Only trigger state update if values have actually changed compared to the previous state objects
+        if (
+          prev.cash26 === liveCash26 &&
+          prev.giro26 === liveGiro26 &&
+          prev.invest26 === liveInvest26 &&
+          prev.unrealizedSecurities26 === liveUnrealizedSecurities26 &&
+          prev.realizedSecurities26 === realizedPnL &&
+          prev.retainedEarnings26 === liveRetainedEarnings26 &&
+          prev.operatingExpense26 === (-575000 - totalFees) &&
+          prev.operatingExpenseOut26 === liveOpexOut26 &&
+          prev.investOut26 === liveCfInvesting26 &&
+          prev.beginningCash26 === liveBeginningCash26
+        ) {
+          return prev;
+        }
+
+        return {
+          ...prev,
+          cash26: liveCash26,
+          giro26: liveGiro26,
+          invest26: liveInvest26,
+          unrealizedSecurities26: liveUnrealizedSecurities26,
+          realizedSecurities26: realizedPnL,
+          retainedEarnings26: liveRetainedEarnings26,
+          operatingExpense26: -575000 - totalFees, // Sync transaction fees as operating expense burden
+          operatingExpenseOut26: liveOpexOut26,     // Sync transaction fees as operating cash outflow
+          investOut26: liveCfInvesting26,           // Balanced investment outflow/inflow matching ending ledger cash
+          beginningCash26: liveBeginningCash26,
+        };
+      });
 
       // Update lastUpdateTime with standard format (matching last update of financial report)
       const now = new Date();
       const formatTime = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')} ${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}:${String(now.getSeconds()).padStart(2, '0')}`;
-      setLastUpdateTime(formatTime);
+      
+      setLastUpdateTime(prev => {
+        // Prevent update cascade if calculated format time string is unchanged
+        if (prev === formatTime) return prev;
+        return formatTime;
+      });
     }
-  }, [portfolioData, cashBalance]);
+  }, [portfolioFingerprint, cashBalance, realizedPnL, totalFees]);
 
   // Keep report lastUpdate values synced with lastUpdateTime
   useEffect(() => {
@@ -299,8 +345,8 @@ export default function FinancialReportingCenter({ portfolioData, cashBalance }:
     const netTotalPasiva25 = totalLiabilities25 + totalEquity25;
 
     // Laba Rugi
-    const netOperatingProfit26 = financialValues.rev26 + financialValues.hpp26 + financialValues.operatingExpense26 + financialValues.depreciationExpense26 + financialValues.interestIncome26;
-    const netOperatingProfit25 = financialValues.rev25 + financialValues.hpp25 + financialValues.operatingExpense25 + financialValues.depreciationExpense25 + financialValues.interestIncome25;
+    const netOperatingProfit26 = financialValues.rev26 + financialValues.hpp26 + financialValues.operatingExpense26 + financialValues.depreciationExpense26 + financialValues.interestIncome26 + (financialValues.realizedSecurities26 || 0);
+    const netOperatingProfit25 = financialValues.rev25 + financialValues.hpp25 + financialValues.operatingExpense25 + financialValues.depreciationExpense25 + financialValues.interestIncome25 + (financialValues.realizedSecurities25 || 0) + (financialValues.tax25 || 0);
 
     const totalComprehensiveProfit26 = netOperatingProfit26 + financialValues.unrealizedSecurities26;
     const totalComprehensiveProfit25 = netOperatingProfit25 + financialValues.unrealizedSecurities25;
@@ -328,13 +374,13 @@ export default function FinancialReportingCenter({ portfolioData, cashBalance }:
           rows: [
             { labelInd: 'ASET LANCAR', labelEng: 'CURRENT ASSETS', val26: formatIdr(netCurrentAssets26), val25: formatIdr(netCurrentAssets25), isBold: true },
             { labelInd: 'Kas dan Setara Kas (RDN/Bank)', labelEng: 'Cash and Cash Equivalents', val26: formatIdr(financialValues.cash26), val25: formatIdr(financialValues.cash25) },
-            { labelInd: 'Saldo Rekening Giro (per 17 Juni 2026)', labelEng: 'Giro Account Balance (as of June 17, 2026)', val26: formatIdr(financialValues.giro26 || 0), val25: formatIdr(financialValues.giro25 || 0) },
-            { labelInd: 'Portofolio Saham & Efek', labelEng: 'Securities Portfolio', val26: formatIdr(financialValues.invest26), val25: formatIdr(financialValues.invest25) },
+            { labelInd: 'Saldo Rekening Giro (2026) / Unrealized Gain Portfolio (2025)', labelEng: 'Giro Account Balance (2026) / Unrealized Gain Portfolio (2025)', val26: formatIdr(financialValues.giro26 || 0), val25: formatIdr(financialValues.giro25 || 0) },
+            { labelInd: 'Portofolio Saham & Efek (2026) / Investasi Saham At Cost (2025)', labelEng: 'Securities Portfolio (2026) / Stock Investments At Cost (2025)', val26: formatIdr(financialValues.invest26), val25: formatIdr(financialValues.invest25) },
             { labelInd: 'TOTAL ASET LANCAR', labelEng: 'TOTAL CURRENT ASSETS', val26: formatIdr(netCurrentAssets26), val25: formatIdr(netCurrentAssets25), isBold: true },
             
-            { labelInd: 'ASET TETAP', labelEng: 'NON-CURRENT ASSETS', val26: formatIdr(netNonCurrentAssets26), val25: formatIdr(netNonCurrentAssets25), isBold: true },
+            { labelInd: 'ASET TETAP / TIDAK LANCAR', labelEng: 'NON-CURRENT ASSETS', val26: formatIdr(netNonCurrentAssets26), val25: formatIdr(netNonCurrentAssets25), isBold: true },
             { labelInd: 'Fasilitas Media (PC & Monitor MSI) - Net', labelEng: 'Media Facilities (PC & Monitor) - Net', val26: formatIdr(financialValues.fixed26), val25: formatIdr(financialValues.fixed25) },
-            { labelInd: 'TOTAL ASET TETAP', labelEng: 'TOTAL NON-CURRENT ASSETS', val26: formatIdr(netNonCurrentAssets26), val25: formatIdr(netNonCurrentAssets25), isBold: true },
+            { labelInd: 'TOTAL ASET TETAP / TIDAK LANCAR', labelEng: 'TOTAL NON-CURRENT ASSETS', val26: formatIdr(netNonCurrentAssets26), val25: formatIdr(netNonCurrentAssets25), isBold: true },
             
             { labelInd: 'TOTAL ASET', labelEng: 'TOTAL CONSOLIDATED ASSETS', val26: formatIdr(netTotalAssets26), val25: formatIdr(netTotalAssets25), isBold: true },
             
@@ -343,8 +389,8 @@ export default function FinancialReportingCenter({ portfolioData, cashBalance }:
             { labelInd: 'TOTAL LIABILITAS (Zero Debt)', labelEng: 'TOTAL LIABILITIES', val26: formatIdr(totalLiabilities26), val25: formatIdr(totalLiabilities25), isBold: true },
             
             { labelInd: 'EKUITAS', labelEng: 'EQUITY', val26: formatIdr(totalEquity26), val25: formatIdr(totalEquity25), isBold: true },
-            { labelInd: 'Modal Disetor', labelEng: 'Paid-in Capital', val26: formatIdr(financialValues.paidCapital26), val25: formatIdr(financialValues.paidCapital25) },
-            { labelInd: 'Laba Ditahan & Berjalan YTD', labelEng: 'Retained Earnings & Current Income YTD', val26: formatIdr(financialValues.retainedEarnings26), val25: formatIdr(financialValues.retainedEarnings25) },
+            { labelInd: 'Modal Disetor & Saldo Laba (Awal)', labelEng: 'Paid-in Capital & Retained Earnings (Beginning)', val26: formatIdr(financialValues.paidCapital26), val25: formatIdr(financialValues.paidCapital25) },
+            { labelInd: 'Laba Komprehensif Periode Berjalan', labelEng: 'Comprehensive Income for the Period', val26: formatIdr(financialValues.retainedEarnings26), val25: formatIdr(financialValues.retainedEarnings25) },
             { labelInd: 'TOTAL EKUITAS', labelEng: 'TOTAL EQUITY', val26: formatIdr(totalEquity26), val25: formatIdr(totalEquity25), isBold: true },
             
             { labelInd: 'TOTAL PASIVA', labelEng: 'TOTAL LIABILITIES & EQUITY', val26: formatIdr(netTotalPasiva26), val25: formatIdr(netTotalPasiva25), isBold: true }
@@ -355,11 +401,13 @@ export default function FinancialReportingCenter({ portfolioData, cashBalance }:
           titleInd: 'LAPORAN LABA RUGI KOMPREHENSIF',
           titleEng: 'STATEMENT OF COMPREHENSIVE INCOME',
           rows: [
-            { labelInd: 'PENDAPATAN OPERASIONAL', labelEng: 'OPERATING INCOME / REVENUE', val26: formatIdr(financialValues.rev26), val25: formatIdr(financialValues.rev25), isBold: true },
+            { labelInd: 'PENDAPATAN USAHA / OPERASIONAL', labelEng: 'OPERATING INCOME / REVENUE', val26: formatIdr(financialValues.rev26), val25: formatIdr(financialValues.rev25), isBold: true },
             { labelInd: 'Harga Pokok Penjualan (HPP)', labelEng: 'Cost of Goods Sold (COGS)', val26: formatIdr(financialValues.hpp26, true), val25: formatIdr(financialValues.hpp25, true) },
             { labelInd: 'Beban Operasional & Administrasi', labelEng: 'Operating & Admin Expenses', val26: formatIdr(financialValues.operatingExpense26, true), val25: formatIdr(financialValues.operatingExpense25, true) },
             { labelInd: 'Beban Penyusutan Aset', labelEng: 'Depreciation Expenses', val26: formatIdr(financialValues.depreciationExpense26, true), val25: formatIdr(financialValues.depreciationExpense25, true) },
             { labelInd: 'Hasil Bunga RDN & Lainnya', labelEng: 'Interest Income & Others', val26: formatIdr(financialValues.interestIncome26), val25: formatIdr(financialValues.interestIncome25) },
+            { labelInd: 'Laba (Rugi) Direalisasikan (Rebalancing)', labelEng: 'Realized Gain / (Loss) on Portfolio Rebalancing', val26: formatIdr(financialValues.realizedSecurities26 || 0, true), val25: formatIdr(financialValues.realizedSecurities25 || 0, true) },
+            { labelInd: 'Pajak Penghasilan (Estimasi)', labelEng: 'Income Tax (Estimated)', val26: '-', val25: formatIdr(financialValues.tax25 || 0, true) },
             
             { labelInd: 'LABA (RUGI) BERSIH OPERASIONAL YTD', labelEng: 'NET INCOME (LOSS) FROM OPERATIONS YTD', val26: formatIdr(netOperatingProfit26, true), val25: formatIdr(netOperatingProfit25, true), isBold: true },
             
@@ -384,7 +432,7 @@ export default function FinancialReportingCenter({ portfolioData, cashBalance }:
             { labelInd: 'Penerimaan Setoran Modal (YTD)', labelEng: 'Proceeds from Capital Contribution (YTD)', val26: formatIdr(financialValues.proceedsCapital26), val25: financialValues.proceedsCapital25 === 0 ? '-' : formatIdr(financialValues.proceedsCapital25) },
             
             { labelInd: 'KENAIKAN (PENURUNAN) KAS BERSIH', labelEng: 'NET INCREASE (DECREASE) IN CASH', val26: formatIdr(netCashIncrease26, true), val25: cfOperating25 === 0 && cfInvesting25 === 0 && cfFinancing25 === 0 ? '-' : formatIdr(netCashIncrease25, true), isBold: true },
-            { labelInd: 'Saldo Awal Kas', labelEng: 'Beginning Cash Balance', val26: formatIdr(financialValues.beginningCash26), val25: '-' },
+            { labelInd: 'Saldo Awal Kas', labelEng: 'Beginning Cash Balance', val26: formatIdr(financialValues.beginningCash26), val25: formatIdr(financialValues.beginningCash25, true) },
             { labelInd: 'SALDO KAS AKHIR', labelEng: 'ENDING CASH BALANCE', val26: formatIdr(endingCash26), val25: formatIdr(financialValues.cash25) }
           ]
         };
@@ -419,62 +467,538 @@ export default function FinancialReportingCenter({ portfolioData, cashBalance }:
   };
 
   const exportToPDF = () => {
-    if (!reportData) return;
+    const netCurrentAssets26 = financialValues.cash26 + (financialValues.giro26 || 0) + financialValues.invest26;
+    const netCurrentAssets25 = financialValues.cash25 + (financialValues.giro25 || 0) + financialValues.invest25;
 
-    const doc = new jsPDF();
+    const netNonCurrentAssets26 = financialValues.fixed26;
+    const netNonCurrentAssets25 = financialValues.fixed25;
+
+    const netTotalAssets26 = netCurrentAssets26 + netNonCurrentAssets26;
+    const netTotalAssets25 = netCurrentAssets25 + netNonCurrentAssets25;
+
+    const totalLiabilities26 = financialValues.shortLiability26;
+    const totalLiabilities25 = financialValues.shortLiability25;
+
+    const totalEquity26 = financialValues.paidCapital26 + financialValues.retainedEarnings26;
+    const totalEquity25 = financialValues.paidCapital25 + financialValues.retainedEarnings25;
+
+    const netOperatingProfit26 = financialValues.rev26 + financialValues.hpp26 + financialValues.operatingExpense26 + financialValues.depreciationExpense26 + financialValues.interestIncome26 + (financialValues.realizedSecurities26 || 0);
+    const netOperatingProfit25 = financialValues.rev25 + financialValues.hpp25 + financialValues.operatingExpense25 + financialValues.depreciationExpense25 + financialValues.interestIncome25 + (financialValues.realizedSecurities25 || 0) + (financialValues.tax25 || 0);
+
+    const totalComprehensiveProfit26 = netOperatingProfit26 + financialValues.unrealizedSecurities26;
+    const totalComprehensiveProfit25 = netOperatingProfit25 + financialValues.unrealizedSecurities25;
+
+    const doc = new jsPDF({
+      orientation: 'portrait',
+      unit: 'mm',
+      format: 'a4'
+    });
+
+    const writeParagraph = (docObj: any, text: string, x: number, yStart: number, width: number, lineHeight: number) => {
+      const lines = docObj.splitTextToSize(text, width);
+      let y = yStart;
+      for (let i = 0; i < lines.length; i++) {
+        docObj.text(lines[i], x, y);
+        y += lineHeight;
+      }
+      return y;
+    };
+
+    // ==================== PAGE 1 ====================
+    let y = 25;
     
-    // Header
-    doc.setFontSize(18);
-    doc.text('VENTURE ASSET MANAGEMENT', 105, 15, { align: 'center' });
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(10.5);
+    doc.setTextColor(40, 40, 40);
+    
+    y = writeParagraph(doc, "sejak tanggal 01 Januari 2026 hingga penutupan 31 Mei 2026, dengan menyandingkan data historis penuh tahun buku 2025 guna menyajikan riset kinerja keuangan komparatif, serta diperkuat dengan deklarasi pemilik manfaat akhir (UBO) dan penetapan klasifikasi internasional.", 20, y, 170, 5.5);
+    y += 8;
+
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(14);
+    doc.setTextColor(24, 24, 27);
+    y = writeParagraph(doc, "I. LANDASAN KEUANGAN KONSOLIDASI YTD (PER 31 MEI 2026 - TERKOREKSI)", 20, y, 170, 6.5);
+    y += 4;
+
+    doc.setFont("helvetica", "normal");
     doc.setFontSize(10);
-    doc.text('Laporan Keuangan Institusional / Institutional Financial Report', 105, 22, { align: 'center' });
-    
-    doc.setDrawColor(0);
-    doc.setLineWidth(0.5);
-    doc.line(15, 27, 195, 27);
+    doc.setTextColor(60, 60, 60);
+    y = writeParagraph(doc, "Penyusunan Buku Saham Perusahaan PT Venture Asset Management ¹ per tanggal 31 Mei 2026 didasarkan secara ketat pada data keuangan yang tersaji di dalam Laporan Keuangan Konsolidasi YTD (Consolidated Financial Report YTD) perseroan untuk periode 01 Januari 2026 sampai dengan penutupan 31 Mei 2026 yang telah dikoreksi berdasarkan tarif penyusutan PC/Monitor MSI sebesar 2% per tahun (garis lurus) tanpa amortisasi/penyusutan aset tetap lainnya.", 20, y, 170, 5.5);
+    y += 8;
 
-    // Title
-    doc.setFontSize(12);
-    doc.text(reportData.titleInd, 105, 38, { align: 'center' });
-    doc.setFontSize(8);
-    doc.setTextColor(150);
-    doc.text(reportData.titleEng, 105, 43, { align: 'center' });
-    doc.setTextColor(0);
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(11.5);
+    doc.setTextColor(24, 24, 27);
+    y = writeParagraph(doc, "1. Laporan Posisi Keuangan (Neraca) / Statement of Financial Position", 20, y, 170, 6);
+    y += 2.5;
 
-    // Date
-    doc.setFontSize(9);
-    doc.text(`Periode Berakhir / Period Ended: Per ${getRealTimeReportingDate().formattedInd} / As of ${getRealTimeReportingDate().formattedEng}`, 15, 48);
-    doc.setFontSize(8);
-    doc.text(`Tanggal Cetak / Printed Date: ${lastUpdateTime} (WIB/Jakarta)`, 15, 53);
-
-    // Table
-    const tableRows = reportData.rows.map(row => [
-      `${row.labelInd}\n(${row.labelEng})`,
-      row.val26,
-      row.val25
-    ]);
+    doc.setFont("helvetica", "italic");
+    doc.setFontSize(9.5);
+    doc.setTextColor(110, 110, 110);
+    y = writeParagraph(doc, "(Posisi YTD per 31 Mei 2026 – Terkoreksi / As of May 31, 2026 – Corrected) ¹", 20, y, 170, 5);
+    y += 6;
 
     autoTable(doc, {
-      startY: 60,
-      head: [['Uraian / Description', '2026 (Rp)', '2025 (Rp)']],
-      body: tableRows,
-      theme: 'striped',
-      headStyles: { fillColor: [24, 24, 27], textColor: [255, 255, 255], fontStyle: 'bold' },
-      styles: { fontSize: 8, cellPadding: 4 },
+      startY: y,
+      margin: { left: 20, right: 20 },
+      head: [['Bahasa Indonesia (ID)', 'Nilai (IDR)', 'English (EN)']],
+      body: [
+        ['ASET', '-', 'ASSETS'],
+        ['Aset Lancar', '-', 'Current Assets'],
+        ['Kas dan Setara Kas (RDN/Bank)', '2.950.677', 'Cash and Cash Equivalents'],
+        ['Portofolio Saham & Efek ¹', '1.226.900 ¹', 'Securities Portfolio ¹'],
+        ['Total Aset Lancar', '4.177.577', 'Total Current Assets'],
+        ['Aset Tetap', '-', 'Non-Current Assets'],
+        ['Fasilitas Media (PC & Monitor MSI) - Net ¹', '5.950.000 ¹', 'Media Facilities (PC & Monitor) - Net ¹'],
+        ['Total Aset Tetap', '5.950.000', 'Total Non-Current Assets']
+      ],
+      theme: 'grid',
+      headStyles: { fillColor: [248, 250, 252], textColor: [24, 24, 27], fontStyle: 'bold', fontSize: 9.5, lineColor: [210, 210, 210], lineWidth: 0.1 },
+      bodyStyles: { fontSize: 9, cellPadding: 3.5, textColor: [40, 40, 40], lineColor: [210, 210, 210], lineWidth: 0.1 },
       columnStyles: {
-        1: { halign: 'right' },
-        2: { halign: 'right' }
+        0: { cellWidth: 70 },
+        1: { cellWidth: 35, halign: 'right' },
+        2: { cellWidth: 65 }
+      },
+      didParseCell: (data) => {
+        const idx = data.row.index;
+        const isHeaderRow = idx === 0 || idx === 1 || idx === 4 || idx === 5 || idx === 7;
+        if (isHeaderRow && data.section === 'body') {
+          data.cell.styles.fontStyle = 'bold';
+          data.cell.styles.textColor = [15, 15, 15];
+        }
       }
     });
 
-    const fileName = `${reportData.titleEng.replace(/\s+/g, '_')}_${new Date().toISOString().split('T')[0]}.pdf`;
+    // ==================== PAGE 2 ====================
+    doc.addPage();
+    y = 25;
+
+    autoTable(doc, {
+      startY: y,
+      margin: { left: 20, right: 20 },
+      body: [
+        ['TOTAL ASET ¹', '10.127.577 ¹', 'TOTAL ASSETS ¹'],
+        ['LIABILITAS & EKUITAS', '-', 'LIABILITIES & EQUITY'],
+        ['Liabilitas', '-', 'Liabilities'],
+        ['Kewajiban Jangka Pendek', '0', 'Short-Term Liabilities'],
+        ['Total Liabilitas (Zero Debt)', '0', 'Total Liabilities'],
+        ['Ekuitas', '-', 'Equity'],
+        ['Modal Disetor', '9.300.000', 'Paid-in Capital'],
+        ['Laba Ditahan & Berjalan YTD ¹', '827.577 ¹', 'Retained Earnings & Current Income ¹'],
+        ['Total Ekuitas', '10.127.577', 'Total Equity'],
+        ['TOTAL PASIVA ¹', '10.127.577 ¹', 'TOTAL LIABILITIES & EQUITY ¹']
+      ],
+      theme: 'grid',
+      bodyStyles: { fontSize: 9, cellPadding: 3.5, textColor: [40, 40, 40], lineColor: [210, 210, 210], lineWidth: 0.1 },
+      columnStyles: {
+        0: { cellWidth: 70 },
+        1: { cellWidth: 35, halign: 'right' },
+        2: { cellWidth: 65 }
+      },
+      didParseCell: (data) => {
+        const idx = data.row.index;
+        const isBoldRow = idx === 0 || idx === 1 || idx === 2 || idx === 4 || idx === 5 || idx === 8 || idx === 9;
+        if (isBoldRow && data.section === 'body') {
+          data.cell.styles.fontStyle = 'bold';
+          data.cell.styles.textColor = [15, 15, 15];
+        }
+        if ((idx === 0 || idx === 9) && data.section === 'body') {
+          data.cell.styles.fillColor = [245, 247, 250];
+        }
+      }
+    });
+    y = (doc as any).lastAutoTable.finalY + 12;
+
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(11.5);
+    doc.setTextColor(24, 24, 27);
+    y = writeParagraph(doc, "2. Laporan Laba Rugi YTD / Statement of Profit or Loss", 20, y, 170, 6);
+    y += 2.5;
+
+    doc.setFont("helvetica", "italic");
+    doc.setFontSize(9.5);
+    doc.setTextColor(110, 110, 110);
+    y = writeParagraph(doc, "(Periode Berjalan 01 Januari – 31 Mei 2026 – Terkoreksi / For the Period of Jan 01 – May 31, 2026 – Corrected) ¹", 20, y, 170, 5);
+    y += 6;
+
+    autoTable(doc, {
+      startY: y,
+      margin: { left: 20, right: 20 },
+      head: [['Bahasa Indonesia (ID)', 'Nilai (IDR)', 'English (EN)']],
+      body: [
+        ['Pendapatan Investasi & Dividen', '456.200', 'Investment & Dividend Income'],
+        ['Beban Operasional & Administrasi', '(575.000)', 'Operating & Admin Expenses'],
+        ['Beban Penyusutan Aset (5 Bulan) ¹', '(50.000) ¹', 'Depreciation Expenses (5 Months) ¹']
+      ],
+      theme: 'grid',
+      headStyles: { fillColor: [248, 250, 252], textColor: [24, 24, 27], fontStyle: 'bold', fontSize: 9.5, lineColor: [210, 210, 210], lineWidth: 0.1 },
+      bodyStyles: { fontSize: 9, cellPadding: 3.5, textColor: [40, 40, 40], lineColor: [210, 210, 210], lineWidth: 0.1 },
+      columnStyles: {
+        0: { cellWidth: 70 },
+        1: { cellWidth: 35, halign: 'right' },
+        2: { cellWidth: 65 }
+      }
+    });
+
+    // ==================== PAGE 3 ====================
+    doc.addPage();
+    y = 25;
+
+    autoTable(doc, {
+      startY: y,
+      margin: { left: 20, right: 20 },
+      body: [
+        ['LABA (RUGI) BERSIH OPERASIONAL YTD ¹', '(168.800) ¹', 'NET INCOME (LOSS) YTD ¹']
+      ],
+      theme: 'grid',
+      bodyStyles: { fontSize: 9, cellPadding: 3.5, fontStyle: 'bold', textColor: [15, 15, 15], fillColor: [245, 247, 250], lineColor: [210, 210, 210], lineWidth: 0.1 },
+      columnStyles: {
+        0: { cellWidth: 70 },
+        1: { cellWidth: 35, halign: 'right' },
+        2: { cellWidth: 65 }
+      }
+    });
+    y = (doc as any).lastAutoTable.finalY + 12;
+
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(11.5);
+    doc.setTextColor(24, 24, 27);
+    y = writeParagraph(doc, "3. Laporan Arus Kas YTD / Statement of Cash Flows", 20, y, 170, 6);
+    y += 2.5;
+
+    doc.setFont("helvetica", "italic");
+    doc.setFontSize(9.5);
+    doc.setTextColor(110, 110, 110);
+    y = writeParagraph(doc, "(Periode Berjalan 01 Januari – 31 Mei 2026 – Terkoreksi / For the Period of Jan 01 – May 31, 2026 – Corrected) ¹", 20, y, 170, 5);
+    y += 6;
+
+    autoTable(doc, {
+      startY: y,
+      margin: { left: 20, right: 20 },
+      head: [['Bahasa Indonesia (ID)', 'Nilai (IDR)', 'English (EN)']],
+      body: [
+        ['Arus Kas Aktivitas Operasi', '(118.800)', 'Cash Flows from Operations'],
+        ['Penerimaan dari Penjualan Efek & Dividen', '456.200', 'Receipts from Sales & Dividends'],
+        ['Pembayaran Beban Operasional', '(575.000)', 'Payments for Operating Expenses'],
+        ['Arus Kas Aktivitas Investasi ¹', '(5.193.450) ¹', 'Cash Flows from Investing ¹'],
+        ['Perolehan Aset Portofolio Efek ¹', '(5.193.450) ¹', 'Acquisition of Securities Portfolio ¹'],
+        ['Arus Kas Aktivitas Pendanaan ¹', '7.300.000 ¹', 'Cash Flows from Financing ¹'],
+        ['Penerimaan Setoran Modal (YTD) ¹', '7.300.000 ¹', 'Proceeds from Capital Contribution ¹'],
+        ['Kenaikan (Penurunan) Kas Bersih', '1.987.750', 'Net Increase (Decrease) in Cash']
+      ],
+      theme: 'grid',
+      headStyles: { fillColor: [248, 250, 252], textColor: [24, 24, 27], fontStyle: 'bold', fontSize: 9.5, lineColor: [210, 210, 210], lineWidth: 0.1 },
+      bodyStyles: { fontSize: 9, cellPadding: 3.5, textColor: [40, 40, 40], lineColor: [210, 210, 210], lineWidth: 0.1 },
+      columnStyles: {
+        0: { cellWidth: 70 },
+        1: { cellWidth: 35, halign: 'right' },
+        2: { cellWidth: 65 }
+      },
+      didParseCell: (data) => {
+        const idx = data.row.index;
+        const isBoldRow = idx === 0 || idx === 3 || idx === 5 || idx === 7;
+        if (isBoldRow && data.section === 'body') {
+          data.cell.styles.fontStyle = 'bold';
+          data.cell.styles.textColor = [15, 15, 15];
+        }
+      }
+    });
+
+    // ==================== PAGE 4 ====================
+    doc.addPage();
+    y = 25;
+
+    autoTable(doc, {
+      startY: y,
+      margin: { left: 20, right: 20 },
+      body: [
+        ['Saldo Awal Kas (01 Januari 2026)', '962.927', 'Beginning Cash Balance'],
+        ['SALDO KAS AKHIR (31 MEI 2026)', '2.950.677', 'ENDING CASH BALANCE']
+      ],
+      theme: 'grid',
+      bodyStyles: { fontSize: 9, cellPadding: 3.5, textColor: [40, 40, 40], lineColor: [210, 210, 210], lineWidth: 0.1 },
+      columnStyles: {
+        0: { cellWidth: 70 },
+        1: { cellWidth: 35, halign: 'right' },
+        2: { cellWidth: 65 }
+      },
+      didParseCell: (data) => {
+        if (data.row.index === 1 && data.section === 'body') {
+          data.cell.styles.fontStyle = 'bold';
+          data.cell.styles.textColor = [15, 15, 15];
+          data.cell.styles.fillColor = [245, 247, 250];
+        }
+      }
+    });
+    y = (doc as any).lastAutoTable.finalY + 12;
+
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(10);
+    doc.setTextColor(50, 50, 50);
+    y = writeParagraph(doc, `Berdasarkan data keuangan di atas, perseroan menunjukkan posisi solvabilitas yang sangat sehat dengan total liabilitas sebesar IDR 0 (DER 0%), yang berarti seluruh operasional dan investasi dibiayai murni oleh modal pemegang saham.¹ Nilai total ekuitas perseroan per tanggal 31 Mei 2026 tercatat sebesar IDR ${formatIdr(totalEquity26)}, yang dibentuk oleh pos Modal Disetor sebesar IDR ${formatIdr(financialValues.paidCapital26)} dan akumulasi Laba Ditahan & Berjalan sebesar IDR ${formatIdr(financialValues.retainedEarnings26)}.`, 20, y, 170, 5.5);
+
+    // ==================== PAGE 5 ====================
+    doc.addPage();
+    y = 25;
+
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(14);
+    doc.setTextColor(24, 24, 27);
+    y = writeParagraph(doc, "II. ANALISIS KOMPARATIF KINERJA KEUANGAN (BUKU AUDIT 2025 VS PERIODE BERJALAN 2026 - TERKOREKSI PER 31 MEI 2026)", 20, y, 170, 6.5);
+    y += 4;
+
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(10);
+    doc.setTextColor(60, 60, 60);
+    y = writeParagraph(doc, "Untuk mengukur laju pertumbuhan dan arah kebijakan taktis PT Venture Asset Management ¹, berikut disajikan riset perbandingan keuangan terperinci yang menyandingkan hasil audit penutupan tahun buku 2025 (periode berjalan semester 2 / tahun buku penuh) dengan realisasi organik berjalan tahun 2026 setelah disesuaikan dengan penyusutan 2% tahunan:¹", 20, y, 170, 5.5);
+    y += 8;
+
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(11.5);
+    doc.setTextColor(24, 24, 27);
+    y = writeParagraph(doc, "1. Laporan Posisi Keuangan Komparatif (Common-Size)", 20, y, 170, 6);
+    y += 6;
+
+    const pctChange = (v26: number, v25: number) => {
+      if (v25 === 0) return '0,00%';
+      const pct = ((v26 - v25) / v25) * 100;
+      return (pct >= 0 ? '+' : '') + pct.toLocaleString('id-ID', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + '%';
+    };
+
+    autoTable(doc, {
+      startY: y,
+      margin: { left: 20, right: 20 },
+      head: [['Pos Posisi Keuangan', 'Realisasi Buku 31 Des 2025 (IDR)', 'Realisasi Organik 31 Mei 2026 (IDR)', 'Perubahan (%)']],
+      body: [
+        ['Aset Lancar', '', '', ''],
+        ['Kas dan Setara Kas (Bank & RDN)', formatIdr(financialValues.cash25), formatIdr(financialValues.cash26), pctChange(financialValues.cash26, financialValues.cash25)],
+        ['Portofolio Saham & Efek (Nilai Pasar) ¹', formatIdr(financialValues.invest25) + ' ¹', formatIdr(financialValues.invest26) + ' ¹', pctChange(financialValues.invest26, financialValues.invest25)],
+        ['Total Aset Lancar', formatIdr(netCurrentAssets25), formatIdr(netCurrentAssets26), pctChange(netCurrentAssets26, netCurrentAssets25)],
+        ['Aset Tetap / Tidak Lancar', '', '', ''],
+        ['Properti & Aset Tetap Neto', formatIdr(financialValues.fixed25), formatIdr(financialValues.fixed26) + ' ¹', pctChange(financialValues.fixed26, financialValues.fixed25)],
+        ['TOTAL ASET', formatIdr(netTotalAssets25), formatIdr(netTotalAssets26) + ' ¹', pctChange(netTotalAssets26, netTotalAssets25)],
+        ['Liabilitas & Ekuitas', '', '', '']
+      ],
+      theme: 'grid',
+      headStyles: { fillColor: [248, 250, 252], textColor: [24, 24, 27], fontStyle: 'bold', fontSize: 9.5, lineColor: [210, 210, 210], lineWidth: 0.1 },
+      bodyStyles: { fontSize: 9, cellPadding: 3.5, textColor: [40, 40, 40], lineColor: [210, 210, 210], lineWidth: 0.1 },
+      columnStyles: {
+        0: { cellWidth: 60 },
+        1: { cellWidth: 40, halign: 'right' },
+        2: { cellWidth: 40, halign: 'right' },
+        3: { cellWidth: 30, halign: 'right' }
+      },
+      didParseCell: (data) => {
+        const idx = data.row.index;
+        const isBoldRow = idx === 0 || idx === 3 || idx === 4 || idx === 6 || idx === 7;
+        if (isBoldRow && data.section === 'body') {
+          data.cell.styles.fontStyle = 'bold';
+          data.cell.styles.textColor = [15, 15, 15];
+        }
+        if (idx === 6 && data.section === 'body') {
+          data.cell.styles.fillColor = [245, 247, 250];
+        }
+      }
+    });
+
+    // ==================== PAGE 6 ====================
+    doc.addPage();
+    y = 25;
+
+    autoTable(doc, {
+      startY: y,
+      margin: { left: 20, right: 20 },
+      body: [
+        ['Total Kewajiban (Utang)', formatIdr(totalLiabilities25), formatIdr(totalLiabilities26), pctChange(totalLiabilities26, totalLiabilities25)],
+        ['Modal Disetor', formatIdr(financialValues.paidCapital25), formatIdr(financialValues.paidCapital26), pctChange(financialValues.paidCapital26, financialValues.paidCapital25)],
+        ['Laba Ditahan & Berjalan YTD', formatIdr(financialValues.retainedEarnings25), formatIdr(financialValues.retainedEarnings26) + ' ¹', pctChange(financialValues.retainedEarnings26, financialValues.retainedEarnings25)],
+        ['TOTAL EKUITAS', formatIdr(totalEquity25), formatIdr(totalEquity26) + ' ¹', pctChange(totalEquity26, totalEquity25)]
+      ],
+      theme: 'grid',
+      bodyStyles: { fontSize: 9, cellPadding: 3.5, textColor: [40, 40, 40], lineColor: [210, 210, 210], lineWidth: 0.1 },
+      columnStyles: {
+        0: { cellWidth: 60 },
+        1: { cellWidth: 40, halign: 'right' },
+        2: { cellWidth: 40, halign: 'right' },
+        3: { cellWidth: 30, halign: 'right' }
+      },
+      didParseCell: (data) => {
+        if (data.row.index === 3 && data.section === 'body') {
+          data.cell.styles.fontStyle = 'bold';
+          data.cell.styles.textColor = [15, 15, 15];
+          data.cell.styles.fillColor = [245, 247, 250];
+        }
+      }
+    });
+    y = (doc as any).lastAutoTable.finalY + 10;
+
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(9.5);
+    doc.setTextColor(24, 24, 27);
+
+    doc.text('•', 20, y);
+    doc.setFont("helvetica", "bold");
+    doc.text('Ekspansi Likuiditas Kas:', 24, y);
+    doc.setFont("helvetica", "normal");
+    doc.setTextColor(60, 60, 60);
+
+    const cashGrowthStr = pctChange(financialValues.cash26, financialValues.cash25);
+    const hasCashGrown = financialValues.cash26 > financialValues.cash25;
+    const cashCommentary = hasCashGrown
+      ? `Saldo kas riil (rekening bank dan RDN) bertumbuh sebesar ${cashGrowthStr} menjadi IDR ${formatIdr(financialValues.cash26)} per 31 Mei 2026.¹ Pertumbuhan ini didorong oleh realokasi dana taktis oleh pemegang saham.`
+      : `Saldo kas riil (rekening bank dan RDN) terkoreksi sebesar ${cashGrowthStr} menjadi IDR ${formatIdr(financialValues.cash26)} per 31 Mei 2026.¹ Penyesuaian ini mencerminkan alokasi dana ditarik atau ditempatkan pada aset investasi modal reguler.`;
+
+    y = writeParagraph(doc, cashCommentary, 24, y + 4.5, 166, 5) + 3;
+
+    doc.setFont("helvetica", "bold");
+    doc.setTextColor(24, 24, 27);
+    doc.text('•', 20, y);
+    doc.text('Struktur Modal Tanpa Utang:', 24, y);
+    doc.setFont("helvetica", "normal");
+    doc.setTextColor(60, 60, 60);
+    y = writeParagraph(doc, "Kebijakan Zero-Debt berhasil dipertahankan secara konsisten selama dua tahun berturut-turut (DER dan DAR sebesar 0,00%), mengeliminasi risiko solvabilitas serta beban bunga pinjaman secara mutlak.¹", 24, y + 4.5, 166, 5) + 10;
+
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(11.5);
+    doc.setTextColor(24, 24, 27);
+    y = writeParagraph(doc, "2. Laporan Laba Rugi Komparatif", 20, y, 170, 6);
+    y += 6;
+
+    autoTable(doc, {
+      startY: y,
+      margin: { left: 20, right: 20 },
+      head: [['Akun Laba Rugi', 'Realisasi Buku 2025 (IDR)', 'Realisasi YTD Berjalan 2026 (IDR)', 'Analisis & Interpretasi Kinerja']],
+      body: [
+        ['Pendapatan Operasional', formatIdr(financialValues.rev25), formatIdr(financialValues.rev26), 'Pergeseran fokus dari trading aktif menjadi realisasi dividen & kupon.'],
+        ['Harga Pokok Penjualan (HPP)', formatIdr(financialValues.hpp25, true), formatIdr(financialValues.hpp26, true), 'Biaya perolehan saham yang telah direalisasikan jual.'],
+        ['Beban Operasional & Administrasi', formatIdr(financialValues.operatingExpense25, true), formatIdr(financialValues.operatingExpense26, true), 'Peningkatan beban akibat kliring regulasi dan legal bursa.']
+      ],
+      theme: 'grid',
+      headStyles: { fillColor: [248, 250, 252], textColor: [24, 24, 27], fontStyle: 'bold', fontSize: 9.5, lineColor: [210, 210, 210], lineWidth: 0.1 },
+      bodyStyles: { fontSize: 9, cellPadding: 3.5, textColor: [40, 40, 40], lineColor: [210, 210, 210], lineWidth: 0.1 },
+      columnStyles: {
+        0: { cellWidth: 45 },
+        1: { cellWidth: 35, halign: 'right' },
+        2: { cellWidth: 35, halign: 'right' },
+        3: { cellWidth: 55 }
+      }
+    });
+
+    // ==================== PAGE 7 ====================
+    doc.addPage();
+    y = 25;
+
+    autoTable(doc, {
+      startY: y,
+      margin: { left: 20, right: 20 },
+      body: [
+        ['Beban Penyusutan Aset', formatIdr(financialValues.depreciationExpense25, true), formatIdr(financialValues.depreciationExpense26, true), 'Pengukuran amortisasi peralatan media secara merata di 2026 YTD.'],
+        ['Hasil Bunga RDN & Lainnya', formatIdr(financialValues.interestIncome25), formatIdr(financialValues.interestIncome26), 'Pendapatan non-operasional sekunder yang diakui.'],
+        ['Laba Operasional Bersih', formatIdr(netOperatingProfit25, true), formatIdr(netOperatingProfit26, true), 'Tekanan margin operasional yang minimal mendekati titik impas.'],
+        ['Unrealized Gain / (Loss) Efek', formatIdr(financialValues.unrealizedSecurities25, true), formatIdr(financialValues.unrealizedSecurities26, true), 'Dampak revaluasi rebalancing portofolio efek pasar harian.'],
+        ['TOTAL LABA (RUGI) KOMPREHENSIF', formatIdr(totalComprehensiveProfit25, true), formatIdr(totalComprehensiveProfit26, true), 'Penurunan murni akibat penyesuaian pasar yang belum direalisasi.']
+      ],
+      theme: 'grid',
+      bodyStyles: { fontSize: 9, cellPadding: 3.5, textColor: [40, 40, 40], lineColor: [210, 210, 210], lineWidth: 0.1 },
+      columnStyles: {
+        0: { cellWidth: 45 },
+        1: { cellWidth: 35, halign: 'right' },
+        2: { cellWidth: 35, halign: 'right' },
+        3: { cellWidth: 55 }
+      },
+      didParseCell: (data) => {
+        const idx = data.row.index;
+        const isBoldRow = idx === 2 || idx === 4;
+        if (isBoldRow && data.section === 'body') {
+          data.cell.styles.fontStyle = 'bold';
+          data.cell.styles.textColor = [15, 15, 15];
+        }
+        if (idx === 4 && data.section === 'body') {
+          data.cell.styles.fillColor = [245, 247, 250];
+        }
+      }
+    });
+    y = (doc as any).lastAutoTable.finalY + 10;
+
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(9.5);
+    doc.setTextColor(24, 24, 27);
+
+    doc.text('•', 20, y);
+    doc.text('Analisis Kualitas Kerugian 2026:', 24, y);
+    doc.setFont("helvetica", "normal");
+    doc.setTextColor(60, 60, 60);
+
+    const netOpProfit26Str = formatIdr(netOperatingProfit26, true);
+    const unrealizedSec26Str = formatIdr(financialValues.unrealizedSecurities26, true);
+    y = writeParagraph(doc, `Setelah dikoreksi berdasarkan tarif penyusutan 2% tahunan, laba/rugi operasional berjalan adalah sebesar IDR ${netOpProfit26Str}.¹ Sebagian besar penyesuaian disebabkan oleh revaluasi portofolio atau penyesuaian pasar belum terealisasi sebesar IDR ${unrealizedSec26Str}.¹ Kas riil perusahaan tetap berada pada kondisi prima.¹`, 24, y + 4.5, 166, 5) + 8;
+
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(11.5);
+    doc.setTextColor(24, 24, 27);
+    y = writeParagraph(doc, "3. Perhitungan Rasio Kinerja Utama Komparatif", 20, y, 170, 6);
+    y += 6;
+
+    // ROE
+    const roe25 = (totalComprehensiveProfit25 / totalEquity25) * 100;
+    const roe26 = ((totalComprehensiveProfit26 * 12) / 5 / totalEquity26) * 100;
+    const roa25 = (totalComprehensiveProfit25 / netTotalAssets25) * 100;
+    const roa26 = ((totalComprehensiveProfit26 * 12) / 5 / netTotalAssets26) * 100;
+
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(9.5);
+    doc.setTextColor(24, 24, 27);
+    doc.text('•', 20, y);
+    doc.text('Return on Equity (ROE):', 24, y);
+    doc.setFont("helvetica", "normal");
+    doc.setTextColor(60, 60, 60);
+    doc.text(`o  Tahun 2025: (Laba Bersih Komprehensif Rp ${formatIdr(totalComprehensiveProfit25)} / Total Ekuitas Rp ${formatIdr(totalEquity25)}) = ${roe25.toFixed(2).replace('.', ',')}%`, 24, y + 5);
+    doc.text(`o  Tahun 2026 (Disetahunkan / Annualized): (Komprehensif Rp ${formatIdr(totalComprehensiveProfit26)} * 12/5) / Total Ekuitas Rp ${formatIdr(totalEquity26)} = ${roe26.toFixed(2).replace('.', ',')}%`, 24, y + 10);
+    y += 16;
+
+    // ROA
+    doc.setFont("helvetica", "bold");
+    doc.setTextColor(24, 24, 27);
+    doc.text('•', 20, y);
+    doc.text('Return on Assets (ROA):', 24, y);
+    doc.setFont("helvetica", "normal");
+    doc.setTextColor(60, 60, 60);
+    doc.text(`o  Tahun 2025: (Laba Bersih Komprehensif Rp ${formatIdr(totalComprehensiveProfit25)} / Total Aset Rp ${formatIdr(netTotalAssets25)}) = ${roa25.toFixed(2).replace('.', ',')}%`, 24, y + 5);
+    doc.text(`o  Tahun 2026 (Disetahunkan / Annualized): (Komprehensif Rp ${formatIdr(totalComprehensiveProfit26)} * 12/5) / Total Aset Rp ${formatIdr(netTotalAssets26)} = ${roa26.toFixed(2).replace('.', ',')}%`, 24, y + 10);
+    y += 16;
+
+    // ==================== POST PASS FOOTER AND HEADER ====================
+    const pageCount = doc.getNumberOfPages();
+    for (let i = 1; i <= pageCount; i++) {
+      doc.setPage(i);
+      
+      // Draw top decoration line
+      doc.setDrawColor(240, 240, 240);
+      doc.setLineWidth(0.2);
+      doc.line(20, 15, 190, 15);
+      
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(8);
+      doc.setTextColor(150, 150, 150);
+      doc.text(`PT Venture Asset Management  |  Laporan Keuangan Konsolidasi Terkoreksi`, 20, 11);
+      doc.text(`CONFIDENTIAL`, 190, 11, { align: 'right' });
+
+      // Draw bottom decoration line
+      doc.line(20, 280, 190, 280);
+      
+      doc.text(`PT Venture Asset Management  |  Institutional Financial Compliance Report`, 20, 285);
+      doc.text(`Page ${i} of ${pageCount}`, 190, 285, { align: 'right' });
+    }
+
+    const fileName = `VentureAM_Comprehensive_YTD_Financial_Report_${new Date().toISOString().split('T')[0]}.pdf`;
     doc.save(fileName);
-    addAuditLog('PDF_EXTRACT', 'INFO', `Successfully drafted & exported verified PDF: ${reportData.titleEng}`);
+    addAuditLog('PDF_EXTRACT', 'INFO', `Successfully generated 7-page institutional compliance report PDF: ${fileName}`);
   };
 
   const exportTrendToPDF = () => {
     // Calculate values matching dashboard calculations
-    const netOperatingProfit26 = financialValues.rev26 + (financialValues.hpp26 || 0) + (financialValues.operatingExpense26 || 0) + (financialValues.depreciationExpense26 || 0) + (financialValues.interestIncome26 || 0);
+    const netOperatingProfit26 = financialValues.rev26 + (financialValues.hpp26 || 0) + (financialValues.operatingExpense26 || 0) + (financialValues.depreciationExpense26 || 0) + (financialValues.interestIncome26 || 0) + (financialValues.realizedSecurities26 || 0);
     const totalComprehensiveProfit26 = netOperatingProfit26 + (financialValues.unrealizedSecurities26 || 0);
     const netCurrentAssets26 = financialValues.cash26 + (financialValues.giro26 || 0) + financialValues.invest26;
     const netTotalAssets26 = netCurrentAssets26 + financialValues.fixed26;
@@ -1563,7 +2087,7 @@ VentureAM,Luxury watches,120000000`;
 
               {/* Dynamic KPI Trend Sparkline Panel (ROA, ROE, GPM, Current Ratio) */}
               {(() => {
-                const netOperatingProfit26 = financialValues.rev26 + (financialValues.hpp26 || 0) + (financialValues.operatingExpense26 || 0) + (financialValues.depreciationExpense26 || 0) + (financialValues.interestIncome26 || 0);
+                const netOperatingProfit26 = financialValues.rev26 + (financialValues.hpp26 || 0) + (financialValues.operatingExpense26 || 0) + (financialValues.depreciationExpense26 || 0) + (financialValues.interestIncome26 || 0) + (financialValues.realizedSecurities26 || 0);
                 const totalComprehensiveProfit26 = netOperatingProfit26 + (financialValues.unrealizedSecurities26 || 0);
                 const netCurrentAssets26 = financialValues.cash26 + (financialValues.giro26 || 0) + financialValues.invest26;
                 const netTotalAssets26 = netCurrentAssets26 + financialValues.fixed26;
@@ -1792,6 +2316,173 @@ VentureAM,Luxury watches,120000000`;
               </div>
             </div>
           </div>
+
+          {/* Year-to-Date Performance Summary Section */}
+          <div className="p-6 rounded-2xl border border-zinc-850 bg-zinc-950/40 space-y-6 animate-fade-in" id="ytd-performance-summary">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+              <div className="space-y-1">
+                <div className="flex items-center gap-2">
+                  <span className="text-[8px] font-mono font-bold bg-orange-500/10 text-orange-400 px-2 py-0.5 rounded border border-orange-500/20 uppercase tracking-widest">
+                    FISCAL YEAR 2026
+                  </span>
+                  <span className="text-[8px] font-mono font-bold bg-sky-500/10 text-sky-400 px-2 py-0.5 rounded border border-sky-500/20 uppercase tracking-widest">
+                    AGGREGATE LEDGER
+                  </span>
+                </div>
+                <h3 className="text-xs font-mono font-black text-white uppercase tracking-widest flex items-center gap-2">
+                  <History className="w-4 h-4 text-orange-400" /> YEAR-TO-DATE (YTD) PERFORMANCE SUMMARY
+                </h3>
+                <p className="text-[10px] text-zinc-400 max-w-xl">
+                  Konsolidasian laba/rugi direalisasikan (Realized PnL) antar kuartal berjalan yang bersumber dari aktivitas rebalancing portofolio efek harian.
+                </p>
+              </div>
+              
+              <div className="text-left sm:text-right">
+                <span className="text-[8px] font-mono text-zinc-500 block uppercase tracking-widest leading-none">CUMULATIVE YTD PROFIT</span>
+                <p className="text-lg font-mono font-black text-[#deff9a] mt-1 pr-1">
+                  Rp {(3110000 + realizedPnL).toLocaleString('id-ID')}
+                </p>
+              </div>
+            </div>
+
+            {/* Progress distribution bar */}
+            <div className="space-y-2">
+              <div className="flex justify-between items-center text-[8px] font-mono text-zinc-500 uppercase tracking-wider">
+                <span>QUARTERLY CONTRIBUTION WEIGHTS</span>
+                <span>YTD TARGET: Rp 5.000.000</span>
+              </div>
+              <div className="h-2 w-full bg-zinc-900 rounded-lg overflow-hidden flex">
+                <div 
+                  style={{ width: `${Math.max(10, Math.min(90, (1150000 / (3110000 + realizedPnL || 1)) * 100))}%` }} 
+                  className="h-full bg-amber-500 transition-all duration-500" 
+                  title="Q1 Contribution"
+                />
+                <div 
+                  style={{ width: `${Math.max(10, Math.min(90, ((1960000 + realizedPnL) / (3110000 + realizedPnL || 1)) * 100))}%` }} 
+                  className="h-full bg-emerald-500 transition-all duration-500" 
+                  title="Q2 Contribution"
+                />
+                <div 
+                  style={{ width: '0%' }} 
+                  className="h-full bg-zinc-700 transition-all duration-500" 
+                  title="Q3 Contribution"
+                />
+                <div 
+                  style={{ width: '0%' }} 
+                  className="h-full bg-zinc-850 transition-all duration-500" 
+                  title="Q4 Contribution"
+                />
+              </div>
+              <div className="flex flex-wrap gap-4 text-[8px] font-mono text-zinc-400">
+                <div className="flex items-center gap-1.5">
+                  <span className="w-1.5 h-1.5 rounded-full bg-amber-500"></span>
+                  <span>Q1: {((1150000 / (3110000 + realizedPnL || 1)) * 100).toFixed(1)}%</span>
+                </div>
+                <div className="flex items-center gap-1.5">
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
+                  <span>Q2: {(((1960000 + realizedPnL) / (3110000 + realizedPnL || 1)) * 100).toFixed(1)}%</span>
+                </div>
+                <div className="flex items-center gap-1.5">
+                  <span className="w-1.5 h-1.5 rounded-full bg-zinc-700"></span>
+                  <span>Q3: 0.0% (Upcoming)</span>
+                </div>
+                <div className="flex items-center gap-1.5">
+                  <span className="w-1.5 h-1.5 rounded-full bg-zinc-800"></span>
+                  <span>Q4: 0.0% (Upcoming)</span>
+                </div>
+              </div>
+            </div>
+
+            {/* Quarterly cards */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+              {/* Q1 */}
+              <div className="p-4 rounded-xl bg-zinc-950/80 border border-zinc-900 flex flex-col justify-between space-y-3">
+                <div className="flex justify-between items-start">
+                  <div>
+                    <span className="text-[8px] font-mono font-black text-zinc-400 uppercase tracking-widest block">QUARTER 1 (Q1)</span>
+                    <span className="text-[8px] font-mono text-zinc-650 uppercase mt-0.5 block">JAN - MAR 2026</span>
+                  </div>
+                  <span className="text-[7px] px-1.5 py-0.5 rounded bg-amber-500/10 text-amber-500 font-mono font-bold border border-amber-500/20 uppercase shrink-0">
+                    SETTLED
+                  </span>
+                </div>
+                <div>
+                  <span className="text-xs font-mono font-black text-amber-500 block">
+                    Rp 1.150.000
+                  </span>
+                  <p className="text-[8px] text-zinc-500 mt-1 leading-normal uppercase font-mono">
+                    8 WINS / 2 CORRECTIONS
+                  </p>
+                </div>
+              </div>
+
+              {/* Q2 */}
+              <div className="p-4 rounded-xl bg-zinc-950/80 border border-zinc-900 flex flex-col justify-between space-y-3 border-emerald-500/10 shadow-[0_0_15px_rgba(16,185,129,0.02)]">
+                <div className="flex justify-between items-start">
+                  <div>
+                    <span className="text-[8px] font-mono font-black text-emerald-400 uppercase tracking-widest block">QUARTER 2 (Q2)</span>
+                    <span className="text-[8px] font-mono text-zinc-650 uppercase mt-0.5 block">APR - JUN 2026</span>
+                  </div>
+                  <span className="text-[7px] px-1.5 py-0.5 rounded bg-emerald-500/10 text-emerald-400 font-mono font-bold border border-emerald-500/20 uppercase shrink-0">
+                    ACTIVE
+                  </span>
+                </div>
+                <div>
+                  <span className="text-xs font-mono font-black text-[#deff9a] block">
+                    Rp {(1960000 + realizedPnL).toLocaleString('id-ID')}
+                  </span>
+                  <p className="text-[8px] text-zinc-500 mt-1 leading-normal uppercase font-mono">
+                    {9 + (realizedPnL > 0 ? 1 : 0)} WINS / {3 + (realizedPnL < 0 ? 1 : 0)} CORRECTIONS
+                  </p>
+                </div>
+              </div>
+
+              {/* Q3 */}
+              <div className="p-4 rounded-xl bg-zinc-950/80 border border-zinc-900 flex flex-col justify-between space-y-3 opacity-60 hover:opacity-100 transition-opacity">
+                <div className="flex justify-between items-start">
+                  <div>
+                    <span className="text-[8px] font-mono font-black text-zinc-500 uppercase tracking-widest block">QUARTER 3 (Q3)</span>
+                    <span className="text-[8px] font-mono text-zinc-650 mt-0.5 block">JUL - SEP 2026</span>
+                  </div>
+                  <span className="text-[7px] px-1.5 py-0.5 rounded bg-zinc-900 text-zinc-500 font-mono font-bold border border-zinc-800 uppercase shrink-0">
+                    UPCOMING
+                  </span>
+                </div>
+                <div>
+                  <span className="text-xs font-mono font-black text-zinc-650 block">
+                    Rp 0
+                  </span>
+                  <p className="text-[8px] text-zinc-500 mt-1 leading-normal uppercase font-mono">
+                    TARGET REBALANCE AT 01.07
+                  </p>
+                </div>
+              </div>
+
+              {/* Q4 */}
+              <div className="p-4 rounded-xl bg-zinc-950/80 border border-zinc-900 flex flex-col justify-between space-y-3 opacity-60 hover:opacity-100 transition-opacity">
+                <div className="flex justify-between items-start">
+                  <div>
+                    <span className="text-[8px] font-mono font-black text-zinc-500 uppercase tracking-widest block">QUARTER 4 (Q4)</span>
+                    <span className="text-[8px] font-mono text-zinc-655 mt-0.5 block">OKT - DES 2026</span>
+                  </div>
+                  <span className="text-[7px] px-1.5 py-0.5 rounded bg-zinc-900 text-zinc-500 font-mono font-bold border border-zinc-800 uppercase shrink-0">
+                    UPCOMING
+                  </span>
+                </div>
+                <div>
+                  <span className="text-xs font-mono font-black text-zinc-650 block">
+                    Rp 0
+                  </span>
+                  <p className="text-[8px] text-zinc-500 mt-1 leading-normal uppercase font-mono">
+                    TARGET REBALANCE AT 01.10
+                  </p>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Daily Realized P&L Trends & Rebalancing Performance History (Recharts) */}
+          <RealizedPnLChart realizedPnL={realizedPnL} />
         </div>
       ) : (
         /* TAB 2: SECURE DOCUMENT VAULT (SOP-IT-VAM-003) PIPELINE */
