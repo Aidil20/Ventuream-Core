@@ -118,9 +118,13 @@ export const ManualRebalanceForm: React.FC<ManualRebalanceFormProps> = ({
       return;
     }
 
+    const feeRate = action === 'BUY' ? 0.0018 : 0.0029;
+    const feeAmount = Math.round(amount * feeRate);
+    const netTotal = action === 'BUY' ? amount + feeAmount : amount - feeAmount;
+
     if (action === 'BUY') {
-      if (amount > cashBalance) {
-        setErrorMessage(`Insufficient cash balance. Required: Rp ${amount.toLocaleString('id-ID')} but RDN holds Rp ${cashBalance.toLocaleString('id-ID')}.`);
+      if (netTotal > cashBalance) {
+        setErrorMessage(`Insufficient cash balance. Required (with fee): Rp ${netTotal.toLocaleString('id-ID')} (including 0.18% buy fee of Rp ${feeAmount.toLocaleString('id-ID')}) but RDN holds Rp ${cashBalance.toLocaleString('id-ID')}.`);
         return;
       }
     } else {
@@ -136,7 +140,7 @@ export const ManualRebalanceForm: React.FC<ManualRebalanceFormProps> = ({
     // Call callback to commit changes to core portfolio state
     onUpdatePortfolio(tickerVal, action, price, lots);
 
-    setSuccessMessage(`Successfully updated: ${action} ${lots} Lots of ${tickerVal} at Rp ${price.toLocaleString('id-ID')}/share.`);
+    setSuccessMessage(`Successfully updated: ${action} ${lots} Lots of ${tickerVal} at Rp ${price.toLocaleString('id-ID')}/share. [Gross: Rp ${amount.toLocaleString('id-ID')}, Fee (${(feeRate * 100).toFixed(2)}%): Rp ${feeAmount.toLocaleString('id-ID')}, Net: Rp ${netTotal.toLocaleString('id-ID')}]`);
     
     // Clear custom texts and show success anim
     if (isCustomTicker) {
@@ -320,6 +324,39 @@ export const ManualRebalanceForm: React.FC<ManualRebalanceFormProps> = ({
           </div>
 
         </div>
+
+        {/* Dynamic Ticket Preview with Fee detail structure (Buy: 0.18%, Sell: 0.29%) */}
+        {(() => {
+          const parsedPrice = parseFloat(priceInput) || 0;
+          const parsedLots = parseFloat(lotsInput) || 0;
+          const grossAmountVal = parsedPrice * parsedLots * 100;
+          
+          if (grossAmountVal <= 0) return null;
+
+          const currentFeeRate = action === 'BUY' ? 0.0018 : 0.0029;
+          const calculatedFeeVal = Math.round(grossAmountVal * currentFeeRate);
+          const calculatedNetTotal = action === 'BUY' ? grossAmountVal + calculatedFeeVal : grossAmountVal - calculatedFeeVal;
+
+          return (
+            <div className="bg-slate-900/40 border border-slate-800/80 rounded-2xl p-4 space-y-2 text-[10px]">
+              <div className="flex justify-between items-center text-zinc-500 font-bold uppercase tracking-wider">
+                <span>Gross Settlement Size</span>
+                <span className="font-mono text-zinc-300">Rp {grossAmountVal.toLocaleString('id-ID')}</span>
+              </div>
+              <div className="flex justify-between items-center text-zinc-500 font-bold uppercase tracking-wider">
+                <span>Brokerage Fee ({action === 'BUY' ? 'Buy: 0.18%' : 'Sell: 0.29%'})</span>
+                <span className="font-mono text-[#deff9a]">Rp {calculatedFeeVal.toLocaleString('id-ID')}</span>
+              </div>
+              <div className="h-px bg-slate-850 my-1"></div>
+              <div className="flex justify-between items-center uppercase tracking-widest font-black text-[11px]">
+                <span className="text-slate-200">Net Estimated {action === 'BUY' ? 'Debit' : 'Credit'}</span>
+                <span className={`font-mono ${action === 'BUY' ? 'text-red-400' : 'text-green-400'}`}>
+                  Rp {calculatedNetTotal.toLocaleString('id-ID')}
+                </span>
+              </div>
+            </div>
+          );
+        })()}
 
         {/* Validation Errors & Feedbacks */}
         <AnimatePresence mode="wait">

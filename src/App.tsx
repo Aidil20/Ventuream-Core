@@ -76,6 +76,7 @@ import MarketOverviewWidget from './components/MarketOverviewWidget';
 import LegalDocumentCenter from './components/LegalDocumentCenter';
 import FinancialReportingCenter from './components/FinancialReportingCenter';
 import RegulatoryArchive from './components/RegulatoryArchive';
+import RegulatoryReport from './components/RegulatoryReport';
 import TaskCenter from './components/TaskCenter';
 import IdxPriceList from './components/IdxPriceList';
 import { MarketHeatmap } from './components/MarketHeatmap';
@@ -96,6 +97,7 @@ import { User } from 'firebase/auth';
 import { doc, onSnapshot } from 'firebase/firestore';
 import { GlobalSearch } from './components/GlobalSearch';
 import HoldingCard from './components/HoldingCard';
+import { AuditSync } from './components/AuditSync';
 
 const ASSETS = [
   {
@@ -184,14 +186,14 @@ const HOLDINGS = [
 const SIDEBAR_MENU = [
   { id: 0, label: "Dashboard Utama", icon: Home, path: "home", color: "#deff9a" },
   { id: 99, label: "About Company", icon: Building, path: "my-company", color: "#DFFF00" },
-  { id: 20, label: "VAM Radar TBML", icon: Radar, path: "radartbml", color: "#f43f5e" },
-  { id: 21, label: "VamSmartScanner", icon: Activity, path: "vamsmartscanner", color: "#DFFF00" },
+  { id: 21, label: "M&A Factor issue", icon: Activity, path: "vamsmartscanner", color: "#DFFF00" },
   { id: 13, label: "Fundamental Analyst", icon: BrainCircuit, path: "fundamental", color: "#DFFF00" },
   { id: 8, label: "Monitor Pasar", icon: Search, path: "market", color: "#deff9a" },
   { id: 1, label: "Analisis Portofolio", icon: BarChart3, path: "portfolio", color: "#deff9a" },
   { id: 10, label: "Permintaan Dokumen", icon: PenTool, path: "legal", color: "#deff9a" },
   { id: 5, label: "Laporan Keuangan", icon: Calculator, path: "financial", color: "orange-400" },
   { id: 11, label: "Arsip & Audit Trail", icon: Database, path: "archive", color: "blue-400" },
+  { id: 101, label: "Audit Sync", icon: ShieldCheck, path: "audit-sync", color: "#DFFF00" },
   { id: 12, label: "Manajemen Tugas", icon: ListTodo, path: "tasks", color: "#deff9a" },
   { id: 9, label: "Sistem Keamanan", icon: ShieldCheck, path: "security", color: "#deff9a" },
   { id: 7, label: "Rebalancing Asset", icon: Scale, path: "rebalancer", color: "#deff9a" },
@@ -233,7 +235,6 @@ const SIDEBAR_MENU = [
 import BloombergTable from './components/BloombergTable';
 import VAMTerminalScanner from './components/VAMTerminalScanner';
 import RebalanceTool from './components/RebalanceTool';
-import VamRadarTbml from './components/VamRadarTbml';
 import { TechnicalRecommendations } from './components/TechnicalRecommendations';
 import RiskAnalytics from './components/RiskAnalytics';
 import { ManualRebalanceForm } from './components/ManualRebalanceForm';
@@ -419,14 +420,19 @@ export default function App() {
   ]);
   const [cgsCashBalance, setCgsCashBalance] = useState(71879);
 
+  const { history, recordTransaction } = useTransactionManager();
+
   const handleUpdatePortfolio = useCallback((ticker: string, action: 'BUY' | 'SELL', price: number, lots: number) => {
     const cost = price * lots * 100;
+    const feeRate = action === 'BUY' ? 0.0018 : 0.0029;
+    const fee = Math.round(cost * feeRate);
+    const balanceAdjustment = action === 'BUY' ? cost + fee : cost - fee;
     
     setCgsCashBalance(prev => {
       if (action === 'BUY') {
-        return prev - cost;
+        return prev - balanceAdjustment;
       } else {
-        return prev + cost;
+        return prev + balanceAdjustment;
       }
     });
 
@@ -477,7 +483,20 @@ export default function App() {
         return prevAssets;
       }
     });
-  }, []);
+
+    // Record this action to the Gateway Executions Log (History)
+    const isGlobal = !ticker.toUpperCase().endsWith('.JK');
+    recordTransaction({
+      ticker: ticker.toUpperCase(),
+      price: price,
+      side: action,
+      quantity: lots * 100,
+      assetType: 'EQUITY',
+      currency: isGlobal ? 'USD' : 'IDR',
+      broker: isGlobal ? 'IBKR' : 'CGS_INTERNATIONAL'
+    });
+
+  }, [recordTransaction]);
 
   const handleResetPortfolio = useCallback(() => {
     setCgsAssets([
@@ -842,7 +861,7 @@ export default function App() {
     }
 
     if (userRole === 'Public') {
-      const allowedPaths = ['home', 'my-company', 'market', 'fundamental', 'scanner', 'asset-detail', 'users', 'radartbml', 'vamsmartscanner'];
+      const allowedPaths = ['home', 'my-company', 'market', 'fundamental', 'scanner', 'asset-detail', 'users', 'vamsmartscanner', 'audit-sync'];
       return !allowedPaths.includes(path);
     }
     const item = SIDEBAR_MENU.find(m => m.path === path);
@@ -1007,8 +1026,6 @@ export default function App() {
     sortBy: 'signal',
     timeframe: '1D'
   });
-
-  const { history, recordTransaction } = useTransactionManager();
 
   const setStopLossFromAlert = useCallback((symbol: string, price: number) => {
     recordTransaction({
@@ -2553,6 +2570,19 @@ export default function App() {
                   </div>
                 </div>
 
+                {/* Bloomberg Portfolio Monitor (Moved to very top) */}
+                <BloombergTable 
+                  portfolioData={portfolioData} 
+                  onSelectSymbol={(s) => {
+                    setSelectedSymbol(s);
+                    setActiveTab('home');
+                  }}
+                  onFundamentalAudit={(symbol) => {
+                    setFundamentalSymbol(symbol);
+                    setActiveTab('fundamental');
+                  }}
+                />
+
                 {/* Connection Status: CGS & IBKR */}
                 <div className="grid grid-cols-2 gap-2">
                   <div className="bg-slate-900/50 p-3 rounded-xl border border-slate-800 flex flex-col gap-2 relative overflow-hidden group">
@@ -2688,20 +2718,7 @@ export default function App() {
                   </div>
                 </div>
 
-                {/* Bloomberg Portfolio Monitor */}
-                <div className="pt-6">
-                  <BloombergTable 
-                    portfolioData={portfolioData} 
-                    onSelectSymbol={(s) => {
-                      setSelectedSymbol(s);
-                      setActiveTab('home');
-                    }}
-                    onFundamentalAudit={(symbol) => {
-                      setFundamentalSymbol(symbol);
-                      setActiveTab('fundamental');
-                    }}
-                  />
-                </div>
+
 
                 {/* Total Market Value Card Moved to Bottom */}
                 <div className="bg-slate-950 p-8 rounded-[2.5rem] border border-slate-800/80 shadow-2xl relative overflow-hidden group">
@@ -3096,8 +3113,8 @@ export default function App() {
         return <WorkspaceHub onAuthRequired={() => setNeedsAuth(true)} />;
       case 'my-company':
         return <MyCompanyOverview />;
-      case 'radartbml':
-        return <VamRadarTbml />;
+      case 'audit-sync':
+        return <AuditSync />;
       case 'vamsmartscanner':
         return <VamSmartScanner />;
       case 'users':
@@ -3112,8 +3129,57 @@ export default function App() {
             <UserManagement />
           </div>
         );
-      case 'compliance':
-      case 'liquidity':
+      case 'compliance': {
+        const profileEmailVal = (userProfile?.email || '').toLowerCase();
+        const googleEmailVal = (googleUser?.email || '').toLowerCase();
+        const isUnlocked = userProfile?.role === 'President_Director' || 
+                           profileEmailVal === 'aidilsyahdan2000@gmail.com' || 
+                           profileEmailVal === 'pt.ventuream@gmail.com' ||
+                           googleEmailVal === 'aidilsyahdan2000@gmail.com' ||
+                           googleEmailVal === 'pt.ventuream@gmail.com';
+        return (
+          <div className="space-y-4">
+            <div className="flex items-center gap-2 mb-2">
+              <button onClick={() => setActiveTab('home')} className="p-1.5 bg-slate-900 rounded-lg border border-[#deff9a]/20 text-[#deff9a] hover:bg-slate-800 transition-all">
+                <ArrowLeft className="w-4 h-4" />
+              </button>
+              <div className="flex flex-col">
+                <h3 className="text-sm font-semibold text-slate-300 uppercase tracking-widest">
+                  Laporan Regulasi
+                </h3>
+                {isUnlocked && <span className="text-[8px] text-[#deff9a] font-black uppercase tracking-tighter">Authority: Fully Unlocked</span>}
+              </div>
+            </div>
+            
+            {isUnlocked ? (
+              <RegulatoryReport />
+            ) : (
+              <div className="bg-slate-900/50 p-10 rounded-[2.5rem] border border-slate-800 flex flex-col items-center text-center">
+                <div className="p-4 bg-red-500/10 rounded-full border border-red-500/20 mb-6">
+                  <Lock className="w-8 h-8 text-red-400 animate-pulse" />
+                </div>
+                <h3 className="text-xl font-black text-white uppercase tracking-tight">Akses Terbatas (Restricted)</h3>
+                <p className="text-[10px] text-zinc-500 mt-2 leading-relaxed uppercase tracking-widest max-w-sm">
+                  Laporan kepatuhan regulasi terpadu PT Venture Asset Management memerlukan hak akses penandatangan legal resmi (President Director / Special Attorney-in-Fact).
+                </p>
+                <div className="mt-8 flex flex-col items-center gap-2">
+                  <div className="flex items-center gap-2">
+                    <div className="w-2 h-2 rounded-full bg-red-500 animate-pulse" />
+                    <span className="text-[9px] font-black text-red-500 uppercase tracking-widest">Akses Ditolak</span>
+                  </div>
+                  <button 
+                    onClick={() => setActiveTab('home')}
+                    className="mt-2 text-[9px] font-bold text-[#deff9a] uppercase underline hover:text-white"
+                  >
+                    Kembali Ke Dashboard Utama
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+        );
+      }
+      case 'liquidity': {
         const profileEmailVal = (userProfile?.email || '').toLowerCase();
         const googleEmailVal = (googleUser?.email || '').toLowerCase();
         const isUnlocked = userProfile?.role === 'President_Director' || 
@@ -3199,6 +3265,7 @@ export default function App() {
              )}
           </div>
         );
+      }
       default:
         return null;
     }
