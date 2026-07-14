@@ -60,7 +60,13 @@ const TICKER_TO_SECTOR: Record<string, string> = {
   'LAND.JK': 'Property',
   'LPKR.JK': 'Property',
   'PIPA.JK': 'Service',
-  'WMUU.JK': 'Consumer'
+  'WMUU.JK': 'Consumer',
+  'BACH.JK': 'Basic Materials',
+  'EMMI.JK': 'Consumer',
+  'JECX.JK': 'Technology',
+  'PRDL.JK': 'Property',
+  'RANS.JK': 'Consumer',
+  'PJHB-W.JK': 'Financial'
 };
 
 const RebalanceTool: React.FC<RebalanceToolProps> = ({

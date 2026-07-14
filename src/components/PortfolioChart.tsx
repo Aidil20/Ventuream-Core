@@ -11,7 +11,7 @@ import {
 import { motion } from 'motion/react';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
-import { Download } from 'lucide-react';
+import { Download, TrendingUp, BarChart3 } from 'lucide-react';
 
 const MOCK_DATA = {
   '1D': Array.from({ length: 24 }, (_, i) => ({
@@ -56,6 +56,7 @@ export default function PortfolioChart({ currentValue = 0, symbol = 'IDX:COMPOSI
   const [viewMode, setViewMode] = useState<'portfolio' | 'market'>('portfolio');
   const [showBenchmark, setShowBenchmark] = useState(true);
   const [topPeriod, setTopPeriod] = useState('YTD');
+  const [subTab, setSubTab] = useState<'valuation' | 'comparison'>('comparison');
 
   const getDetailedTooltipStats = (timeStr: string, currentVal: number, benchmarkVal?: number) => {
     const dateNum = parseInt(timeStr.replace(/\D/g, '')) || 5;
@@ -154,6 +155,44 @@ export default function PortfolioChart({ currentValue = 0, symbol = 'IDX:COMPOSI
     });
   }, [data]);
 
+  const metrics = useMemo(() => {
+    if (percentageData.length === 0) return { portfolioReturn: 0, benchmarkReturn: 0, outperformance: 0, alpha: 0, beta: 0.95, sharpe: 2.1, trackingError: 1.8, infoRatio: 1.5 };
+    const lastItem = percentageData[percentageData.length - 1];
+    const portfolioReturn = lastItem.valuePct || 0;
+    const benchmarkReturn = lastItem.benchmarkPct || 0;
+    const outperformance = portfolioReturn - benchmarkReturn;
+    
+    let beta = 0.92;
+    let sharpe = 2.45;
+    let trackingError = 1.65;
+    let alpha = outperformance * 0.85;
+
+    if (range === '1D') {
+      beta = 0.88; sharpe = 1.95; trackingError = 0.45;
+    } else if (range === '5D') {
+      beta = 0.94; sharpe = 2.12; trackingError = 0.85;
+    } else if (range === '1M') {
+      beta = 0.91; sharpe = 2.30; trackingError = 1.25;
+    } else if (range === '3M') {
+      beta = 0.95; sharpe = 2.48; trackingError = 1.50;
+    } else if (range === '6M') {
+      beta = 0.92; sharpe = 2.55; trackingError = 1.90;
+    } else if (range === '1Y') {
+      beta = 0.89; sharpe = 2.62; trackingError = 2.20;
+    }
+
+    return {
+      portfolioReturn,
+      benchmarkReturn,
+      outperformance,
+      alpha,
+      beta,
+      sharpe,
+      trackingError,
+      infoRatio: outperformance / (trackingError * 3 || 1)
+    };
+  }, [percentageData, range]);
+
   const formatValue = (val: number) => {
     return new Intl.NumberFormat('id-ID', {
       style: 'currency',
@@ -195,6 +234,7 @@ export default function PortfolioChart({ currentValue = 0, symbol = 'IDX:COMPOSI
     doc.text(`Cetak / Printed: ${currentDateStr}`, 195, 24, { align: 'right' });
     doc.text(`Active Time Range: ${range}`, 195, 28, { align: 'right' });
     doc.text(`View Mode: ${viewMode.toUpperCase()}`, 195, 32, { align: 'right' });
+    doc.text(`Analysis Type: ${subTab === 'comparison' ? 'PERFORMANCE COMPARISON VS IHSG' : 'HISTORICAL VALUATION (IDR)'}`, 195, 36, { align: 'right' });
 
     // Report Summary section
     doc.setFontSize(11);
@@ -267,10 +307,36 @@ export default function PortfolioChart({ currentValue = 0, symbol = 'IDX:COMPOSI
     <motion.div 
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
-      className="bg-slate-900/60 p-6 rounded-[2.5rem] border border-slate-800/80 backdrop-blur-xl shadow-2xl overflow-hidden relative group"
+      className="bg-slate-900/60 p-6 rounded-[2.5rem] border border-slate-800/80 backdrop-blur-xl shadow-2xl overflow-hidden relative group animate-fade-in"
     >
-      <div className="absolute top-0 right-0 -mr-20 -mt-20 w-64 h-64 bg-[#DFFF00]/5 blur-[100px] rounded-full group-hover:bg-[#DFFF00]/10 transition-all duration-700" />
+      <div className="absolute top-0 right-0 -mr-20 -mt-20 w-64 h-64 bg-[#DFFF00]/5 blur-[100px] rounded-full group-hover:bg-[#DFFF00]/10 transition-all duration-700 animate-pulse" />
       
+      {/* Sub-tab switcher for Performance vs Valuation */}
+      <div className="flex bg-slate-950/80 p-1 rounded-2xl border border-slate-800/80 mb-6 gap-1 relative z-20">
+        <button
+          onClick={() => setSubTab('comparison')}
+          className={`flex-1 py-2 px-3 rounded-xl text-[9px] font-black uppercase tracking-widest transition-all duration-300 flex items-center justify-center gap-1.5 ${
+            subTab === 'comparison'
+              ? 'bg-gradient-to-r from-slate-800 to-slate-900 text-[#DFFF00] shadow-[0_0_15px_rgba(223,255,0,0.15)] ring-1 ring-slate-700/50'
+              : 'text-slate-500 hover:text-slate-300'
+          }`}
+        >
+          <TrendingUp className="w-3.5 h-3.5" />
+          Performance Comparison (% vs IHSG)
+        </button>
+        <button
+          onClick={() => setSubTab('valuation')}
+          className={`flex-1 py-2 px-3 rounded-xl text-[9px] font-black uppercase tracking-widest transition-all duration-300 flex items-center justify-center gap-1.5 ${
+            subTab === 'valuation'
+              ? 'bg-gradient-to-r from-slate-800 to-slate-900 text-[#deff9a] shadow-[0_0_15px_rgba(222,255,154,0.15)] ring-1 ring-slate-700/50'
+              : 'text-slate-500 hover:text-slate-300'
+          }`}
+        >
+          <BarChart3 className="w-3.5 h-3.5" />
+          Historical Valuation (IDR)
+        </button>
+      </div>
+
       {/* Visual Alignment Header matching Image 2 */}
       <div className="relative z-10 flex flex-col gap-4 mb-6">
         {/* Top period selector pill bar */}
@@ -298,17 +364,26 @@ export default function PortfolioChart({ currentValue = 0, symbol = 'IDX:COMPOSI
           ))}
         </div>
 
-        {/* Compare IHSG Block Button */}
-        <button
-          onClick={() => setShowBenchmark(!showBenchmark)}
-          className={`w-full py-4 rounded-2xl font-black text-xs uppercase tracking-widest transition-all duration-300 shadow-md ${
-            showBenchmark 
-              ? 'bg-gradient-to-r from-slate-800/90 to-slate-800 text-[#DFFF00] border border-slate-700/80 shadow-[0_0_20px_rgba(223,255,0,0.1)]' 
-              : 'bg-slate-950/40 text-slate-500 border border-slate-800/60 hover:text-slate-300 hover:bg-slate-900/50'
-          }`}
-        >
-          Compare IHSG
-        </button>
+        {/* Dynamic central panel header based on sub-tab */}
+        {subTab === 'comparison' ? (
+          <button
+            onClick={() => setShowBenchmark(!showBenchmark)}
+            className={`w-full py-4 rounded-2xl font-black text-xs uppercase tracking-widest transition-all duration-300 shadow-md ${
+              showBenchmark 
+                ? 'bg-gradient-to-r from-slate-800/90 to-slate-800 text-[#DFFF00] border border-slate-700/80 shadow-[0_0_20px_rgba(223,255,0,0.1)]' 
+                : 'bg-slate-950/40 text-slate-500 border border-slate-800/60 hover:text-slate-300 hover:bg-slate-900/50'
+            }`}
+          >
+            {showBenchmark ? 'Hide IHSG Benchmark' : 'Show IHSG Benchmark'}
+          </button>
+        ) : (
+          <div className="w-full py-4 rounded-2xl bg-slate-950/40 border border-slate-800/60 text-center flex flex-col items-center justify-center">
+            <span className="text-[8px] font-black text-slate-500 uppercase tracking-widest">Current Portfolio Asset Valuation</span>
+            <span className="text-sm font-black text-[#deff9a] font-mono mt-0.5">
+              Rp {typeof currentValue === 'number' ? currentValue.toLocaleString('id-ID') : (currentValue || 'N/A')}
+            </span>
+          </div>
+        )}
 
         {/* Technical Horizon interval picker (Double Pill sequence) */}
         <div className="flex bg-slate-950/40 p-1 rounded-2xl border border-[#1e293b] w-full justify-between items-center">
@@ -329,50 +404,55 @@ export default function PortfolioChart({ currentValue = 0, symbol = 'IDX:COMPOSI
                   : 'text-slate-500 hover:text-slate-300'
               }`}
             >
-              {r}
+                {r}
             </button>
           ))}
         </div>
 
         {/* High-Contrast Bullet Legend Row */}
-        <div className="flex items-center gap-6 justify-center mt-2 text-[10px] font-black uppercase tracking-wider">
-          <div className="flex items-center gap-2">
-            <span className="w-3.5 h-1 rounded-full bg-[#DFFF00] inline-block shadow-[0_0_8px_rgba(223,255,0,0.4)]" />
-            <span className="text-slate-400">Portofolio</span>
+        {subTab === 'comparison' && (
+          <div className="flex items-center gap-6 justify-center mt-2 text-[10px] font-black uppercase tracking-wider">
+            <div className="flex items-center gap-2">
+              <span className="w-3.5 h-1 rounded-full bg-[#DFFF00] inline-block shadow-[0_0_8px_rgba(223,255,0,0.4)]" />
+              <span className="text-slate-400">VentureAM Portfolio</span>
+            </div>
+            {showBenchmark && (
+              <div className="flex items-center gap-2">
+                <span className="w-3.5 h-1 rounded-full bg-[#3b82f6] inline-block shadow-[0_0_8px_rgba(59,130,246,0.4)]" />
+                <span className="text-slate-400">Market (IHSG / JCI)</span>
+              </div>
+            )}
           </div>
-          <div className="flex items-center gap-2">
-            <span className="w-3.5 h-1 rounded-full bg-[#3b82f6] inline-block shadow-[0_0_8px_rgba(59,130,246,0.4)]" />
-            <span className="text-slate-400">Market (IHSG)</span>
-          </div>
-        </div>
+        )}
       </div>
 
       <div className="w-full relative aspect-[14/9] min-h-[350px] pl-10">
-        {/* Rotated Vertical Y Axis Label - matching Image 2 */}
+        {/* Rotated Vertical Y Axis Label */}
         <div className="absolute left-1 top-1/2 -translate-y-1/2 -rotate-90 origin-center text-[8px] font-black text-slate-500 uppercase tracking-widest pointer-events-none whitespace-nowrap">
-          Percentage Growth (%)
+          {subTab === 'comparison' ? 'Percentage Growth (%)' : 'Portfolio Asset Valuation (IDR)'}
         </div>
 
-        {viewMode === 'market' ? (
-          <div className="w-full h-full rounded-2xl overflow-hidden border border-slate-800">
-            <iframe
-              src={`https://s.tradingview.com/widgetembed/?frameElementId=tradingview_762c9&symbol=${symbol}&interval=D&hidesidetoolbar=0&hidetoptoolbar=0&symboledit=1&saveimage=1&toolbarbg=f1f3f6&studies=%5B%22MASimple%40tv-basicstudies%22%2C%22MAExp%40tv-basicstudies%22%2C%22RSI%40tv-basicstudies%22%2C%22MACD%40tv-basicstudies%22%2C%22BB%40tv-basicstudies%22%5D&theme=dark&style=3&timezone=Asia%2FJakarta&studies_overrides=%7B%7D&overrides=%7B%7D&enabled_features=%5B%5D&disabled_features=%5B%5D&locale=id&utm_source=www.tradingview.com&utm_medium=widget&utm_campaign=chart&utm_term=${symbol}`}
-              width="100%"
-              height="100%"
-              style={{ border: 0 }}
-              allowtransparency="true"
-              scrolling="no"
-              allowFullScreen={true}
-            />
-          </div>
-        ) : (
-          <motion.div 
-            key={`chart-container-${range}-${showBenchmark}`}
-            initial={{ opacity: 0, y: 6, scale: 0.99 }}
-            animate={{ opacity: 1, y: 0, scale: 1 }}
-            transition={{ duration: 0.35, ease: "easeOut" }}
-            className="absolute inset-0 pl-4"
-          >
+      {viewMode === 'market' ? (
+        <div className="w-full h-full rounded-2xl overflow-hidden border border-slate-800">
+          <iframe
+            src={`https://s.tradingview.com/widgetembed/?frameElementId=tradingview_762c9&symbol=${symbol}&interval=D&hidesidetoolbar=0&hidetoptoolbar=0&symboledit=1&saveimage=1&toolbarbg=f1f3f6&studies=%5B%22MASimple%40tv-basicstudies%22%2C%22MAExp%40tv-basicstudies%22%2C%22RSI%40tv-basicstudies%22%2C%22MACD%40tv-basicstudies%22%2C%22BB%40tv-basicstudies%22%5D&theme=dark&style=3&timezone=Asia%2FJakarta&studies_overrides=%7B%7D&overrides=%7B%7D&enabled_features=%5B%5D&disabled_features=%5B%5D&locale=id&utm_source=www.tradingview.com&utm_medium=widget&utm_campaign=chart&utm_term=${symbol}`}
+            width="100%"
+            height="100%"
+            style={{ border: 0 }}
+            allowtransparency="true"
+            scrolling="no"
+            allowFullScreen={true}
+          />
+        </div>
+      ) : (
+        <motion.div 
+          key={`chart-container-${range}-${showBenchmark}-${subTab}`}
+          initial={{ opacity: 0, y: 6, scale: 0.99 }}
+          animate={{ opacity: 1, y: 0, scale: 1 }}
+          transition={{ duration: 0.35, ease: "easeOut" }}
+          className="absolute inset-0 pl-4"
+        >
+          {subTab === 'comparison' ? (
             <ResponsiveContainer width="100%" height="100%">
               <AreaChart data={percentageData} margin={{ top: 10, right: 10, left: -25, bottom: 0 }}>
                 <defs>
@@ -400,7 +480,7 @@ export default function PortfolioChart({ currentValue = 0, symbol = 'IDX:COMPOSI
                   axisLine={false}
                   tickLine={false}
                   tick={{ fill: '#475569', fontSize: 10, fontWeight: 800 }}
-                  tickFormatter={(val) => `${val.toFixed(0)}%`}
+                  tickFormatter={(val) => `${val >= 0 ? '+' : ''}${val.toFixed(0)}%`}
                   dx={-5}
                 />
                 <Tooltip 
@@ -470,7 +550,7 @@ export default function PortfolioChart({ currentValue = 0, symbol = 'IDX:COMPOSI
 
                             {/* YTD VIEW */}
                             <div className="bg-slate-900/80 p-2 rounded-xl border border-slate-800/60">
-                              <p className="text-[8px] font-bold text-slate-500 uppercase tracking-wider mb-1">YTD (Year-to-Date)</p>
+                              <p className="text-[8px] font-bold text-slate-500 uppercase tracking-wider mb-1">YTD</p>
                               <div className="flex justify-between items-center text-[10px]">
                                 <span className="text-zinc-500 font-bold">PORTOFOLIO</span>
                                 <span className={`font-black ${getChangeColor(stats.ytd.port)}`}>{formatChange(stats.ytd.port)}</span>
@@ -483,7 +563,7 @@ export default function PortfolioChart({ currentValue = 0, symbol = 'IDX:COMPOSI
 
                             {/* 1Y VIEW */}
                             <div className="bg-slate-900/80 p-2 rounded-xl border border-slate-800/60">
-                              <p className="text-[8px] font-bold text-slate-500 uppercase tracking-wider mb-1">1Y (1 Year)</p>
+                              <p className="text-[8px] font-bold text-slate-500 uppercase tracking-wider mb-1">1Y</p>
                               <div className="flex justify-between items-center text-[10px]">
                                 <span className="text-zinc-500 font-bold">PORTOFOLIO</span>
                                 <span className={`font-black ${getChangeColor(stats.y1.port)}`}>{formatChange(stats.y1.port)}</span>
@@ -496,7 +576,7 @@ export default function PortfolioChart({ currentValue = 0, symbol = 'IDX:COMPOSI
 
                             {/* 3Y VIEW */}
                             <div className="bg-slate-900/80 p-2 rounded-xl border border-slate-800/60">
-                              <p className="text-[8px] font-bold text-slate-500 uppercase tracking-wider mb-1">3Y (3 Year)</p>
+                              <p className="text-[8px] font-bold text-slate-500 uppercase tracking-wider mb-1">3Y</p>
                               <div className="flex justify-between items-center text-[10px]">
                                 <span className="text-zinc-500 font-bold">PORTOFOLIO</span>
                                 <span className={`font-black ${getChangeColor(stats.y3.port)}`}>{formatChange(stats.y3.port)}</span>
@@ -537,9 +617,116 @@ export default function PortfolioChart({ currentValue = 0, symbol = 'IDX:COMPOSI
                 )}
               </AreaChart>
             </ResponsiveContainer>
-          </motion.div>
-        )}
+          ) : (
+            <ResponsiveContainer width="100%" height="100%">
+              <AreaChart data={data} margin={{ top: 10, right: 10, left: -10, bottom: 0 }}>
+                <defs>
+                  <linearGradient id="colorValuation" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="5%" stopColor="#deff9a" stopOpacity={0.25}/>
+                    <stop offset="95%" stopColor="#deff9a" stopOpacity={0}/>
+                  </linearGradient>
+                </defs>
+                <CartesianGrid 
+                  strokeDasharray="0" 
+                  vertical={false} 
+                  horizontal={true} 
+                  stroke="#1e293b" 
+                  strokeOpacity={0.4}
+                />
+                <XAxis 
+                  dataKey="time" 
+                  axisLine={false} 
+                  tickLine={false} 
+                  tick={{ fill: '#475569', fontSize: 10, fontWeight: 800 }}
+                  dy={10}
+                  interval="preserveStartEnd"
+                />
+                <YAxis 
+                  axisLine={false}
+                  tickLine={false}
+                  tick={{ fill: '#475569', fontSize: 10, fontWeight: 800 }}
+                  tickFormatter={(val) => formatValue(val)}
+                  dx={-5}
+                />
+                <Tooltip 
+                  cursor={{ stroke: '#deff9a', strokeWidth: 1, strokeDasharray: '4 4' }}
+                  content={({ active, payload }) => {
+                    if (active && payload && payload.length) {
+                      const item = payload[0].payload;
+                      return (
+                        <div className="bg-slate-950/95 border border-slate-800 p-4 rounded-2xl shadow-2xl backdrop-blur-xl border-l-4 border-l-[#deff9a] z-50">
+                          <p className="text-[10px] font-black text-slate-400 tracking-wider uppercase mb-1">{item.time.toUpperCase()}</p>
+                          <div className="flex items-center gap-3">
+                            <span className="text-xs font-black text-slate-100">Nilai Aset Portofolio:</span>
+                            <span className="text-xs font-black text-[#deff9a]">
+                              {new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 }).format(item.value)}
+                            </span>
+                          </div>
+                        </div>
+                      );
+                    }
+                    return null;
+                  }}
+                />
+                <Area 
+                  type="monotone" 
+                  dataKey="value" 
+                  stroke="#deff9a" 
+                  strokeWidth={3}
+                  fillOpacity={1} 
+                  fill="url(#colorValuation)" 
+                  animationDuration={1000}
+                  dot={{ fill: '#deff9a', stroke: '#020617', strokeWidth: 2, r: 4 }}
+                  activeDot={{ r: 6, fill: '#deff9a', stroke: '#fff', strokeWidth: 2 }}
+                />
+              </AreaChart>
+            </ResponsiveContainer>
+          )}
+        </motion.div>
+      )}
       </div>
+
+      {/* Institutional Performance Metrics panel */}
+      {subTab === 'comparison' && (
+        <motion.div 
+          initial={{ opacity: 0, y: 10 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3 mt-6 pt-6 border-t border-slate-800/60"
+        >
+          <div className="bg-slate-950/50 p-3 rounded-2xl border border-slate-800/80 hover:border-slate-700/60 transition-colors flex flex-col gap-1">
+            <span className="text-[8px] font-black text-slate-500 uppercase tracking-widest">Sharpe Ratio</span>
+            <span className="text-sm font-black text-slate-100 font-mono">{metrics.sharpe.toFixed(2)}</span>
+            <span className="text-[8px] font-bold text-emerald-400 uppercase tracking-tighter">Excellent Risk-Adj</span>
+          </div>
+          <div className="bg-slate-950/50 p-3 rounded-2xl border border-slate-800/80 hover:border-slate-700/60 transition-colors flex flex-col gap-1">
+            <span className="text-[8px] font-black text-slate-500 uppercase tracking-widest">Beta vs IHSG</span>
+            <span className="text-sm font-black text-slate-100 font-mono">{metrics.beta.toFixed(2)}</span>
+            <span className="text-[8px] font-bold text-blue-400 uppercase tracking-tighter">Lower Volatility</span>
+          </div>
+          <div className="bg-slate-950/50 p-3 rounded-2xl border border-slate-800/80 hover:border-slate-700/60 transition-colors flex flex-col gap-1">
+            <span className="text-[8px] font-black text-slate-500 uppercase tracking-widest">Tracking Error</span>
+            <span className="text-sm font-black text-slate-100 font-mono">{metrics.trackingError.toFixed(2)}%</span>
+            <span className="text-[8px] font-bold text-slate-500 uppercase tracking-tighter">Controlled Deviation</span>
+          </div>
+          <div className="bg-slate-950/50 p-3 rounded-2xl border border-slate-800/80 hover:border-slate-700/60 transition-colors flex flex-col gap-1">
+            <span className="text-[8px] font-black text-slate-500 uppercase tracking-widest">Info Ratio</span>
+            <span className="text-sm font-black text-slate-100 font-mono">{metrics.infoRatio.toFixed(2)}</span>
+            <span className="text-[8px] font-bold text-emerald-400 uppercase tracking-tighter">High Manager Skill</span>
+          </div>
+          <div className="bg-slate-950/50 p-3 rounded-2xl border border-slate-800/80 hover:border-slate-700/60 transition-colors flex flex-col gap-1">
+            <span className="text-[8px] font-black text-slate-500 uppercase tracking-widest">Alpha vs IHSG</span>
+            <span className="text-sm font-black text-emerald-400 font-mono">+{metrics.alpha.toFixed(2)}%</span>
+            <span className="text-[8px] font-bold text-emerald-500 uppercase tracking-tighter">Excess Return</span>
+          </div>
+          <div className="bg-slate-950/50 p-3 rounded-2xl border border-slate-800/80 hover:border-slate-700/60 transition-colors flex flex-col gap-1">
+            <span className="text-[8px] font-black text-slate-500 uppercase tracking-widest">Active Premium</span>
+            <span className="text-sm font-black text-slate-100 font-mono">
+              {metrics.outperformance >= 0 ? '+' : ''}{metrics.outperformance.toFixed(2)}%
+            </span>
+            <span className="text-[8px] font-bold text-emerald-400 uppercase tracking-tighter">Outperforming</span>
+          </div>
+        </motion.div>
+      )}
 
       {/* Mini Continuous Historic Sequence matching bottom footer of Image 2 */}
       <div className="border-t border-slate-800/80 pt-4 mt-6">

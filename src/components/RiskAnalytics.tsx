@@ -57,6 +57,12 @@ const TICKER_RISK_METADATA: Record<string, { name: string; dailyVol: number; exp
   'LAND': { name: "LAND (Property & Dev)", dailyVol: 0.035, expectedReturn: 0.14, beta: 1.30, sector: "Property" },
   'LPKR': { name: "LPKR (Lippo Karawaci)", dailyVol: 0.025, expectedReturn: 0.10, beta: 1.10, sector: "Property" },
   'PIPA': { name: "PIPA (Metal & Piping)", dailyVol: 0.039, expectedReturn: 0.16, beta: 1.40, sector: "Service" },
+  'BACH': { name: "BACH (Alumina Chemical)", dailyVol: 0.034, expectedReturn: 0.17, beta: 1.15, sector: "Basic Materials" },
+  'EMMI': { name: "EMMI (Manufacturing)", dailyVol: 0.028, expectedReturn: 0.13, beta: 0.95, sector: "Consumer" },
+  'JECX': { name: "JECX (Tech & Commerce)", dailyVol: 0.045, expectedReturn: 0.20, beta: 1.50, sector: "Technology" },
+  'PRDL': { name: "PRDL (Real Estate Dev)", dailyVol: 0.032, expectedReturn: 0.12, beta: 1.25, sector: "Property" },
+  'RANS': { name: "RANS (Media & Ent)", dailyVol: 0.050, expectedReturn: 0.19, beta: 1.60, sector: "Consumer" },
+  'PJHB-W': { name: "PJHB-W (Security Warrant)", dailyVol: 0.080, expectedReturn: 0.25, beta: 2.10, sector: "Financial" },
   'DEFAULT': { name: "Asset Group", dailyVol: 0.032, expectedReturn: 0.13, beta: 1.20, sector: "Other" }
 };
 
@@ -65,6 +71,8 @@ export default function RiskAnalytics({ portfolioData, cashBalance }: RiskAnalyt
   const [activeTab, setActiveTab] = useState<'analytical' | 'historical' | 'stress'>('analytical');
   const [stressScenario, setStressScenario] = useState<string>('none');
   const [showTooltipInfo, setShowTooltipInfo] = useState<string | null>(null);
+  const [varConfLevel, setVarConfLevel] = useState<'95' | '99'>('95');
+  const [varHorizon, setVarHorizon] = useState<'1D' | '10D'>('1D');
 
   // 1. Math Analysis: Portfolio Weights & Metrics
   const riskAnalysis = useMemo(() => {
@@ -292,6 +300,44 @@ export default function RiskAnalytics({ portfolioData, cashBalance }: RiskAnalyt
       assetRiskContributions
     };
   }, [portfolioData, cashBalance, riskFreeRate]);
+
+  // Selected Value at Risk (VaR) Calculation based on user configuration and recent market volatility
+  const selectedVaR = useMemo(() => {
+    const z = varConfLevel === '95' ? 1.645 : 2.326;
+    const hFactor = varHorizon === '1D' ? 1 : Math.sqrt(10);
+    const dailyVol = riskAnalysis.recentPortfolioDailyVol;
+    
+    // Percentage Risk Score is: Confidence Z-score * Daily Portfolio Volatility * Sqrt(Horizon) * 100
+    const pctScore = z * dailyVol * hFactor * 100;
+    const idrLoss = (pctScore / 100) * riskAnalysis.totalVal;
+
+    // Get risk level rating
+    let riskLevel: 'LOW' | 'MODERATE' | 'HIGH' = 'LOW';
+    let riskColor = 'text-emerald-400';
+    let riskBg = 'bg-emerald-500/10 border-emerald-500/20';
+    let riskProgressBg = 'bg-emerald-500';
+    
+    if (pctScore > 6.0) {
+      riskLevel = 'HIGH';
+      riskColor = 'text-red-400';
+      riskBg = 'bg-red-500/10 border-red-500/20';
+      riskProgressBg = 'bg-red-500';
+    } else if (pctScore > 3.0) {
+      riskLevel = 'MODERATE';
+      riskColor = 'text-amber-400';
+      riskBg = 'bg-amber-500/10 border-amber-500/20';
+      riskProgressBg = 'bg-amber-400';
+    }
+
+    return {
+      pctScore,
+      idrLoss,
+      riskLevel,
+      riskColor,
+      riskBg,
+      riskProgressBg
+    };
+  }, [riskAnalysis.recentPortfolioDailyVol, riskAnalysis.totalVal, varConfLevel, varHorizon]);
 
   // 3. Stress Testing Engine
   const stressResults = useMemo(() => {
@@ -979,6 +1025,113 @@ export default function RiskAnalytics({ portfolioData, cashBalance }: RiskAnalyt
                 </div>
                 <p className="text-[8.5px] text-zinc-500 leading-snug">
                   Co-variance modeling offsets standalone asset noise by Rp {Math.round(riskAnalysis.diversificationBenefit * riskAnalysis.totalVal).toLocaleString('id-ID')} in correlation hedges.
+                </p>
+              </div>
+
+              {/* Interactive Value at Risk (VaR) Indicator Card */}
+              <div className="bg-zinc-900/30 border border-zinc-800/50 p-4 rounded-2xl flex flex-col gap-3 relative overflow-hidden group">
+                <div className="flex justify-between items-center">
+                  <span className="text-[8.5px] font-black text-zinc-400 uppercase tracking-widest flex items-center gap-1.5">
+                    <ShieldAlert className="w-3.5 h-3.5 text-amber-500 animate-pulse" />
+                    Value at Risk (VaR) Indicator
+                  </span>
+                  <span className={`text-[7px] font-black uppercase px-1.5 py-0.5 rounded leading-none ${selectedVaR.riskBg} ${selectedVaR.riskColor}`}>
+                    {selectedVaR.riskLevel} RISK
+                  </span>
+                </div>
+
+                {/* Sub-selectors for VaR Confidence Level and Horizon */}
+                <div className="grid grid-cols-2 gap-2 bg-zinc-950/60 p-1.5 rounded-xl border border-zinc-900/80">
+                  <div className="flex flex-col gap-1">
+                    <span className="text-[7px] text-zinc-500 font-extrabold uppercase tracking-widest pl-1">Confidence</span>
+                    <div className="flex bg-zinc-900 p-0.5 rounded-lg border border-zinc-800/80">
+                      <button
+                        onClick={() => setVarConfLevel('95')}
+                        className={`flex-1 py-1 rounded text-[7.5px] font-black uppercase tracking-wider transition-all cursor-pointer ${
+                          varConfLevel === '95'
+                            ? 'bg-zinc-850 text-[#DFFF00] font-black'
+                            : 'text-zinc-500 hover:text-zinc-300'
+                        }`}
+                      >
+                        95%
+                      </button>
+                      <button
+                        onClick={() => setVarConfLevel('99')}
+                        className={`flex-1 py-1 rounded text-[7.5px] font-black uppercase tracking-wider transition-all cursor-pointer ${
+                          varConfLevel === '99'
+                            ? 'bg-zinc-850 text-[#DFFF00] font-black'
+                            : 'text-zinc-500 hover:text-zinc-300'
+                        }`}
+                      >
+                        99%
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="flex flex-col gap-1">
+                    <span className="text-[7px] text-zinc-500 font-extrabold uppercase tracking-widest pl-1">Horizon</span>
+                    <div className="flex bg-zinc-900 p-0.5 rounded-lg border border-zinc-800/80">
+                      <button
+                        onClick={() => setVarHorizon('1D')}
+                        className={`flex-1 py-1 rounded text-[7.5px] font-black uppercase tracking-wider transition-all cursor-pointer ${
+                          varHorizon === '1D'
+                            ? 'bg-zinc-850 text-[#DFFF00] font-black'
+                            : 'text-zinc-500 hover:text-zinc-300'
+                        }`}
+                      >
+                        1-Day
+                      </button>
+                      <button
+                        onClick={() => setVarHorizon('10D')}
+                        className={`flex-1 py-1 rounded text-[7.5px] font-black uppercase tracking-wider transition-all cursor-pointer ${
+                          varHorizon === '10D'
+                            ? 'bg-zinc-850 text-[#DFFF00] font-black'
+                            : 'text-zinc-500 hover:text-zinc-300'
+                        }`}
+                      >
+                        10-Day
+                      </button>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Score display */}
+                <div className="flex justify-between items-baseline mt-1">
+                  <div>
+                    <span className="text-3xl font-black font-mono tracking-tighter text-white">
+                      {selectedVaR.pctScore.toFixed(2)}%
+                    </span>
+                    <span className="text-[7.5px] font-black text-zinc-500 uppercase tracking-widest block mt-0.5">
+                      Percentage Risk Score
+                    </span>
+                  </div>
+                  <div className="text-right">
+                    <span className="text-xs font-black font-mono text-zinc-300 block">
+                      Rp {Math.round(selectedVaR.idrLoss).toLocaleString('id-ID')}
+                    </span>
+                    <span className="text-[7.5px] font-black text-zinc-500 uppercase tracking-widest block mt-0.5">
+                      Potential Capital Loss
+                    </span>
+                  </div>
+                </div>
+
+                {/* Modern Indicator Progress Bar */}
+                <div className="space-y-1">
+                  <div className="w-full bg-zinc-950 h-2 rounded-full overflow-hidden p-[1px] border border-zinc-900">
+                    <div 
+                      className={`h-full rounded-full transition-all duration-500 ${selectedVaR.riskProgressBg}`}
+                      style={{ width: `${Math.min(100, (selectedVaR.pctScore / 12) * 100)}%` }}
+                    />
+                  </div>
+                  <div className="flex justify-between text-[7px] text-zinc-600 font-extrabold uppercase px-0.5">
+                    <span>Low (0%)</span>
+                    <span>Mod (3% - 6%)</span>
+                    <span>High (6%+)</span>
+                  </div>
+                </div>
+
+                <p className="text-[8.5px] text-zinc-500 leading-normal">
+                  Calculated using recent market volatility (daily portfolio vol of {(riskAnalysis.recentPortfolioDailyVol * 100).toFixed(2)}%). Under {varConfLevel}% confidence, loss is expected not to exceed this boundary within {varHorizon === '1D' ? '1 market day' : '10 market days'}.
                 </p>
               </div>
 

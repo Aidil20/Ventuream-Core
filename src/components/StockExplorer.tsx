@@ -1048,14 +1048,14 @@ export const StockExplorer: React.FC<StockExplorerProps> = ({
 
               {!isChartExpanded && (
                 <div className="flex flex-col gap-6">
-                  <div className="bg-[#020407] rounded-[2.5rem] border border-zinc-800 p-6 shadow-2xl relative overflow-hidden flex-1 min-h-[450px]">
+                  <div className="bg-[#020407] rounded-[2.5rem] border border-zinc-800 p-6 shadow-2xl relative overflow-hidden flex-1 min-h-[480px]">
                     <div className="absolute top-0 right-0 p-4 bg-blue-500/5 blur-2xl rounded-full" />
                     <h4 className="text-[10px] font-black text-zinc-500 uppercase tracking-widest mb-6 flex items-center gap-2">
                       <Activity className="w-3 h-3 text-blue-400" />
                       Technical Signals
                     </h4>
                     
-                    <div className="h-full">
+                    <div className="h-[380px]">
                       <TradingViewTechnicalAnalysisWidget 
                         symbol={selectedStock.includes(':') ? selectedStock : `IDX:${selectedStock}`}
                         interval="1D"

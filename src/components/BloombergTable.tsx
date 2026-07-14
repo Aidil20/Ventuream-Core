@@ -11,15 +11,27 @@ interface PortfolioItem {
     marketValue: number;
     unrealized: number;
     dailyChange?: number;
+    targetWeight?: number;
+    stopLoss?: number;
 }
 
 interface BloombergTableProps {
     portfolioData: PortfolioItem[];
     onSelectSymbol?: (symbol: string) => void;
     onFundamentalAudit?: (symbol: string) => void;
+    selectedTickers?: string[];
+    onSelectTickerToggle?: (ticker: string) => void;
+    onSelectAllTickers?: () => void;
 }
 
-const BloombergTable: React.FC<BloombergTableProps> = ({ portfolioData, onSelectSymbol, onFundamentalAudit }) => {
+const BloombergTable: React.FC<BloombergTableProps> = ({ 
+    portfolioData, 
+    onSelectSymbol, 
+    onFundamentalAudit,
+    selectedTickers = [],
+    onSelectTickerToggle,
+    onSelectAllTickers
+}) => {
     return (
         <div className="bloomberg-terminal mt-6 border border-zinc-800/80 bg-[#020407] rounded-[2rem] p-6">
             <div className="terminal-header border-b border-zinc-900 pb-4 mb-4 flex justify-between items-center">
@@ -37,6 +49,29 @@ const BloombergTable: React.FC<BloombergTableProps> = ({ portfolioData, onSelect
                 <table className="portfolio-table border-collapse w-full">
                     <thead>
                         <tr className="border-b border-zinc-900">
+                            {onSelectTickerToggle && (
+                                <th className="text-left py-3 w-10">
+                                    <div 
+                                        onClick={(e) => {
+                                            e.stopPropagation();
+                                            onSelectAllTickers?.();
+                                        }}
+                                        className="cursor-pointer flex items-center justify-center"
+                                    >
+                                        <div className={`w-4 h-4 rounded border flex items-center justify-center transition-all duration-200 ${
+                                            portfolioData.length > 0 && selectedTickers.length === portfolioData.length
+                                                ? 'bg-[#DFFF00] border-[#DFFF00] text-slate-950 shadow-[0_0_8px_rgba(223,255,0,0.3)]'
+                                                : 'border-zinc-700 bg-zinc-950 hover:border-zinc-500'
+                                        }`}>
+                                            {portfolioData.length > 0 && selectedTickers.length === portfolioData.length && (
+                                                <svg className="w-3 h-3 stroke-current stroke-[3px]" viewBox="0 0 24 24" fill="none">
+                                                    <polyline points="20 6 9 17 4 12" />
+                                                </svg>
+                                            )}
+                                        </div>
+                                    </div>
+                                </th>
+                            )}
                             <th className="text-zinc-500 text-[10px] font-black tracking-widest uppercase">Security</th>
                             <th className="text-zinc-500 text-[10px] font-black tracking-widest uppercase">Position</th>
                             <th className="text-zinc-500 text-[10px] font-black tracking-widest uppercase">Avg Price</th>
@@ -60,12 +95,47 @@ const BloombergTable: React.FC<BloombergTableProps> = ({ portfolioData, onSelect
                             const isDailyGain = dailyChg >= 0;
 
                             return (
-                                <tr key={item.ticker} className="border-b border-zinc-900/40 hover:bg-white/[0.01]">
+                                <tr key={item.ticker} className={`border-b border-zinc-900/40 hover:bg-white/[0.01] ${selectedTickers.includes(item.ticker) ? 'bg-white/[0.01]' : ''}`}>
+                                    {onSelectTickerToggle && (
+                                        <td className="py-3 text-center">
+                                            <div 
+                                                onClick={(e) => {
+                                                    e.stopPropagation();
+                                                    onSelectTickerToggle(item.ticker);
+                                                }}
+                                                className="cursor-pointer flex items-center justify-center"
+                                            >
+                                                <div className={`w-4 h-4 rounded border flex items-center justify-center transition-all duration-200 ${
+                                                    selectedTickers.includes(item.ticker)
+                                                        ? 'bg-[#DFFF00] border-[#DFFF00] text-slate-950 shadow-[0_0_8px_rgba(223,255,0,0.3)]'
+                                                        : 'border-zinc-850 bg-zinc-950 hover:border-zinc-650'
+                                                }`}>
+                                                    {selectedTickers.includes(item.ticker) && (
+                                                        <svg className="w-3 h-3 stroke-current stroke-[3px]" viewBox="0 0 24 24" fill="none">
+                                                            <polyline points="20 6 9 17 4 12" />
+                                                        </svg>
+                                                    )}
+                                                </div>
+                                            </div>
+                                        </td>
+                                    )}
                                     <td 
                                         className="ticker-cell group relative cursor-pointer hover:bg-[#DFFF00]/5 transition-colors font-black text-white py-3"
                                         onClick={() => onSelectSymbol?.(`IDX:${ticker}`)}
                                     >
-                                        {ticker}
+                                        <div className="flex items-center gap-1.5 flex-wrap">
+                                            <span>{ticker}</span>
+                                            {item.targetWeight !== undefined && (
+                                                <span className="text-[8px] font-bold font-mono bg-[#DFFF00]/10 text-[#DFFF00] border border-[#DFFF00]/20 px-1 py-0.2 rounded" title="Target Allocation Weight">
+                                                    Tgt: {item.targetWeight}%
+                                                </span>
+                                            )}
+                                            {item.stopLoss !== undefined && (
+                                                <span className="text-[8px] font-bold font-mono bg-rose-500/10 text-rose-400 border border-rose-500/20 px-1 py-0.2 rounded" title="Stop-loss trigger price">
+                                                    SL: Rp {item.stopLoss.toLocaleString('id-ID')}
+                                                </span>
+                                            )}
+                                        </div>
                                         <div className="absolute -left-2 top-1/2 -translate-y-1/2 w-0.5 h-4 bg-[#DFFF00] opacity-0 group-hover:opacity-100 transition-opacity"></div>
                                     </td>
                                     <td className="text-zinc-300 font-medium py-3">{item.lots} LOT</td>
@@ -116,7 +186,7 @@ const BloombergTable: React.FC<BloombergTableProps> = ({ portfolioData, onSelect
                     </tbody>
                     <tfoot className="border-t border-zinc-800">
                         <tr>
-                            <td colSpan={5} className="py-4 font-black text-[#DFFF00] text-[10px] uppercase tracking-[0.2em]">Total Portfolio Aggregation</td>
+                            <td colSpan={onSelectTickerToggle ? 6 : 5} className="py-4 font-black text-[#DFFF00] text-[10px] uppercase tracking-[0.2em]">Total Portfolio Aggregation</td>
                             <td className="font-mono py-4">
                                 {(() => {
                                     const totalYesterdayMktVal = portfolioData.reduce((acc, curr) => {

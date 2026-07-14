@@ -226,13 +226,13 @@ export async function fetchLatestInsights(count: number = 5, force: boolean = fa
     cacheKey,
     async () => {
       const response = await fetchWithRetry(`/api/market/insights?count=${count}&force=${force}`).catch(err => {
-        console.error("Network error fetching insights:", err);
+        console.warn("Network error fetching insights:", err);
         throw new Error(`Network failure: ${err.message}`);
       });
       
       if (!response.ok) {
         const errText = await response.text().catch(() => "Unknown error");
-        console.error(`Insights API responded with ${response.status}: ${errText}`);
+        console.warn(`Insights API responded with ${response.status}: ${errText}`);
         throw new Error(`Server error: ${response.status}`);
       }
       
@@ -245,7 +245,7 @@ export async function fetchLatestInsights(count: number = 5, force: boolean = fa
     ttl,
     true
   ).catch((error) => {
-    console.error("Error fetching insights, utilizing fallback:", error);
+    console.warn("Error fetching insights, utilizing fallback:", error);
     const cached = MarketApiCache.get<MarketInsight[]>(cacheKey);
     if (cached) return cached;
     return getInsightFallback();
@@ -284,7 +284,7 @@ export async function fetchScannerResults(scannerName: string): Promise<ScannerR
     ttl,
     true
   ).catch(error => {
-    console.error(`Error fetching scanner ${scannerName}, fallback to simulated data:`, error);
+    console.warn(`Error fetching scanner ${scannerName}, fallback to simulated data:`, error);
     const cached = MarketApiCache.get<ScannerResult[]>(cacheKey);
     if (cached) return cached;
     return [
@@ -663,13 +663,13 @@ export async function fetchStockRecommendations(options?: ScanOptions): Promise<
       if (options?.dateRange) params.append('dateRange', JSON.stringify(options.dateRange));
       
       const response = await fetchWithRetry(`/api/market/recommendations?${params.toString()}`, {}, 1).catch(err => {
-        console.error("Network error fetching recommendations:", err);
+        console.warn("Network error fetching recommendations:", err);
         throw new Error(`Network failure: ${err.message}`);
       });
       
       if (!response.ok) {
         const errText = await response.text().catch(() => "Unknown error");
-        console.error(`Recommendations API responded with ${response.status}: ${errText}`);
+        console.warn(`Recommendations API responded with ${response.status}: ${errText}`);
         throw new Error(`Server error: ${response.status}`);
       }
       
@@ -694,7 +694,7 @@ export async function fetchStockRecommendations(options?: ScanOptions): Promise<
     ttl,
     true
   ).catch((error: any) => {
-    console.error("Error fetching recommendations, utilizing fallback:", error);
+    console.warn("Error fetching recommendations, utilizing fallback:", error);
     const cached = MarketApiCache.get<StockRecommendation[]>(cacheKey) || MarketApiCache.get<StockRecommendation[]>('recommendations_cache_default');
     if (cached) return cached;
 

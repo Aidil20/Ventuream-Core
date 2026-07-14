@@ -98,20 +98,29 @@ const VAMTerminalScanner: React.FC<VAMTerminalScannerProps> = ({
 
     // Sync live prices to results
     useEffect(() => {
-        if (Object.keys(livePrices).length > 0 && results.length > 0) {
-            setResults(prev => prev.map(res => {
-                const livePrice = livePrices[res.symbol];
-                if (livePrice && res.metrics['Price'] !== livePrice.toLocaleString('id-ID')) {
-                    return {
-                        ...res,
-                        metrics: {
-                            ...res.metrics,
-                            'Price': livePrice.toLocaleString('id-ID')
+        if (Object.keys(livePrices).length > 0) {
+            setResults(prev => {
+                if (!prev || prev.length === 0) return prev;
+                let changed = false;
+                const next = prev.map(res => {
+                    const livePrice = livePrices[res.symbol];
+                    if (livePrice) {
+                        const priceStr = livePrice.toLocaleString('id-ID');
+                        if (res.metrics['Price'] !== priceStr) {
+                            changed = true;
+                            return {
+                                ...res,
+                                metrics: {
+                                    ...res.metrics,
+                                    'Price': priceStr
+                                }
+                            };
                         }
-                    };
-                }
-                return res;
-            }));
+                    }
+                    return res;
+                });
+                return changed ? next : prev;
+            });
         }
     }, [livePrices]);
 

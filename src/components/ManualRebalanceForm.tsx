@@ -23,7 +23,13 @@ const PRESET_TICKERS = [
   { symbol: 'LPKR.JK', name: 'Lippo Karawaci' },
   { symbol: 'PIPA.JK', name: 'Multi Makmur Lemindo' },
   { symbol: 'COAL.JK', name: 'Coal Energy' },
-  { symbol: 'WMUU.JK', name: 'Widodo Makmur Unggas' }
+  { symbol: 'WMUU.JK', name: 'Widodo Makmur Unggas' },
+  { symbol: 'BACH.JK', name: 'Batavia Alumina Chemical' },
+  { symbol: 'EMMI.JK', name: 'Eka Mas Mandiri Indonesia' },
+  { symbol: 'JECX.JK', name: 'Jakarta Electronic Commerce' },
+  { symbol: 'PRDL.JK', name: 'Pratama Real Estate Dev' },
+  { symbol: 'RANS.JK', name: 'Rona Adi Nusantara Sejahtera' },
+  { symbol: 'PJHB-W.JK', name: 'Panca Jaya Hanurata Warrant' }
 ];
 
 const ALL_SUGGESTIONS = [
@@ -62,6 +68,12 @@ const ALL_SUGGESTIONS = [
   { symbol: 'LAND.JK', name: 'Trinitan Land Tbk', priceKey: 'LAND', market: 'IDX' },
   { symbol: 'PIPA.JK', name: 'Multi Spunindo Jaya Tbk', priceKey: 'PIPA', market: 'IDX' },
   { symbol: 'LPKR.JK', name: 'Lippo Karawaci Tbk', priceKey: 'LPKR', market: 'IDX' },
+  { symbol: 'BACH.JK', name: 'Batavia Alumina Chemical Tbk', priceKey: 'BACH', market: 'IDX' },
+  { symbol: 'EMMI.JK', name: 'Eka Mas Mandiri Indonesia Tbk', priceKey: 'EMMI', market: 'IDX' },
+  { symbol: 'JECX.JK', name: 'Jakarta Electronic Commerce Tbk', priceKey: 'JECX', market: 'IDX' },
+  { symbol: 'PRDL.JK', name: 'Pratama Real Estate Dev Tbk', priceKey: 'PRDL', market: 'IDX' },
+  { symbol: 'RANS.JK', name: 'Rona Adi Nusantara Sejahtera Tbk', priceKey: 'RANS', market: 'IDX' },
+  { symbol: 'PJHB-W.JK', name: 'Panca Jaya Hanurata Warrant', priceKey: 'PJHB-W', market: 'IDX' },
   
   // SGX Stocks
   { symbol: 'DBS', name: 'DBS Group Holdings Ltd', priceKey: 'DBS', market: 'SGX' },
@@ -120,7 +132,8 @@ export const ManualRebalanceForm: React.FC<ManualRebalanceFormProps> = ({
           setMarketPrices(data);
         }
       } catch (err) {
-        console.error("Failed to query live prices in manual balance segment:", err);
+        // Handle transient connection errors during dev server boot-up gracefully
+        console.warn("Real-time prices offline or syncing:", err instanceof Error ? err.message : String(err));
       }
     };
     fetchLiveQuotes();
@@ -142,52 +155,39 @@ export const ManualRebalanceForm: React.FC<ManualRebalanceFormProps> = ({
   }, [portfolioAssets]);
 
   // Sync price details when ticker changes, or when live prices load for the active ticker
-  const prevTickerRef = useRef('');
-  const prevMarketPricesRef = useRef<any>(null);
+  const cleanLookup = activeTicker.replace('.JK', '').toUpperCase();
+  const livePrice = marketPrices[cleanLookup]?.price;
 
   useEffect(() => {
-    const cleanLookup = activeTicker.replace('.JK', '').toUpperCase();
-    const liveData = marketPrices[cleanLookup];
-    const tickerChanged = activeTicker !== prevTickerRef.current;
-    
-    // Check if market prices were loaded/updated for this ticker
-    const pricesUpdated = marketPrices !== prevMarketPricesRef.current && liveData;
+    const currentLots = parseFloat(lotsInputRef.current) || 0;
 
-    if (tickerChanged || pricesUpdated) {
-      prevTickerRef.current = activeTicker;
-      prevMarketPricesRef.current = marketPrices;
-
-      const currentLots = parseFloat(lotsInputRef.current) || 0;
-
-      if (liveData) {
-        setPriceInput(liveData.price.toString());
-        // Recalculate estimated amount using latest price and current lots
-        const p = liveData.price;
+    if (livePrice !== undefined) {
+      setPriceInput(livePrice.toString());
+      // Recalculate estimated amount using latest price and current lots
+      const amt = livePrice * currentLots * 100;
+      setAmountInput(amt === 0 ? '' : Math.round(amt).toString());
+    } else {
+      // Fallback or preset prices
+      const asset = portfolioAssetsRef.current.find(a => a.ticker === activeTicker);
+      if (asset) {
+        setPriceInput(asset.marketPrice.toString());
+        const p = asset.marketPrice;
         const amt = p * currentLots * 100;
         setAmountInput(amt === 0 ? '' : Math.round(amt).toString());
       } else {
-        // Fallback or preset prices
-        const asset = portfolioAssetsRef.current.find(a => a.ticker === activeTicker);
-        if (asset) {
-          setPriceInput(asset.marketPrice.toString());
-          const p = asset.marketPrice;
-          const amt = p * currentLots * 100;
-          setAmountInput(amt === 0 ? '' : Math.round(amt).toString());
-        } else {
-          let fallback = '100';
-          if (activeTicker === 'COAL.JK') fallback = '150';
-          else if (activeTicker === 'WMUU.JK') fallback = '50';
-          else if (activeTicker === 'DSSA.JK') fallback = '775';
-          else if (activeTicker === 'BUMI.JK') fallback = '140';
-          
-          setPriceInput(fallback);
-          const p = parseFloat(fallback) || 0;
-          const amt = p * currentLots * 100;
-          setAmountInput(amt === 0 ? '' : Math.round(amt).toString());
-        }
+        let fallback = '100';
+        if (activeTicker === 'COAL.JK') fallback = '150';
+        else if (activeTicker === 'WMUU.JK') fallback = '50';
+        else if (activeTicker === 'DSSA.JK') fallback = '775';
+        else if (activeTicker === 'BUMI.JK') fallback = '140';
+        
+        setPriceInput(fallback);
+        const p = parseFloat(fallback) || 0;
+        const amt = p * currentLots * 100;
+        setAmountInput(amt === 0 ? '' : Math.round(amt).toString());
       }
     }
-  }, [activeTicker, marketPrices]);
+  }, [activeTicker, livePrice]);
 
   // Handle price change -> update amount
   const handlePriceChange = (val: string) => {

@@ -63,7 +63,13 @@ const MARKET_SYMBOLS: Record<string, Record<string, string>> = {
     "MEDC": "Medco Energi Internasional Tbk",
     "DEWA": "Darma Henwa Tbk",
     "DSSA": "Dian Swastatika Sentosa Tbk",
-    "BUMI": "PT Bumi Resources Tbk"
+    "BUMI": "PT Bumi Resources Tbk",
+    "BACH": "Batavia Alumina Chemical Tbk",
+    "EMMI": "Eka Mas Mandiri Indonesia Tbk",
+    "JECX": "Jakarta Electronic Commerce Tbk",
+    "PRDL": "Pratama Real Estate Development Tbk",
+    "RANS": "Rona Adi Nusantara Sejahtera Tbk",
+    "PJHB-W": "Panca Jaya Hanurata Warrant"
   },
   SGX: {
     "DBS": "DBS Group Holdings Ltd",
@@ -202,8 +208,8 @@ export const IdxPriceList = () => {
           });
           setTickerHistory(initialHist);
         }
-      } catch (err) {
-        console.error("Failed to fetch initial realtime prices:", err);
+      } catch (err: any) {
+        console.warn("Failed to fetch initial realtime prices (transient):", err?.message || err);
       }
     };
     fetchInitialPrices();

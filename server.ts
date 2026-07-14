@@ -2237,6 +2237,12 @@ Status Pengiriman        : CONVERTED LIVE RESILIENCE STYLING ACTIVE
     { symbol: "LAND", yahooSymbol: "LAND.JK", name: "Trinitan Land Tbk", market: "IDX", basePrice: 89 },
     { symbol: "PIPA", yahooSymbol: "PIPA.JK", name: "Multi Spunindo Jaya Tbk", market: "IDX", basePrice: 116 },
     { symbol: "LPKR", yahooSymbol: "LPKR.JK", name: "Lippo Karawaci Tbk", market: "IDX", basePrice: 81 },
+    { symbol: "BACH", yahooSymbol: "BACH.JK", name: "Batavia Alumina Chemical Tbk", market: "IDX", basePrice: 550 },
+    { symbol: "EMMI", yahooSymbol: "EMMI.JK", name: "Eka Mas Mandiri Indonesia Tbk", market: "IDX", basePrice: 500 },
+    { symbol: "JECX", yahooSymbol: "JECX.JK", name: "Jakarta Electronic Commerce Tbk", market: "IDX", basePrice: 1660 },
+    { symbol: "PRDL", yahooSymbol: "PRDL.JK", name: "Pratama Real Estate Development Tbk", market: "IDX", basePrice: 162 },
+    { symbol: "RANS", yahooSymbol: "RANS.JK", name: "Rona Adi Nusantara Sejahtera Tbk", market: "IDX", basePrice: 170 },
+    { symbol: "PJHB-W", yahooSymbol: "PJHB-W.JK", name: "Panca Jaya Hanurata Warrant", market: "IDX", basePrice: 36 },
     
     // --- SGX (Singapore Exchange) ---
     { symbol: "DBS", yahooSymbol: "D05.SI", name: "DBS Group Holdings Ltd", market: "SGX", basePrice: 38.60 },

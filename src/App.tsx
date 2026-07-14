@@ -43,7 +43,10 @@ import {
   CheckCircle2,
   BrainCircuit,
   Loader2,
-  Building
+  Building,
+  BellRing,
+  Edit2,
+  Check
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { Decimal } from 'decimal.js';
@@ -97,6 +100,7 @@ import { User } from 'firebase/auth';
 import { doc, onSnapshot } from 'firebase/firestore';
 import { GlobalSearch } from './components/GlobalSearch';
 import HoldingCard from './components/HoldingCard';
+import BulkActionPanel from './components/BulkActionPanel';
 import { AuditSync } from './components/AuditSync';
 
 const ASSETS = [
@@ -242,14 +246,18 @@ import { ManualRebalanceForm } from './components/ManualRebalanceForm';
 const myCGSPortfolio = {
   accountID: "YU001HC5400154",
   owner: "PT Venture Asset Management",
-  cashBalance: 71879,
+  cashBalance: 452286.00,
   assets: [
-    { ticker: "DEFI.JK", lots: 10, averagePrice: 224, marketPrice: 145 },
-    { ticker: "DSSA.JK", lots: 6, averagePrice: 691.6667, marketPrice: 775 },
-    { ticker: "KOTA.JK", lots: 15, averagePrice: 151, marketPrice: 134 },
-    { ticker: "LAND.JK", lots: 31, averagePrice: 103.3548, marketPrice: 89 },
-    { ticker: "LPKR.JK", lots: 20, averagePrice: 84, marketPrice: 81 },
-    { ticker: "PIPA.JK", lots: 15, averagePrice: 151, marketPrice: 116 }
+    { ticker: "BACH.JK", lots: 1, averagePrice: 442, marketPrice: 550 },
+    { ticker: "DEFI.JK", lots: 10, averagePrice: 224, marketPrice: 103 },
+    { ticker: "DSSA.JK", lots: 4, averagePrice: 691.6667, marketPrice: 775 },
+    { ticker: "EMMI.JK", lots: 1, averagePrice: 470, marketPrice: 500 },
+    { ticker: "JECX.JK", lots: 1, averagePrice: 1250, marketPrice: 1660 },
+    { ticker: "KOTA.JK", lots: 15, averagePrice: 117.4706, marketPrice: 96 },
+    { ticker: "PIPA.JK", lots: 15, averagePrice: 151, marketPrice: 114 },
+    { ticker: "PJHB-W.JK", lots: 0.5, averagePrice: 1, marketPrice: 36 },
+    { ticker: "PRDL.JK", lots: 1, averagePrice: 120, marketPrice: 162 },
+    { ticker: "RANS.JK", lots: 3, averagePrice: 170, marketPrice: 0 }
   ]
 };
 
@@ -412,23 +420,27 @@ export default function App() {
   const [portfolioData, setPortfolioData] = useState<PortfolioAsset[]>([]);
   const [cgsAssets, setCgsAssets] = useState(() => {
     try {
-      const saved = localStorage.getItem('cgsAssets');
+      const saved = localStorage.getItem('cgsAssets_v3');
       if (saved) return JSON.parse(saved);
     } catch (e) {
       console.error("Failed to parse cgsAssets from local storage", e);
     }
     return [
-      { ticker: "DEFI.JK", lots: 10, averagePrice: 224, marketPrice: 145 },
-      { ticker: "DSSA.JK", lots: 6, averagePrice: 691.6667, marketPrice: 775 },
-      { ticker: "KOTA.JK", lots: 15, averagePrice: 151, marketPrice: 134 },
-      { ticker: "LAND.JK", lots: 31, averagePrice: 103.3548, marketPrice: 89 },
-      { ticker: "LPKR.JK", lots: 20, averagePrice: 84, marketPrice: 81 },
-      { ticker: "PIPA.JK", lots: 15, averagePrice: 151, marketPrice: 116 }
+      { ticker: "BACH.JK", lots: 1, averagePrice: 442, marketPrice: 550 },
+      { ticker: "DEFI.JK", lots: 10, averagePrice: 224, marketPrice: 103 },
+      { ticker: "DSSA.JK", lots: 4, averagePrice: 691.6667, marketPrice: 775 },
+      { ticker: "EMMI.JK", lots: 1, averagePrice: 470, marketPrice: 500 },
+      { ticker: "JECX.JK", lots: 1, averagePrice: 1250, marketPrice: 1660 },
+      { ticker: "KOTA.JK", lots: 15, averagePrice: 117.4706, marketPrice: 96 },
+      { ticker: "PIPA.JK", lots: 15, averagePrice: 151, marketPrice: 114 },
+      { ticker: "PJHB-W.JK", lots: 0.5, averagePrice: 1, marketPrice: 36 },
+      { ticker: "PRDL.JK", lots: 1, averagePrice: 120, marketPrice: 162 },
+      { ticker: "RANS.JK", lots: 3, averagePrice: 170, marketPrice: 0 }
     ];
   });
   const [cgsCashBalance, setCgsCashBalance] = useState(() => {
     try {
-      const saved = localStorage.getItem('cgsCashBalance');
+      const saved = localStorage.getItem('cgsCashBalance_v3');
       if (saved !== null) {
         const parsed = parseFloat(saved);
         if (!isNaN(parsed)) return parsed;
@@ -436,11 +448,23 @@ export default function App() {
     } catch (e) {
       console.error("Failed to parse cgsCashBalance", e);
     }
-    return 71879;
+    return 452286.00;
+  });
+  const [cgsGiroBalance, setCgsGiroBalance] = useState(() => {
+    try {
+      const saved = localStorage.getItem('cgsGiroBalance_v3');
+      if (saved !== null) {
+        const parsed = parseFloat(saved);
+        if (!isNaN(parsed)) return parsed;
+      }
+    } catch (e) {
+      console.error("Failed to parse cgsGiroBalance", e);
+    }
+    return 711000.00; // Corrected default Giro balance
   });
   const [cgsRealizedPnL, setCgsRealizedPnL] = useState(() => {
     try {
-      const saved = localStorage.getItem('cgsRealizedPnL');
+      const saved = localStorage.getItem('cgsRealizedPnL_v3');
       if (saved !== null) {
         const parsed = parseFloat(saved);
         if (!isNaN(parsed)) return parsed;
@@ -452,7 +476,7 @@ export default function App() {
   });
   const [cgsTotalFees, setCgsTotalFees] = useState(() => {
     try {
-      const saved = localStorage.getItem('cgsTotalFees');
+      const saved = localStorage.getItem('cgsTotalFees_v3');
       if (saved !== null) {
         const parsed = parseFloat(saved);
         if (!isNaN(parsed)) return parsed;
@@ -464,20 +488,61 @@ export default function App() {
   });
 
   useEffect(() => {
-    localStorage.setItem('cgsAssets', JSON.stringify(cgsAssets));
+    localStorage.setItem('cgsAssets_v3', JSON.stringify(cgsAssets));
   }, [cgsAssets]);
 
   useEffect(() => {
-    localStorage.setItem('cgsCashBalance', cgsCashBalance.toString());
+    localStorage.setItem('cgsCashBalance_v3', cgsCashBalance.toString());
   }, [cgsCashBalance]);
 
   useEffect(() => {
-    localStorage.setItem('cgsRealizedPnL', cgsRealizedPnL.toString());
+    localStorage.setItem('cgsGiroBalance_v3', cgsGiroBalance.toString());
+  }, [cgsGiroBalance]);
+
+  useEffect(() => {
+    localStorage.setItem('cgsRealizedPnL_v3', cgsRealizedPnL.toString());
   }, [cgsRealizedPnL]);
 
   useEffect(() => {
-    localStorage.setItem('cgsTotalFees', cgsTotalFees.toString());
+    localStorage.setItem('cgsTotalFees_v3', cgsTotalFees.toString());
   }, [cgsTotalFees]);
+
+  const [globalAlertsEnabled, setGlobalAlertsEnabled] = useState<boolean>(() => {
+    try {
+      const saved = localStorage.getItem('vam-global-alerts-enabled');
+      return saved !== null ? JSON.parse(saved) : true;
+    } catch {
+      return true;
+    }
+  });
+
+  const [alertThresholds, setAlertThresholds] = useState<Record<string, { targetPrice: number; type: 'above' | 'below'; active: boolean; lastTriggeredPrice?: number }>>(() => {
+    try {
+      const saved = localStorage.getItem('vam-alert-thresholds');
+      return saved ? JSON.parse(saved) : {};
+    } catch {
+      return {};
+    }
+  });
+
+  useEffect(() => {
+    localStorage.setItem('vam-global-alerts-enabled', JSON.stringify(globalAlertsEnabled));
+  }, [globalAlertsEnabled]);
+
+  useEffect(() => {
+    localStorage.setItem('vam-alert-thresholds', JSON.stringify(alertThresholds));
+  }, [alertThresholds]);
+
+  const handleSaveAlert = useCallback((ticker: string, targetPrice: number, type: 'above' | 'below', active: boolean) => {
+    setAlertThresholds(prev => ({
+      ...prev,
+      [ticker]: {
+        targetPrice,
+        type,
+        active
+      }
+    }));
+  }, []);
 
   const { history, recordTransaction } = useTransactionManager();
 
@@ -564,20 +629,26 @@ export default function App() {
 
   const handleResetPortfolio = useCallback(() => {
     setCgsAssets([
-      { ticker: "DEFI.JK", lots: 10, averagePrice: 224, marketPrice: 145 },
-      { ticker: "DSSA.JK", lots: 6, averagePrice: 691.6667, marketPrice: 775 },
-      { ticker: "KOTA.JK", lots: 15, averagePrice: 151, marketPrice: 134 },
-      { ticker: "LAND.JK", lots: 31, averagePrice: 103.3548, marketPrice: 89 },
-      { ticker: "LPKR.JK", lots: 20, averagePrice: 84, marketPrice: 81 },
-      { ticker: "PIPA.JK", lots: 15, averagePrice: 151, marketPrice: 116 }
+      { ticker: "BACH.JK", lots: 1, averagePrice: 442, marketPrice: 550 },
+      { ticker: "DEFI.JK", lots: 10, averagePrice: 224, marketPrice: 103 },
+      { ticker: "DSSA.JK", lots: 4, averagePrice: 691.6667, marketPrice: 775 },
+      { ticker: "EMMI.JK", lots: 1, averagePrice: 470, marketPrice: 500 },
+      { ticker: "JECX.JK", lots: 1, averagePrice: 1250, marketPrice: 1660 },
+      { ticker: "KOTA.JK", lots: 15, averagePrice: 117.4706, marketPrice: 96 },
+      { ticker: "PIPA.JK", lots: 15, averagePrice: 151, marketPrice: 114 },
+      { ticker: "PJHB-W.JK", lots: 0.5, averagePrice: 1, marketPrice: 36 },
+      { ticker: "PRDL.JK", lots: 1, averagePrice: 120, marketPrice: 162 },
+      { ticker: "RANS.JK", lots: 3, averagePrice: 170, marketPrice: 0 }
     ]);
-    setCgsCashBalance(71879);
+    setCgsCashBalance(452286.00);
+    setCgsGiroBalance(711000.00);
     setCgsRealizedPnL(0);
     setCgsTotalFees(0);
-    localStorage.removeItem('cgsAssets');
-    localStorage.removeItem('cgsCashBalance');
-    localStorage.removeItem('cgsRealizedPnL');
-    localStorage.removeItem('cgsTotalFees');
+    localStorage.removeItem('cgsAssets_v3');
+    localStorage.removeItem('cgsCashBalance_v3');
+    localStorage.removeItem('cgsGiroBalance_v3');
+    localStorage.removeItem('cgsRealizedPnL_v3');
+    localStorage.removeItem('cgsTotalFees_v3');
   }, []);
 
   const [selectedStudies, setSelectedStudies] = useState<string[]>(["MASimple@tv-basicstudies", "MAExp@tv-basicstudies"]);
@@ -741,7 +812,7 @@ export default function App() {
     // Calculate details
     const totalAssetVal = totalPortfolioValue;
     const rdnCash = cgsCashBalance;
-    const giroAccountBalance = 790190; // Giro balance added from custom request
+    const giroAccountBalance = cgsGiroBalance; // Giro balance added from state
     const totalCombinedValue = totalAssetVal + rdnCash + giroAccountBalance;
     
     const totalCost = cgsAssets.reduce((acc, curr) => {
@@ -889,7 +960,7 @@ export default function App() {
 
   const exportPortfolioAnalysisToCSV = () => {
     const rdnCash = cgsCashBalance;
-    const giroAccountBalance = 790190;
+    const giroAccountBalance = cgsGiroBalance; // Giro balance added from state
     const totalAssetVal = totalPortfolioValue;
     const totalCombinedValue = totalAssetVal + rdnCash + giroAccountBalance;
     const totalCost = cgsAssets.reduce((acc, curr) => {
@@ -966,6 +1037,18 @@ export default function App() {
   const [showVamScanner, setShowVamScanner] = useState(false);
   const [showIntradayScanner, setShowIntradayScanner] = useState(false);
   const [selectedAssetId, setSelectedAssetId] = useState<string | null>(null);
+  const [isEditingRDN, setIsEditingRDN] = useState(false);
+  const [rdnInputVal, setRdnInputVal] = useState(cgsCashBalance.toString());
+  const [isEditingGiro, setIsEditingGiro] = useState(false);
+  const [giroInputVal, setGiroInputVal] = useState(cgsGiroBalance.toString());
+
+  useEffect(() => {
+    setRdnInputVal(cgsCashBalance.toString());
+  }, [cgsCashBalance]);
+
+  useEffect(() => {
+    setGiroInputVal(cgsGiroBalance.toString());
+  }, [cgsGiroBalance]);
   const [marketSubTab, setMarketSubTab] = useState<'overview' | 'explorer' | 'fundamental' | 'screener'>('overview');
   const [fundamentalSymbol, setFundamentalSymbol] = useState<string | undefined>(undefined);
   const [insights, setInsights] = useState<MarketInsight[]>([]);
@@ -1103,6 +1186,95 @@ export default function App() {
   // Price Alerts State
   const [alerts, setAlerts] = useState<PriceAlert[]>([]);
   const [notifications, setNotifications] = useState<AlertNotification[]>([]);
+
+  // Monitor portfolio prices and trigger alerts dynamically
+  useEffect(() => {
+    if (!globalAlertsEnabled || portfolioData.length === 0) return;
+
+    const newNotifications: AlertNotification[] = [];
+    let thresholdsUpdated = false;
+    const updatedThresholds = { ...alertThresholds };
+
+    portfolioData.forEach(asset => {
+      const config = updatedThresholds[asset.ticker];
+      if (config && config.active) {
+        const currentPrice = asset.currentPrice || asset.marketPrice;
+        if (!currentPrice) return;
+
+        const isConditionMet = 
+          config.type === 'above' 
+            ? currentPrice >= config.targetPrice 
+            : currentPrice <= config.targetPrice;
+
+        if (isConditionMet) {
+          if (config.lastTriggeredPrice !== currentPrice) {
+            newNotifications.push({
+              id: `${asset.ticker}-${currentPrice}-${Date.now()}`,
+              symbol: asset.ticker.split('.')[0],
+              price: currentPrice,
+              targetPrice: config.targetPrice,
+              condition: config.type === 'above' ? 'gt' : 'lt',
+              timestamp: Date.now()
+            });
+            config.lastTriggeredPrice = currentPrice;
+            thresholdsUpdated = true;
+          }
+        } else {
+          if (config.lastTriggeredPrice !== undefined) {
+            delete config.lastTriggeredPrice;
+            thresholdsUpdated = true;
+          }
+        }
+      }
+    });
+
+    if (thresholdsUpdated) {
+      setAlertThresholds(updatedThresholds);
+    }
+
+    if (newNotifications.length > 0) {
+      setNotifications(prev => {
+        return [...newNotifications, ...prev].slice(0, 5);
+      });
+
+      // Play high-tech synthesizer notification chime
+      try {
+        const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
+        if (AudioContextClass) {
+          const audioCtx = new AudioContextClass();
+          const now = audioCtx.currentTime;
+          
+          const playTone = (freq: number, start: number, duration: number) => {
+            const osc = audioCtx.createOscillator();
+            const gainNode = audioCtx.createGain();
+            osc.type = 'sine';
+            osc.frequency.setValueAtTime(freq, start);
+            gainNode.gain.setValueAtTime(0.12, start);
+            gainNode.gain.exponentialRampToValueAtTime(0.001, start + duration);
+            osc.connect(gainNode);
+            gainNode.connect(audioCtx.destination);
+            osc.start(start);
+            osc.stop(start + duration);
+          };
+
+          playTone(523.25, now, 0.35); // C5
+          playTone(783.99, now + 0.08, 0.45); // G5 (fifths)
+        }
+      } catch (err) {
+        console.warn("Audio chime block or not allowed:", err);
+      }
+    }
+  }, [portfolioData, globalAlertsEnabled, alertThresholds]);
+
+  // Auto-dismiss notifications after 8 seconds
+  useEffect(() => {
+    if (notifications.length > 0) {
+      const timer = setTimeout(() => {
+        setNotifications(prev => prev.slice(0, prev.length - 1));
+      }, 8000);
+      return () => clearTimeout(timer);
+    }
+  }, [notifications]);
 
   // Alert Actions
   const addAlert = useCallback((alert: Omit<PriceAlert, 'id' | 'createdAt' | 'active'>) => {
@@ -1244,8 +1416,8 @@ export default function App() {
           });
         });
       }
-    } catch (err) {
-      console.error("Failed to sync portfolio prices with market API:", err);
+    } catch (err: any) {
+      console.warn("Failed to sync portfolio prices with market API (transient):", err?.message || err);
     }
   }, [cgsAssets]);
 
@@ -2840,7 +3012,22 @@ export default function App() {
                 <div className="space-y-4">
                   <div className="flex items-center justify-between px-1">
                     <h4 className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Holdings Details</h4>
-                    <span className="text-[10px] text-slate-600 font-mono">{portfolioData.length} POSITIONS</span>
+                    <div className="flex items-center gap-3">
+                      {/* Global Price Alert Toggle Switch */}
+                      <div className="flex items-center gap-1.5 bg-slate-900/60 px-2.5 py-1 rounded-full border border-slate-800">
+                        <Bell className={`w-3 h-3 transition-colors ${globalAlertsEnabled ? 'text-[#DFFF00] animate-bounce' : 'text-slate-500'}`} />
+                        <span className="text-[8px] font-black font-mono uppercase tracking-wider text-slate-400">Global Alerts:</span>
+                        <button
+                          type="button"
+                          onClick={() => setGlobalAlertsEnabled(!globalAlertsEnabled)}
+                          className={`relative inline-flex h-3.5 w-7 items-center rounded-full transition-colors duration-300 focus:outline-none ${globalAlertsEnabled ? 'bg-[#DFFF00]' : 'bg-slate-800'}`}
+                          title={globalAlertsEnabled ? "Disable Global Price Alerts" : "Enable Global Price Alerts"}
+                        >
+                          <span className={`inline-block h-2 w-2 transform rounded-full bg-slate-950 transition-transform duration-300 ${globalAlertsEnabled ? 'translate-x-4' : 'translate-x-1'}`} />
+                        </button>
+                      </div>
+                      <span className="text-[10px] text-slate-600 font-mono uppercase tracking-wider">{portfolioData.length} POSITIONS</span>
+                    </div>
                   </div>
                   
                   <div className="space-y-3">
@@ -2857,6 +3044,8 @@ export default function App() {
                             setActiveTab('asset-detail');
                           }
                         }}
+                        alertConfig={alertThresholds[asset.ticker]}
+                        onSaveAlert={handleSaveAlert}
                       />
                     ))}
                   </div>
@@ -2888,9 +3077,124 @@ export default function App() {
                           </div>
                         );
                       })()}
-                      <div className="flex items-center gap-2 px-3 py-1 bg-slate-900/80 rounded-full border border-slate-800">
+                      {/* RDN Cash Badge */}
+                      <div className="flex items-center gap-2 px-3 py-1 bg-slate-900/80 rounded-full border border-slate-800 hover:border-slate-700 transition group relative">
                         <span className="text-[9px] text-slate-500 font-black uppercase">RDN Cash:</span>
-                        <span className="text-[10px] text-[#DFFF00] font-mono font-bold">Rp {typeof cgsCashBalance === 'number' ? cgsCashBalance.toLocaleString('id-ID') : (cgsCashBalance || 'N/A')}</span>
+                        {isEditingRDN ? (
+                          <div className="flex items-center gap-1">
+                            <input
+                              type="number"
+                              className="bg-slate-950 text-[#DFFF00] font-mono text-[10px] w-24 px-1 rounded border border-slate-700 focus:outline-none focus:border-[#DFFF00]"
+                              value={rdnInputVal}
+                              onChange={(e) => setRdnInputVal(e.target.value)}
+                              onKeyDown={(e) => {
+                                if (e.key === 'Enter') {
+                                  const val = parseFloat(rdnInputVal);
+                                  if (!isNaN(val)) {
+                                    setCgsCashBalance(val);
+                                  }
+                                  setIsEditingRDN(false);
+                                } else if (e.key === 'Escape') {
+                                  setRdnInputVal(cgsCashBalance.toString());
+                                  setIsEditingRDN(false);
+                                }
+                              }}
+                              autoFocus
+                            />
+                            <button
+                              onClick={() => {
+                                const val = parseFloat(rdnInputVal);
+                                if (!isNaN(val)) {
+                                  setCgsCashBalance(val);
+                                }
+                                setIsEditingRDN(false);
+                              }}
+                              className="text-green-400 hover:text-green-300 p-0.5"
+                            >
+                              <Check className="w-3 h-3" />
+                            </button>
+                            <button
+                              onClick={() => {
+                                setRdnInputVal(cgsCashBalance.toString());
+                                setIsEditingRDN(false);
+                              }}
+                              className="text-red-400 hover:text-red-300 p-0.5"
+                            >
+                              <X className="w-3 h-3" />
+                            </button>
+                          </div>
+                        ) : (
+                          <div 
+                            className="flex items-center gap-1.5 cursor-pointer"
+                            onClick={() => setIsEditingRDN(true)}
+                            title="Click to edit RDN Cash"
+                          >
+                            <span className="text-[10px] text-[#DFFF00] font-mono font-bold">
+                              Rp {typeof cgsCashBalance === 'number' ? cgsCashBalance.toLocaleString('id-ID') : (cgsCashBalance || '0')}
+                            </span>
+                            <Edit2 className="w-2.5 h-2.5 text-slate-600 group-hover:text-slate-400 opacity-0 group-hover:opacity-100 transition" />
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Giro Cash Badge */}
+                      <div className="flex items-center gap-2 px-3 py-1 bg-slate-900/80 rounded-full border border-slate-800 hover:border-slate-700 transition group relative">
+                        <span className="text-[9px] text-slate-500 font-black uppercase">Giro Cash:</span>
+                        {isEditingGiro ? (
+                          <div className="flex items-center gap-1">
+                            <input
+                              type="number"
+                              className="bg-slate-950 text-[#deff9a] font-mono text-[10px] w-24 px-1 rounded border border-slate-700 focus:outline-none focus:border-[#deff9a]"
+                              value={giroInputVal}
+                              onChange={(e) => setGiroInputVal(e.target.value)}
+                              onKeyDown={(e) => {
+                                if (e.key === 'Enter') {
+                                  const val = parseFloat(giroInputVal);
+                                  if (!isNaN(val)) {
+                                    setCgsGiroBalance(val);
+                                  }
+                                  setIsEditingGiro(false);
+                                } else if (e.key === 'Escape') {
+                                  setGiroInputVal(cgsGiroBalance.toString());
+                                  setIsEditingGiro(false);
+                                }
+                              }}
+                              autoFocus
+                            />
+                            <button
+                              onClick={() => {
+                                const val = parseFloat(giroInputVal);
+                                if (!isNaN(val)) {
+                                  setCgsGiroBalance(val);
+                                }
+                                setIsEditingGiro(false);
+                              }}
+                              className="text-green-400 hover:text-green-300 p-0.5"
+                            >
+                              <Check className="w-3 h-3" />
+                            </button>
+                            <button
+                              onClick={() => {
+                                setGiroInputVal(cgsGiroBalance.toString());
+                                setIsEditingGiro(false);
+                              }}
+                              className="text-red-400 hover:text-red-300 p-0.5"
+                            >
+                              <X className="w-3 h-3" />
+                            </button>
+                          </div>
+                        ) : (
+                          <div 
+                            className="flex items-center gap-1.5 cursor-pointer"
+                            onClick={() => setIsEditingGiro(true)}
+                            title="Click to edit Giro Cash"
+                          >
+                            <span className="text-[10px] text-[#deff9a] font-mono font-bold">
+                              Rp {typeof cgsGiroBalance === 'number' ? cgsGiroBalance.toLocaleString('id-ID') : (cgsGiroBalance || '0')}
+                            </span>
+                            <Edit2 className="w-2.5 h-2.5 text-slate-600 group-hover:text-slate-400 opacity-0 group-hover:opacity-100 transition" />
+                          </div>
+                        )}
                       </div>
                     </div>
                   </div>
@@ -3126,6 +3430,8 @@ export default function App() {
                         setSelectedSymbol(`IDX:${asset.ticker.replace('.JK', '')}`);
                         setActiveTab('home');
                       }}
+                      alertConfig={alertThresholds[asset.ticker]}
+                      onSaveAlert={handleSaveAlert}
                     />
                   ))}
                 </div>
@@ -3191,7 +3497,7 @@ export default function App() {
               </button>
               <h3 className="text-sm font-semibold text-slate-300 uppercase tracking-widest">Financial Reporting Ecosystem</h3>
             </div>
-            <FinancialReportingCenter portfolioData={portfolioData} cashBalance={cgsCashBalance} realizedPnL={cgsRealizedPnL} totalFees={cgsTotalFees} />
+            <FinancialReportingCenter portfolioData={portfolioData} cashBalance={cgsCashBalance} giroBalance={cgsGiroBalance} realizedPnL={cgsRealizedPnL} totalFees={cgsTotalFees} />
           </div>
         );
       case 'archive':

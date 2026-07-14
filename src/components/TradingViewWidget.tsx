@@ -171,9 +171,10 @@ function TradingViewWidget({ symbol = "IDX:BBCA", studies = ["MASimple@tv-basics
       scriptElement.src = "https://s3.tradingview.com/external-embedding/embed-widget-advanced-chart.js";
       scriptElement.type = "text/javascript";
       scriptElement.async = true;
+      const cleanSymbol = symbol.replace(/\.JK$/i, '').toUpperCase();
       scriptElement.innerHTML = JSON.stringify({
         "autosize": true,
-        "symbol": symbol,
+        "symbol": cleanSymbol,
         "interval": "D",
         "timezone": "Asia/Jakarta",
         "theme": "dark",

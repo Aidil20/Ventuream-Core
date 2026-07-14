@@ -45,6 +45,7 @@ interface PortfolioAsset {
 interface FinancialReportingCenterProps {
   portfolioData?: PortfolioAsset[];
   cashBalance?: number;
+  giroBalance?: number;
   realizedPnL?: number;
   totalFees?: number;
 }
@@ -74,7 +75,7 @@ interface ExtractedLedger {
   confidence: number;
 }
 
-export default function FinancialReportingCenter({ portfolioData, cashBalance, realizedPnL = 0, totalFees = 0 }: FinancialReportingCenterProps) {
+export default function FinancialReportingCenter({ portfolioData, cashBalance, giroBalance = 711000, realizedPnL = 0, totalFees = 0 }: FinancialReportingCenterProps) {
   const [activeTab, setActiveTabState] = useState<'REPORTS' | 'SECURE_VAULT'>('REPORTS');
   const [kpiMetric, setKpiMetric] = useState<'ROA' | 'ROE' | 'GPM' | 'CR'>('ROA');
   const [isGenerating, setIsGenerating] = useState(false);
@@ -120,7 +121,7 @@ export default function FinancialReportingCenter({ portfolioData, cashBalance, r
     // Balance Sheet (Rp)
     cash26: 2950677,
     cash25: 989908.69, // Kas dan Setara Kas (Audit 2025)
-    giro26: 790190,
+    giro26: giroBalance !== undefined ? giroBalance : 711000,
     giro25: 262900, // Keuntungan Portofolio Belum Direalisasi (Audit 2025)
     invest26: 1226900,
     invest25: 1018300, // Investasi Saham At Cost (Audit 2025)
@@ -130,7 +131,7 @@ export default function FinancialReportingCenter({ portfolioData, cashBalance, r
     shortLiability25: 0,
     paidCapital26: 9300000,
     paidCapital25: 6196225.05, // Modal Disetor (Audit 2025)
-    retainedEarnings26: 827577,
+    retainedEarnings26: 1538577, // Corrected to include separate 711.000 Giro balance (827577 + 711000)
     retainedEarnings25: 2074883.64, // Laba Komprehensif (Audit 2025)
 
     // Profit Loss (Rp)
@@ -174,7 +175,7 @@ export default function FinancialReportingCenter({ portfolioData, cashBalance, r
     if (portfolioData && cashBalance !== undefined) {
       const liveInvest26 = portfolioData.reduce((acc, asset) => acc + (asset.marketValue || 0), 0);
       const liveCash26 = cashBalance;
-      const liveGiro26 = 790190;
+      const liveGiro26 = giroBalance;
       const liveUnrealizedSecurities26 = portfolioData.reduce((acc, asset) => acc + (asset.unrealized || 0), 0);
       
       const netCurrentAssets26 = liveCash26 + liveInvest26 + liveGiro26;
@@ -232,7 +233,7 @@ export default function FinancialReportingCenter({ portfolioData, cashBalance, r
         return formatTime;
       });
     }
-  }, [portfolioFingerprint, cashBalance, realizedPnL, totalFees]);
+  }, [portfolioFingerprint, cashBalance, giroBalance, realizedPnL, totalFees]);
 
   // Keep report lastUpdate values synced with lastUpdateTime
   useEffect(() => {
@@ -488,6 +489,12 @@ export default function FinancialReportingCenter({ portfolioData, cashBalance, r
     const totalComprehensiveProfit26 = netOperatingProfit26 + financialValues.unrealizedSecurities26;
     const totalComprehensiveProfit25 = netOperatingProfit25 + financialValues.unrealizedSecurities25;
 
+    // Cash Flow calculations
+    const cfOperating26 = financialValues.received26 + financialValues.operatingExpenseOut26;
+    const cfInvesting26 = financialValues.investOut26;
+    const cfFinancing26 = financialValues.proceedsCapital26;
+    const netCashIncrease26 = cfOperating26 + cfInvesting26 + cfFinancing26;
+
     const doc = new jsPDF({
       orientation: 'portrait',
       unit: 'mm',
@@ -545,12 +552,13 @@ export default function FinancialReportingCenter({ portfolioData, cashBalance, r
       body: [
         ['ASET', '-', 'ASSETS'],
         ['Aset Lancar', '-', 'Current Assets'],
-        ['Kas dan Setara Kas (RDN/Bank)', '2.950.677', 'Cash and Cash Equivalents'],
-        ['Portofolio Saham & Efek ¹', '1.226.900 ¹', 'Securities Portfolio ¹'],
-        ['Total Aset Lancar', '4.177.577', 'Total Current Assets'],
+        ['Kas Dana Nasabah (RDN)', formatIdr(financialValues.cash26), 'Cash Equivalents (RDN)'],
+        ['Kas Rekening Giro Perusahaan', formatIdr(financialValues.giro26 || 0), 'Giro Account Cash'],
+        ['Portofolio Saham & Efek ¹', formatIdr(financialValues.invest26) + ' ¹', 'Securities Portfolio ¹'],
+        ['Total Aset Lancar', formatIdr(financialValues.cash26 + (financialValues.giro26 || 0) + financialValues.invest26), 'Total Current Assets'],
         ['Aset Tetap', '-', 'Non-Current Assets'],
-        ['Fasilitas Media (PC & Monitor MSI) - Net ¹', '5.950.000 ¹', 'Media Facilities (PC & Monitor) - Net ¹'],
-        ['Total Aset Tetap', '5.950.000', 'Total Non-Current Assets']
+        ['Fasilitas Media (PC & Monitor MSI) - Net ¹', formatIdr(financialValues.fixed26) + ' ¹', 'Media Facilities (PC & Monitor) - Net ¹'],
+        ['Total Aset Tetap', formatIdr(financialValues.fixed26), 'Total Non-Current Assets']
       ],
       theme: 'grid',
       headStyles: { fillColor: [248, 250, 252], textColor: [24, 24, 27], fontStyle: 'bold', fontSize: 9.5, lineColor: [210, 210, 210], lineWidth: 0.1 },
@@ -562,7 +570,7 @@ export default function FinancialReportingCenter({ portfolioData, cashBalance, r
       },
       didParseCell: (data) => {
         const idx = data.row.index;
-        const isHeaderRow = idx === 0 || idx === 1 || idx === 4 || idx === 5 || idx === 7;
+        const isHeaderRow = idx === 0 || idx === 1 || idx === 5 || idx === 6 || idx === 8;
         if (isHeaderRow && data.section === 'body') {
           data.cell.styles.fontStyle = 'bold';
           data.cell.styles.textColor = [15, 15, 15];
@@ -578,16 +586,16 @@ export default function FinancialReportingCenter({ portfolioData, cashBalance, r
       startY: y,
       margin: { left: 20, right: 20 },
       body: [
-        ['TOTAL ASET ¹', '10.127.577 ¹', 'TOTAL ASSETS ¹'],
+        ['TOTAL ASET ¹', formatIdr(financialValues.cash26 + (financialValues.giro26 || 0) + financialValues.invest26 + financialValues.fixed26) + ' ¹', 'TOTAL ASSETS ¹'],
         ['LIABILITAS & EKUITAS', '-', 'LIABILITIES & EQUITY'],
         ['Liabilitas', '-', 'Liabilities'],
-        ['Kewajiban Jangka Pendek', '0', 'Short-Term Liabilities'],
-        ['Total Liabilitas (Zero Debt)', '0', 'Total Liabilities'],
+        ['Kewajiban Jangka Pendek', formatIdr(financialValues.shortLiability26), 'Short-Term Liabilities'],
+        ['Total Liabilitas (Zero Debt)', formatIdr(financialValues.shortLiability26), 'Total Liabilities'],
         ['Ekuitas', '-', 'Equity'],
-        ['Modal Disetor', '9.300.000', 'Paid-in Capital'],
-        ['Laba Ditahan & Berjalan YTD ¹', '827.577 ¹', 'Retained Earnings & Current Income ¹'],
-        ['Total Ekuitas', '10.127.577', 'Total Equity'],
-        ['TOTAL PASIVA ¹', '10.127.577 ¹', 'TOTAL LIABILITIES & EQUITY ¹']
+        ['Modal Disetor', formatIdr(financialValues.paidCapital26), 'Paid-in Capital'],
+        ['Laba Ditahan & Berjalan YTD ¹', formatIdr(financialValues.retainedEarnings26) + ' ¹', 'Retained Earnings & Current Income ¹'],
+        ['Total Ekuitas', formatIdr(financialValues.paidCapital26 + financialValues.retainedEarnings26), 'Total Equity'],
+        ['TOTAL PASIVA ¹', formatIdr(financialValues.paidCapital26 + financialValues.retainedEarnings26) + ' ¹', 'TOTAL LIABILITIES & EQUITY ¹']
       ],
       theme: 'grid',
       bodyStyles: { fontSize: 9, cellPadding: 3.5, textColor: [40, 40, 40], lineColor: [210, 210, 210], lineWidth: 0.1 },
@@ -627,9 +635,9 @@ export default function FinancialReportingCenter({ portfolioData, cashBalance, r
       margin: { left: 20, right: 20 },
       head: [['Bahasa Indonesia (ID)', 'Nilai (IDR)', 'English (EN)']],
       body: [
-        ['Pendapatan Investasi & Dividen', '456.200', 'Investment & Dividend Income'],
-        ['Beban Operasional & Administrasi', '(575.000)', 'Operating & Admin Expenses'],
-        ['Beban Penyusutan Aset (5 Bulan) ¹', '(50.000) ¹', 'Depreciation Expenses (5 Months) ¹']
+        ['Pendapatan Investasi & Dividen', formatIdr(financialValues.rev26), 'Investment & Dividend Income'],
+        ['Beban Operasional & Administrasi', formatIdr(financialValues.operatingExpense26, true), 'Operating & Admin Expenses'],
+        ['Beban Penyusutan Aset (5 Bulan) ¹', formatIdr(financialValues.depreciationExpense26, true) + ' ¹', 'Depreciation Expenses (5 Months) ¹']
       ],
       theme: 'grid',
       headStyles: { fillColor: [248, 250, 252], textColor: [24, 24, 27], fontStyle: 'bold', fontSize: 9.5, lineColor: [210, 210, 210], lineWidth: 0.1 },
@@ -649,7 +657,7 @@ export default function FinancialReportingCenter({ portfolioData, cashBalance, r
       startY: y,
       margin: { left: 20, right: 20 },
       body: [
-        ['LABA (RUGI) BERSIH OPERASIONAL YTD ¹', '(168.800) ¹', 'NET INCOME (LOSS) YTD ¹']
+        ['LABA (RUGI) BERSIH OPERASIONAL YTD ¹', formatIdr(netOperatingProfit26, true) + ' ¹', 'NET INCOME (LOSS) YTD ¹']
       ],
       theme: 'grid',
       bodyStyles: { fontSize: 9, cellPadding: 3.5, fontStyle: 'bold', textColor: [15, 15, 15], fillColor: [245, 247, 250], lineColor: [210, 210, 210], lineWidth: 0.1 },
@@ -678,14 +686,14 @@ export default function FinancialReportingCenter({ portfolioData, cashBalance, r
       margin: { left: 20, right: 20 },
       head: [['Bahasa Indonesia (ID)', 'Nilai (IDR)', 'English (EN)']],
       body: [
-        ['Arus Kas Aktivitas Operasi', '(118.800)', 'Cash Flows from Operations'],
-        ['Penerimaan dari Penjualan Efek & Dividen', '456.200', 'Receipts from Sales & Dividends'],
-        ['Pembayaran Beban Operasional', '(575.000)', 'Payments for Operating Expenses'],
-        ['Arus Kas Aktivitas Investasi ¹', '(5.193.450) ¹', 'Cash Flows from Investing ¹'],
-        ['Perolehan Aset Portofolio Efek ¹', '(5.193.450) ¹', 'Acquisition of Securities Portfolio ¹'],
-        ['Arus Kas Aktivitas Pendanaan ¹', '7.300.000 ¹', 'Cash Flows from Financing ¹'],
-        ['Penerimaan Setoran Modal (YTD) ¹', '7.300.000 ¹', 'Proceeds from Capital Contribution ¹'],
-        ['Kenaikan (Penurunan) Kas Bersih', '1.987.750', 'Net Increase (Decrease) in Cash']
+        ['Arus Kas Aktivitas Operasi', formatIdr(cfOperating26, true), 'Cash Flows from Operations'],
+        ['Penerimaan dari Penjualan Efek & Dividen', formatIdr(financialValues.received26), 'Receipts from Sales & Dividends'],
+        ['Pembayaran Beban Operasional', formatIdr(financialValues.operatingExpenseOut26, true), 'Payments for Operating Expenses'],
+        ['Arus Kas Aktivitas Investasi ¹', formatIdr(cfInvesting26, true) + ' ¹', 'Cash Flows from Investing ¹'],
+        ['Perolehan Aset Portofolio Efek ¹', formatIdr(cfInvesting26, true) + ' ¹', 'Acquisition of Securities Portfolio ¹'],
+        ['Arus Kas Aktivitas Pendanaan ¹', formatIdr(cfFinancing26) + ' ¹', 'Cash Flows from Financing ¹'],
+        ['Penerimaan Setoran Modal (YTD) ¹', formatIdr(cfFinancing26) + ' ¹', 'Proceeds from Capital Contribution ¹'],
+        ['Kenaikan (Penurunan) Kas Bersih', formatIdr(netCashIncrease26, true), 'Net Increase (Decrease) in Cash']
       ],
       theme: 'grid',
       headStyles: { fillColor: [248, 250, 252], textColor: [24, 24, 27], fontStyle: 'bold', fontSize: 9.5, lineColor: [210, 210, 210], lineWidth: 0.1 },
@@ -713,8 +721,8 @@ export default function FinancialReportingCenter({ portfolioData, cashBalance, r
       startY: y,
       margin: { left: 20, right: 20 },
       body: [
-        ['Saldo Awal Kas (01 Januari 2026)', '962.927', 'Beginning Cash Balance'],
-        ['SALDO KAS AKHIR (31 MEI 2026)', '2.950.677', 'ENDING CASH BALANCE']
+        ['Saldo Awal Kas (01 Januari 2026)', formatIdr(financialValues.beginningCash26), 'Beginning Cash Balance'],
+        ['SALDO KAS AKHIR (31 MEI 2026)', formatIdr(financialValues.cash26 + (financialValues.giro26 || 0)), 'ENDING CASH BALANCE']
       ],
       theme: 'grid',
       bodyStyles: { fontSize: 9, cellPadding: 3.5, textColor: [40, 40, 40], lineColor: [210, 210, 210], lineWidth: 0.1 },
@@ -1016,7 +1024,7 @@ export default function FinancialReportingCenter({ portfolioData, cashBalance, r
         code: 'ROA',
         nameInd: 'Return on Assets',
         badge: 'Efficiency',
-        points: [14.5, 12.0, 9.5, 4.2, -1.2, -4.8, currentROA],
+        points: [14.5, 12.0, 9.5, 4.2, -1.2, -4.8, -5.2, currentROA],
         unit: '%',
         colorRgb: [168, 85, 247]
       },
@@ -1024,7 +1032,7 @@ export default function FinancialReportingCenter({ portfolioData, cashBalance, r
         code: 'ROE',
         nameInd: 'Return on Equity',
         badge: 'Profitability',
-        points: [28.2, 22.1, 15.5, 8.4, -2.3, -6.2, currentROE],
+        points: [28.2, 22.1, 15.5, 8.4, -2.3, -6.2, -7.1, currentROE],
         unit: '%',
         colorRgb: [245, 158, 11]
       },
@@ -1032,7 +1040,7 @@ export default function FinancialReportingCenter({ portfolioData, cashBalance, r
         code: 'GPM',
         nameInd: 'Gross Profit Margin',
         badge: 'Margin',
-        points: [18.7, 35.0, 50.0, 75.0, 95.0, 100.0, currentGPM],
+        points: [18.7, 35.0, 50.0, 75.0, 95.0, 100.0, 98.0, currentGPM],
         unit: '%',
         colorRgb: [16, 185, 129]
       },
@@ -1040,13 +1048,13 @@ export default function FinancialReportingCenter({ portfolioData, cashBalance, r
         code: 'CR',
         nameInd: 'Current Ratio',
         badge: 'Solvency',
-        points: [3.2, 4.5, 6.8, 10.2, 12.4, 14.5, currentCR],
+        points: [3.2, 4.5, 6.8, 10.2, 12.4, 14.5, 15.2, currentCR],
         unit: 'x',
         colorRgb: [34, 211, 238]
       }
     ];
 
-    const timeline = ['DES 25', 'JAN 26', 'FEB 26', 'MAR 26', 'APR 26', 'MEI 26', 'JUN 26'];
+    const timeline = ['DES 25', 'JAN 26', 'FEB 26', 'MAR 26', 'APR 26', 'MEI 26', 'JUN 26', 'JUL 26'];
 
     const doc = new jsPDF();
 
@@ -1096,7 +1104,7 @@ export default function FinancialReportingCenter({ portfolioData, cashBalance, r
     doc.setFontSize(8);
     doc.setTextColor(80, 80, 80);
     doc.setFont("helvetica", "normal");
-    doc.text(`Periode: Desember 2025 - Juni 2026 (Periode Fiskal Berjalan / Current Fiscal Period)`, 15, 66);
+    doc.text(`Periode: Desember 2025 - Juli 2026 (Periode Fiskal Berjalan / Current Fiscal Period)`, 15, 66);
     doc.text(`Tanggal Cetak / Printed Date: ${lastUpdateTime} (WIB/Jakarta)`, 15, 70);
 
     // Format grid matrix
@@ -1140,7 +1148,7 @@ export default function FinancialReportingCenter({ portfolioData, cashBalance, r
     doc.setFontSize(7.5);
     doc.setTextColor(110, 110, 110);
     doc.setFont("helvetica", "normal");
-    doc.text('Rasio diplot berurutan dari Desember 2025 s.d Juni 2026 berjalan.', 15, nextY);
+    doc.text('Rasio diplot berurutan dari Desember 2025 s.d Juli 2026 berjalan.', 15, nextY);
     nextY += 5;
 
     // Outer visual background box
