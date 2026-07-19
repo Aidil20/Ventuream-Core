@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { 
   TrendingUp, 
@@ -123,6 +123,9 @@ export const IdxPriceList = () => {
   const [searchQuery, setSearchQuery] = useState('');
   const [showAllTickers, setShowAllTickers] = useState(true);
   
+  const pricesRef = useRef(prices);
+  pricesRef.current = prices;
+  
   // Custom states for TradingView and Google Finance Integration
   const [feedSource, setFeedSourceState] = useState<'tradingview' | 'googlefinance' | 'hybrid'>(() => {
     const existing = localStorage.getItem('vam-feed-source');
@@ -217,28 +220,25 @@ export const IdxPriceList = () => {
     const handleMarketUpdate = (event: any) => {
       const data = event.detail;
       if (data && data.symbol) {
-        setPrices(prev => {
-          const oldPrice = prev[data.symbol]?.price;
-          if (oldPrice !== undefined && oldPrice !== data.price) {
-            const trend = data.price > oldPrice ? 'up' : 'down';
-            setTimeout(() => {
-              setPriceFlash(flash => ({
-                ...flash,
-                [data.symbol]: trend
-              }));
-              setTimeout(() => {
-                setPriceFlash(flash => ({
-                  ...flash,
-                  [data.symbol]: null
-                }));
-              }, 600);
-            }, 0);
-          }
-          return {
-            ...prev,
-            [data.symbol]: data
-          };
-        });
+        const oldPrice = pricesRef.current[data.symbol]?.price;
+        if (oldPrice !== undefined && oldPrice !== data.price) {
+          const trend = data.price > oldPrice ? 'up' : 'down';
+          setPriceFlash(flash => ({
+            ...flash,
+            [data.symbol]: trend
+          }));
+          setTimeout(() => {
+            setPriceFlash(flash => ({
+              ...flash,
+              [data.symbol]: null
+            }));
+          }, 600);
+        }
+
+        setPrices(prev => ({
+          ...prev,
+          [data.symbol]: data
+        }));
 
         setLastUpdate(new Date().toLocaleTimeString('id-ID'));
 

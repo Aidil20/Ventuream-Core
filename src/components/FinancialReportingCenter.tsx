@@ -48,6 +48,7 @@ interface FinancialReportingCenterProps {
   giroBalance?: number;
   realizedPnL?: number;
   totalFees?: number;
+  transactions?: any[];
 }
 
 interface Report {
@@ -75,7 +76,14 @@ interface ExtractedLedger {
   confidence: number;
 }
 
-export default function FinancialReportingCenter({ portfolioData, cashBalance, giroBalance = 711000, realizedPnL = 0, totalFees = 0 }: FinancialReportingCenterProps) {
+export default function FinancialReportingCenter({ 
+  portfolioData, 
+  cashBalance, 
+  giroBalance = 711000, 
+  realizedPnL = 0, 
+  totalFees = 0,
+  transactions = []
+}: FinancialReportingCenterProps) {
   const [activeTab, setActiveTabState] = useState<'REPORTS' | 'SECURE_VAULT'>('REPORTS');
   const [kpiMetric, setKpiMetric] = useState<'ROA' | 'ROE' | 'GPM' | 'CR'>('ROA');
   const [isGenerating, setIsGenerating] = useState(false);
@@ -150,6 +158,7 @@ export default function FinancialReportingCenter({ portfolioData, cashBalance, g
     realizedSecurities26: 0,
     realizedSecurities25: 0,
     tax25: 0,
+    tax26: 0,
 
     // Cash Flow (Rp)
     received26: 456200,
@@ -170,6 +179,12 @@ export default function FinancialReportingCenter({ portfolioData, cashBalance, g
     return portfolioData.map(asset => `${asset.ticker}:${asset.marketValue || 0}:${asset.unrealized || 0}:${asset.currentPrice || 0}`).join('|');
   }, [portfolioData]);
 
+  // Create a fingerprint for transactions to handle dependencies safely
+  const transactionsFingerprint = useMemo(() => {
+    if (!transactions) return '';
+    return transactions.map((tx: any) => `${tx.id}:${tx.side}:${tx.price}:${tx.quantity}`).join('|');
+  }, [transactions]);
+
   // Sync with portfolioData and cashBalance props from custom portfolio rebalancing
   useEffect(() => {
     if (portfolioData && cashBalance !== undefined) {
@@ -183,11 +198,49 @@ export default function FinancialReportingCenter({ portfolioData, cashBalance, g
       const totalLiabilities26 = 0; // shortLiability26 is 0
       const liveRetainedEarnings26 = netTotalAssets26 - totalLiabilities26 - 9300000; // paidCapital26 is 9300000
 
+      // Calculate real-time Revenue (sell transactions) and HPP (buy transactions)
+      const totalSellAmount = (transactions || []).filter((tx: any) => tx.side === 'SELL' || tx.side === 'STOP_LOSS').reduce((acc: number, tx: any) => {
+        const rate = tx.currency === 'USD' ? 16000 : 1;
+        return acc + (tx.quantity * tx.price * rate);
+      }, 0);
+
+      const totalBuyAmount = (transactions || []).filter((tx: any) => tx.side === 'BUY').reduce((acc: number, tx: any) => {
+        const rate = tx.currency === 'USD' ? 16000 : 1;
+        return acc + (tx.quantity * tx.price * rate);
+      }, 0);
+
+      const liveRev26 = 456200 + totalSellAmount;
+      const liveHpp26 = 0 - totalBuyAmount;
+
+      // Calculate real-time tax from buy and sell fees
+      const totalBuyFees = (transactions || []).filter((tx: any) => tx.side === 'BUY').reduce((acc: number, tx: any) => {
+        const rate = tx.currency === 'USD' ? 16000 : 1;
+        const val = tx.quantity * tx.price * rate;
+        return acc + (val * 0.0018);
+      }, 0);
+
+      const totalSellFees = (transactions || []).filter((tx: any) => tx.side === 'SELL' || tx.side === 'STOP_LOSS').reduce((acc: number, tx: any) => {
+        const rate = tx.currency === 'USD' ? 16000 : 1;
+        const val = tx.quantity * tx.price * rate;
+        return acc + (val * 0.0029);
+      }, 0);
+
+      const sellTaxPPh = (transactions || []).filter((tx: any) => tx.side === 'SELL' || tx.side === 'STOP_LOSS').reduce((acc: number, tx: any) => {
+        const rate = tx.currency === 'USD' ? 16000 : 1;
+        return acc + (tx.quantity * tx.price * rate * 0.001); // 0.1% PPh Final
+      }, 0);
+
+      const vatOnFees = (totalBuyFees + (totalSellFees - sellTaxPPh)) * 0.11; // 11% VAT on commission portion
+      const liveTax26 = 0 - Math.round(sellTaxPPh + vatOnFees); // Store as a negative expense
+
+      // Subtract the tax portion from the totalFees to get the pure operating expense burden
+      const liveOpex26 = -575000 - (totalFees - Math.abs(liveTax26));
+
       // Dynamic Cash Flows to make Balance Sheet always balance with Income & Cash flow logically
       const liveOpexOut26 = -575000 - totalFees;
-      const liveReceived26 = 456200;
+      const liveReceived26 = liveRev26;
       const liveBeginningCash26 = 989908.69;
-      const liveCfOperating26 = liveReceived26 + liveOpexOut26; // 456200 - 575000 - totalFees = -118800 - totalFees
+      const liveCfOperating26 = liveReceived26 + liveOpexOut26; // liveRev26 - 575000 - totalFees
       const liveCfFinancing26 = 7300000;
       const liveCfInvesting26 = liveCash26 - liveBeginningCash26 - liveCfOperating26 - liveCfFinancing26;
 
@@ -200,10 +253,14 @@ export default function FinancialReportingCenter({ portfolioData, cashBalance, g
           prev.unrealizedSecurities26 === liveUnrealizedSecurities26 &&
           prev.realizedSecurities26 === realizedPnL &&
           prev.retainedEarnings26 === liveRetainedEarnings26 &&
-          prev.operatingExpense26 === (-575000 - totalFees) &&
+          prev.operatingExpense26 === liveOpex26 &&
+          prev.tax26 === liveTax26 &&
           prev.operatingExpenseOut26 === liveOpexOut26 &&
           prev.investOut26 === liveCfInvesting26 &&
-          prev.beginningCash26 === liveBeginningCash26
+          prev.beginningCash26 === liveBeginningCash26 &&
+          prev.rev26 === liveRev26 &&
+          prev.hpp26 === liveHpp26 &&
+          prev.received26 === liveReceived26
         ) {
           return prev;
         }
@@ -216,10 +273,14 @@ export default function FinancialReportingCenter({ portfolioData, cashBalance, g
           unrealizedSecurities26: liveUnrealizedSecurities26,
           realizedSecurities26: realizedPnL,
           retainedEarnings26: liveRetainedEarnings26,
-          operatingExpense26: -575000 - totalFees, // Sync transaction fees as operating expense burden
+          operatingExpense26: liveOpex26,           // Sync transaction fees without tax portion as operating expense
+          tax26: liveTax26,                         // Sync tax portion of fees as Tax expense
           operatingExpenseOut26: liveOpexOut26,     // Sync transaction fees as operating cash outflow
           investOut26: liveCfInvesting26,           // Balanced investment outflow/inflow matching ending ledger cash
           beginningCash26: liveBeginningCash26,
+          rev26: liveRev26,
+          hpp26: liveHpp26,
+          received26: liveReceived26,
         };
       });
 
@@ -233,7 +294,7 @@ export default function FinancialReportingCenter({ portfolioData, cashBalance, g
         return formatTime;
       });
     }
-  }, [portfolioFingerprint, cashBalance, giroBalance, realizedPnL, totalFees]);
+  }, [portfolioFingerprint, cashBalance, giroBalance, realizedPnL, totalFees, transactionsFingerprint]);
 
   // Keep report lastUpdate values synced with lastUpdateTime
   useEffect(() => {
@@ -346,7 +407,7 @@ export default function FinancialReportingCenter({ portfolioData, cashBalance, g
     const netTotalPasiva25 = totalLiabilities25 + totalEquity25;
 
     // Laba Rugi
-    const netOperatingProfit26 = financialValues.rev26 + financialValues.hpp26 + financialValues.operatingExpense26 + financialValues.depreciationExpense26 + financialValues.interestIncome26 + (financialValues.realizedSecurities26 || 0);
+    const netOperatingProfit26 = financialValues.rev26 + financialValues.hpp26 + financialValues.operatingExpense26 + financialValues.depreciationExpense26 + financialValues.interestIncome26 + (financialValues.realizedSecurities26 || 0) + (financialValues.tax26 || 0);
     const netOperatingProfit25 = financialValues.rev25 + financialValues.hpp25 + financialValues.operatingExpense25 + financialValues.depreciationExpense25 + financialValues.interestIncome25 + (financialValues.realizedSecurities25 || 0) + (financialValues.tax25 || 0);
 
     const totalComprehensiveProfit26 = netOperatingProfit26 + financialValues.unrealizedSecurities26;
@@ -374,8 +435,7 @@ export default function FinancialReportingCenter({ portfolioData, cashBalance, g
           titleEng: 'CONSOLIDATED STATEMENT OF FINANCIAL POSITION',
           rows: [
             { labelInd: 'ASET LANCAR', labelEng: 'CURRENT ASSETS', val26: formatIdr(netCurrentAssets26), val25: formatIdr(netCurrentAssets25), isBold: true },
-            { labelInd: 'Kas dan Setara Kas (RDN/Bank)', labelEng: 'Cash and Cash Equivalents', val26: formatIdr(financialValues.cash26), val25: formatIdr(financialValues.cash25) },
-            { labelInd: 'Saldo Rekening Giro (2026) / Unrealized Gain Portfolio (2025)', labelEng: 'Giro Account Balance (2026) / Unrealized Gain Portfolio (2025)', val26: formatIdr(financialValues.giro26 || 0), val25: formatIdr(financialValues.giro25 || 0) },
+            { labelInd: 'Kas dan Setara Kas (Bank, RDN & Giro)', labelEng: 'Cash and Cash Equivalents', val26: formatIdr(financialValues.cash26 + (financialValues.giro26 || 0)), val25: formatIdr(financialValues.cash25 + (financialValues.giro25 || 0)) },
             { labelInd: 'Portofolio Saham & Efek (2026) / Investasi Saham At Cost (2025)', labelEng: 'Securities Portfolio (2026) / Stock Investments At Cost (2025)', val26: formatIdr(financialValues.invest26), val25: formatIdr(financialValues.invest25) },
             { labelInd: 'TOTAL ASET LANCAR', labelEng: 'TOTAL CURRENT ASSETS', val26: formatIdr(netCurrentAssets26), val25: formatIdr(netCurrentAssets25), isBold: true },
             
@@ -408,7 +468,7 @@ export default function FinancialReportingCenter({ portfolioData, cashBalance, g
             { labelInd: 'Beban Penyusutan Aset', labelEng: 'Depreciation Expenses', val26: formatIdr(financialValues.depreciationExpense26, true), val25: formatIdr(financialValues.depreciationExpense25, true) },
             { labelInd: 'Hasil Bunga RDN & Lainnya', labelEng: 'Interest Income & Others', val26: formatIdr(financialValues.interestIncome26), val25: formatIdr(financialValues.interestIncome25) },
             { labelInd: 'Laba (Rugi) Direalisasikan (Rebalancing)', labelEng: 'Realized Gain / (Loss) on Portfolio Rebalancing', val26: formatIdr(financialValues.realizedSecurities26 || 0, true), val25: formatIdr(financialValues.realizedSecurities25 || 0, true) },
-            { labelInd: 'Pajak Penghasilan (Estimasi)', labelEng: 'Income Tax (Estimated)', val26: '-', val25: formatIdr(financialValues.tax25 || 0, true) },
+            { labelInd: 'Pajak Penghasilan (Estimasi)', labelEng: 'Income Tax (Estimated)', val26: formatIdr(financialValues.tax26 || 0, true), val25: formatIdr(financialValues.tax25 || 0, true) },
             
             { labelInd: 'LABA (RUGI) BERSIH OPERASIONAL YTD', labelEng: 'NET INCOME (LOSS) FROM OPERATIONS YTD', val26: formatIdr(netOperatingProfit26, true), val25: formatIdr(netOperatingProfit25, true), isBold: true },
             
@@ -483,7 +543,7 @@ export default function FinancialReportingCenter({ portfolioData, cashBalance, g
     const totalEquity26 = financialValues.paidCapital26 + financialValues.retainedEarnings26;
     const totalEquity25 = financialValues.paidCapital25 + financialValues.retainedEarnings25;
 
-    const netOperatingProfit26 = financialValues.rev26 + financialValues.hpp26 + financialValues.operatingExpense26 + financialValues.depreciationExpense26 + financialValues.interestIncome26 + (financialValues.realizedSecurities26 || 0);
+    const netOperatingProfit26 = financialValues.rev26 + financialValues.hpp26 + financialValues.operatingExpense26 + financialValues.depreciationExpense26 + financialValues.interestIncome26 + (financialValues.realizedSecurities26 || 0) + (financialValues.tax26 || 0);
     const netOperatingProfit25 = financialValues.rev25 + financialValues.hpp25 + financialValues.operatingExpense25 + financialValues.depreciationExpense25 + financialValues.interestIncome25 + (financialValues.realizedSecurities25 || 0) + (financialValues.tax25 || 0);
 
     const totalComprehensiveProfit26 = netOperatingProfit26 + financialValues.unrealizedSecurities26;
@@ -552,8 +612,7 @@ export default function FinancialReportingCenter({ portfolioData, cashBalance, g
       body: [
         ['ASET', '-', 'ASSETS'],
         ['Aset Lancar', '-', 'Current Assets'],
-        ['Kas Dana Nasabah (RDN)', formatIdr(financialValues.cash26), 'Cash Equivalents (RDN)'],
-        ['Kas Rekening Giro Perusahaan', formatIdr(financialValues.giro26 || 0), 'Giro Account Cash'],
+        ['Kas dan Setara Kas (Bank, RDN & Giro)', formatIdr(financialValues.cash26 + (financialValues.giro26 || 0)), 'Cash and Cash Equivalents'],
         ['Portofolio Saham & Efek ¹', formatIdr(financialValues.invest26) + ' ¹', 'Securities Portfolio ¹'],
         ['Total Aset Lancar', formatIdr(financialValues.cash26 + (financialValues.giro26 || 0) + financialValues.invest26), 'Total Current Assets'],
         ['Aset Tetap', '-', 'Non-Current Assets'],
@@ -570,7 +629,7 @@ export default function FinancialReportingCenter({ portfolioData, cashBalance, g
       },
       didParseCell: (data) => {
         const idx = data.row.index;
-        const isHeaderRow = idx === 0 || idx === 1 || idx === 5 || idx === 6 || idx === 8;
+        const isHeaderRow = idx === 0 || idx === 1 || idx === 4 || idx === 5 || idx === 7;
         if (isHeaderRow && data.section === 'body') {
           data.cell.styles.fontStyle = 'bold';
           data.cell.styles.textColor = [15, 15, 15];
@@ -780,7 +839,7 @@ export default function FinancialReportingCenter({ portfolioData, cashBalance, g
       head: [['Pos Posisi Keuangan', 'Realisasi Buku 31 Des 2025 (IDR)', 'Realisasi Organik 31 Mei 2026 (IDR)', 'Perubahan (%)']],
       body: [
         ['Aset Lancar', '', '', ''],
-        ['Kas dan Setara Kas (Bank & RDN)', formatIdr(financialValues.cash25), formatIdr(financialValues.cash26), pctChange(financialValues.cash26, financialValues.cash25)],
+        ['Kas dan Setara Kas (Bank, RDN & Giro)', formatIdr(financialValues.cash25 + (financialValues.giro25 || 0)), formatIdr(financialValues.cash26 + (financialValues.giro26 || 0)), pctChange(financialValues.cash26 + (financialValues.giro26 || 0), financialValues.cash25 + (financialValues.giro25 || 0))],
         ['Portofolio Saham & Efek (Nilai Pasar) ¹', formatIdr(financialValues.invest25) + ' ¹', formatIdr(financialValues.invest26) + ' ¹', pctChange(financialValues.invest26, financialValues.invest25)],
         ['Total Aset Lancar', formatIdr(netCurrentAssets25), formatIdr(netCurrentAssets26), pctChange(netCurrentAssets26, netCurrentAssets25)],
         ['Aset Tetap / Tidak Lancar', '', '', ''],
@@ -851,11 +910,13 @@ export default function FinancialReportingCenter({ portfolioData, cashBalance, g
     doc.setFont("helvetica", "normal");
     doc.setTextColor(60, 60, 60);
 
-    const cashGrowthStr = pctChange(financialValues.cash26, financialValues.cash25);
-    const hasCashGrown = financialValues.cash26 > financialValues.cash25;
+    const totalCash26 = financialValues.cash26 + (financialValues.giro26 || 0);
+    const totalCash25 = financialValues.cash25 + (financialValues.giro25 || 0);
+    const cashGrowthStr = pctChange(totalCash26, totalCash25);
+    const hasCashGrown = totalCash26 > totalCash25;
     const cashCommentary = hasCashGrown
-      ? `Saldo kas riil (rekening bank dan RDN) bertumbuh sebesar ${cashGrowthStr} menjadi IDR ${formatIdr(financialValues.cash26)} per 31 Mei 2026.¹ Pertumbuhan ini didorong oleh realokasi dana taktis oleh pemegang saham.`
-      : `Saldo kas riil (rekening bank dan RDN) terkoreksi sebesar ${cashGrowthStr} menjadi IDR ${formatIdr(financialValues.cash26)} per 31 Mei 2026.¹ Penyesuaian ini mencerminkan alokasi dana ditarik atau ditempatkan pada aset investasi modal reguler.`;
+      ? `Saldo kas dan setara kas (rekening bank, RDN, dan giro) bertumbuh sebesar ${cashGrowthStr} menjadi IDR ${formatIdr(totalCash26)} per 31 Mei 2026.¹ Pertumbuhan ini didorong oleh realokasi dana taktis oleh pemegang saham.`
+      : `Saldo kas dan setara kas (rekening bank, RDN, dan giro) terkoreksi sebesar ${cashGrowthStr} menjadi IDR ${formatIdr(totalCash26)} per 31 Mei 2026.¹ Penyesuaian ini mencerminkan alokasi dana ditarik atau ditempatkan pada aset investasi modal reguler.`;
 
     y = writeParagraph(doc, cashCommentary, 24, y + 4.5, 166, 5) + 3;
 

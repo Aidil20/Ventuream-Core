@@ -66,6 +66,51 @@ const getPerformanceArray = (ticker: string): number[] => {
   return result;
 };
 
+const getDeterministicVolume = (ticker: string, currentPrice: number): { shares: number; value: number } => {
+  const clean = ticker.replace('.JK', '').toUpperCase();
+  let hash = 0;
+  for (let i = 0; i < clean.length; i++) {
+    hash = clean.charCodeAt(i) + ((hash << 5) - hash);
+  }
+  
+  // Deterministic base volume (in lots)
+  const baseLots = 2000 + (Math.abs(hash) % 48000);
+  const shares = baseLots * 100;
+  const value = shares * currentPrice;
+  return { shares, value };
+};
+
+const formatVolume = (val: number): string => {
+  if (val >= 1_000_000_000) {
+    return `${(val / 1_000_000_000).toFixed(2)}B`;
+  }
+  if (val >= 1_000_000) {
+    return `${(val / 1_000_000).toFixed(1)}M`;
+  }
+  if (val >= 1_000) {
+    return `${(val / 1_000).toFixed(0)}K`;
+  }
+  return val.toString();
+};
+
+const getDeterministic24hRange = (ticker: string, currentPrice: number) => {
+  const clean = ticker.replace('.JK', '').toUpperCase();
+  let hash = 0;
+  for (let i = 0; i < clean.length; i++) {
+    hash = clean.charCodeAt(i) + ((hash << 5) - hash);
+  }
+  const variancePercent = 0.5 + ((Math.abs(hash) % 40) / 10); // 0.5% to 4.5% range
+  const low = currentPrice * (1 - variancePercent / 100);
+  const high = currentPrice * (1 + variancePercent / 100);
+  const percentPos = ((currentPrice - low) / (high - low)) * 100;
+  
+  let trendLabel = 'Stable';
+  if (percentPos > 70) trendLabel = 'Bullish';
+  else if (percentPos < 30) trendLabel = 'Bearish';
+  
+  return { low, high, percentPos, trendLabel };
+};
+
 export default function HoldingCard({ 
   asset, 
   idx, 
@@ -76,7 +121,7 @@ export default function HoldingCard({
   alertConfig,
   onSaveAlert
 }: HoldingCardProps) {
-  const [prevPrice, setPrevPrice] = useState<number>(asset.marketValue);
+  const prevPriceRef = useRef<number>(asset.marketValue || 0);
   const [pulseType, setPulseType] = useState<'up' | 'down' | null>(null);
   const timerRef = useRef<NodeJS.Timeout | null>(null);
 
@@ -88,25 +133,26 @@ export default function HoldingCard({
   const [alertType, setAlertType] = useState<'above' | 'below'>(alertConfig?.type || 'above');
   const [alertActive, setAlertActive] = useState(alertConfig?.active || false);
 
-  // Sync state if alertConfig changes externally
+  // Sync state if alertConfig changes externally or when opening the alert panel
   useEffect(() => {
     if (alertConfig) {
       setTargetPriceInput(alertConfig.targetPrice.toString());
       setAlertType(alertConfig.type);
       setAlertActive(alertConfig.active);
-    } else {
+    } else if (isAlertPanelOpen) {
       setTargetPriceInput(unitPrice.toFixed(0));
     }
-  }, [alertConfig, unitPrice]);
+  }, [alertConfig, isAlertPanelOpen, unitPrice]);
 
   useEffect(() => {
-    if (asset.marketValue !== prevPrice) {
-      if (asset.marketValue > prevPrice) {
+    const prev = prevPriceRef.current;
+    if (asset.marketValue !== prev) {
+      if (asset.marketValue > prev) {
         setPulseType('up');
-      } else {
+      } else if (asset.marketValue < prev) {
         setPulseType('down');
       }
-      setPrevPrice(asset.marketValue);
+      prevPriceRef.current = asset.marketValue || 0;
 
       if (timerRef.current) clearTimeout(timerRef.current);
       timerRef.current = setTimeout(() => {
@@ -131,6 +177,9 @@ export default function HoldingCard({
   const dailyChangeVal = typeof asset.dailyChange === 'number' ? asset.dailyChange : 0;
   const isDailyGain = dailyChangeVal >= 0;
 
+  const vol = getDeterministicVolume(asset.ticker, unitPrice);
+  const range = getDeterministic24hRange(asset.ticker, unitPrice);
+
   // Render sub-elements with dynamic color states based on recent flash triggers
   const getFlashBorderClass = () => {
     if (pulseType === 'up') return 'border-emerald-500 shadow-[0_0_15px_rgba(16,185,129,0.15)] bg-slate-900/60';
@@ -151,6 +200,14 @@ export default function HoldingCard({
   const scaledPerformancePrices = rawPerf.map((val: number) => {
     return (val / lastRawVal) * unitPrice;
   });
+
+  // Calculate 5-day average price from scaledPerformancePrices
+  const lastFivePrices = scaledPerformancePrices.slice(-5);
+  const fiveDayAvg = lastFivePrices.length > 0 
+    ? lastFivePrices.reduce((sum: number, p: number) => sum + p, 0) / lastFivePrices.length
+    : unitPrice;
+  const isTrendingUp = unitPrice >= fiveDayAvg;
+  const momentumPercent = fiveDayAvg > 0 ? ((unitPrice - fiveDayAvg) / fiveDayAvg) * 100 : 0;
 
   const handleSave = (e: React.MouseEvent) => {
     e.stopPropagation();
@@ -211,17 +268,17 @@ export default function HoldingCard({
           )}
         </AnimatePresence>
 
-        <div className="flex items-center gap-3 relative z-10 w-1/3 min-w-[120px]">
+        <div className="flex items-center gap-3 relative z-10 w-[40%] min-w-[160px]">
           <div className={`w-10 h-10 rounded-xl bg-slate-800 flex items-center justify-center text-[10px] font-bold text-slate-400 border transition-all duration-300 group-hover:bg-slate-750 ${
             pulseType === 'up' ? 'border-emerald-500/40 text-emerald-400' :
             pulseType === 'down' ? 'border-red-500/40 text-red-400' :
             'border-slate-700/50 group-hover:border-[#deff9a]/30'
-          } uppercase`}>
+          } uppercase flex-shrink-0`}>
             {tickerCode}
           </div>
-          <div>
+          <div className="flex-1 min-w-0">
             <div className="flex items-center gap-1.5">
-              <span className="font-black text-sm text-slate-100 uppercase tracking-wide group-hover:text-white transition-colors">
+              <span className="font-black text-sm text-slate-100 uppercase tracking-wide group-hover:text-white transition-colors truncate">
                 {tickerCode}
               </span>
               <AnimatePresence mode="popLayout">
@@ -230,7 +287,7 @@ export default function HoldingCard({
                     initial={{ opacity: 0, scale: 0.4, y: 3 }}
                     animate={{ opacity: 1, scale: 1, y: 0 }}
                     exit={{ opacity: 0, y: -3 }}
-                    className={`text-[8px] font-bold px-1 py-0.2 rounded font-mono uppercase tracking-widest ${
+                    className={`text-[8px] font-bold px-1 py-0.2 rounded font-mono uppercase tracking-widest flex-shrink-0 ${
                       pulseType === 'up' ? 'bg-emerald-950/40 text-emerald-400' : 'bg-red-950/40 text-red-400'
                     }`}
                   >
@@ -256,6 +313,36 @@ export default function HoldingCard({
                 </>
               )}
             </p>
+            <div className="flex items-center gap-1.5 mt-1.5 text-[9px] font-mono flex-wrap">
+              <span className="bg-slate-950 text-slate-400 px-1.5 py-0.5 rounded border border-slate-800/60 font-medium">
+                Vol: {formatVolume(vol.shares)}
+              </span>
+              <span className={`text-[8px] px-1 py-0.5 rounded font-bold uppercase tracking-wider border transition-all duration-300 ${
+                range.percentPos > 70 
+                  ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20 shadow-[0_0_8px_rgba(16,185,129,0.1)]' 
+                  : range.percentPos < 30 
+                    ? 'bg-rose-500/10 text-rose-400 border-rose-500/20 shadow-[0_0_8px_rgba(244,63,94,0.1)]' 
+                    : 'bg-slate-950 text-slate-500 border-slate-800/60'
+              }`}>
+                {range.trendLabel}
+              </span>
+              <span 
+                id={`holding-${tickerCode}-momentum-badge`}
+                className={`text-[8px] px-1.5 py-0.5 rounded font-bold uppercase tracking-wider border transition-all duration-300 flex items-center gap-1 ${
+                  isTrendingUp 
+                    ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20 shadow-[0_0_8px_rgba(16,185,129,0.1)]' 
+                    : 'bg-rose-500/10 text-rose-400 border-rose-500/20 shadow-[0_0_8px_rgba(244,63,94,0.1)]'
+                }`}
+                title={`Current price is ${momentumPercent >= 0 ? 'above' : 'below'} the 5-day average (Rp ${fiveDayAvg.toLocaleString('id-ID', { maximumFractionDigits: 1 })}) by ${Math.abs(momentumPercent).toFixed(2)}%`}
+              >
+                {isTrendingUp ? (
+                  <TrendingUp className="w-3 h-3" />
+                ) : (
+                  <TrendingDown className="w-3 h-3" />
+                )}
+                <span>5D: {momentumPercent >= 0 ? '+' : ''}{momentumPercent.toFixed(1)}%</span>
+              </span>
+            </div>
           </div>
         </div>
 

@@ -414,6 +414,23 @@ export default function App() {
   const [selectedSymbol, setSelectedSymbol] = useState('IDX:COMPOSITE');
   const [assetsData, setAssetsData] = useState(ASSETS);
   const [activeTab, setActiveTab] = useState('home');
+  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+  const [autoSyncEnabled, setAutoSyncEnabled] = useState(() => {
+    try {
+      const saved = localStorage.getItem('vam_auto_sync_enabled');
+      return saved !== null ? saved === 'true' : true;
+    } catch (e) {
+      return true;
+    }
+  });
+  const handleSetAutoSyncEnabled = (val: boolean) => {
+    setAutoSyncEnabled(val);
+    try {
+      localStorage.setItem('vam_auto_sync_enabled', String(val));
+    } catch (e) {
+      console.error(e);
+    }
+  };
   const [activeScannerMarket, setActiveScannerMarket] = useState<'IDX' | 'GLOBAL' | null>(null);
   const [activeScannerModule, setActiveScannerModule] = useState<string | null>(null);
   const [expandedMarket, setExpandedMarket] = useState<string | null>(null);
@@ -489,6 +506,37 @@ export default function App() {
 
   useEffect(() => {
     localStorage.setItem('cgsAssets_v3', JSON.stringify(cgsAssets));
+  }, [cgsAssets]);
+
+  useEffect(() => {
+    setPortfolioData(prev => {
+      return cgsAssets.map(asset => {
+        const existing = prev.find(p => p.ticker.toUpperCase() === asset.ticker.toUpperCase());
+        const currentPrice = existing?.currentPrice || asset.marketPrice || asset.averagePrice || 0;
+        const changePercentFromSource = existing?.dailyChange || 0;
+
+        const lots = new Decimal(asset.lots);
+        const avgPrice = new Decimal(asset.averagePrice);
+        const multiplier = new Decimal(100);
+
+        const totalCost = avgPrice.times(lots).times(multiplier);
+        const marketValue = new Decimal(currentPrice).times(lots).times(multiplier);
+        const unrealized = marketValue.minus(totalCost);
+        const change = avgPrice.isZero() ? new Decimal(0) : new Decimal(currentPrice).minus(avgPrice).div(avgPrice).times(multiplier);
+
+        return {
+          ticker: asset.ticker,
+          lots: asset.lots,
+          averagePrice: asset.averagePrice,
+          marketPrice: asset.marketPrice,
+          currentPrice: currentPrice,
+          change: change.toNumber(),
+          marketValue: marketValue.toNumber(),
+          unrealized: unrealized.toNumber(),
+          dailyChange: changePercentFromSource
+        };
+      });
+    });
   }, [cgsAssets]);
 
   useEffect(() => {
@@ -715,6 +763,11 @@ export default function App() {
         "Refresh Market Data": "Segarkan Data Pasar",
         "Refresh Market": "Segarkan Pasar",
         "Refreshing...": "Menyegarkan...",
+        "System Settings": "Pengaturan Sistem",
+        "Auto-sync market data": "Sinkronisasi Otomatis Data Pasar",
+        "Allows users to pause the 15-second background price refreshing to save mobile data.": "Memungkinkan pengguna untuk menjeda penyegaran harga latar belakang 15 detik untuk menghemat data seluler.",
+        "Data Source": "Sumber Data",
+        "Network Rate": "Kecepatan Jaringan",
       },
       EN: {
         "Dashboard Utama": "Main Dashboard",
@@ -756,6 +809,11 @@ export default function App() {
         "Refresh Market Data": "Refresh Market Data",
         "Refresh Market": "Refresh Market",
         "Refreshing...": "Refreshing...",
+        "System Settings": "System Settings",
+        "Auto-sync market data": "Auto-sync market data",
+        "Allows users to pause the 15-second background price refreshing to save mobile data.": "Allows users to pause the 15-second background price refreshing to save mobile data.",
+        "Data Source": "Data Source",
+        "Network Rate": "Network Rate",
       }
     };
     return translations[language][key] || key;
@@ -1196,7 +1254,7 @@ export default function App() {
     const updatedThresholds = { ...alertThresholds };
 
     portfolioData.forEach(asset => {
-      const config = updatedThresholds[asset.ticker];
+      const config = alertThresholds[asset.ticker];
       if (config && config.active) {
         const currentPrice = asset.currentPrice || asset.marketPrice;
         if (!currentPrice) return;
@@ -1216,12 +1274,17 @@ export default function App() {
               condition: config.type === 'above' ? 'gt' : 'lt',
               timestamp: Date.now()
             });
-            config.lastTriggeredPrice = currentPrice;
+            updatedThresholds[asset.ticker] = {
+              ...config,
+              lastTriggeredPrice: currentPrice
+            };
             thresholdsUpdated = true;
           }
         } else {
           if (config.lastTriggeredPrice !== undefined) {
-            delete config.lastTriggeredPrice;
+            const nextConfig = { ...config };
+            delete nextConfig.lastTriggeredPrice;
+            updatedThresholds[asset.ticker] = nextConfig;
             thresholdsUpdated = true;
           }
         }
@@ -1427,11 +1490,6 @@ export default function App() {
   }, [updateCGSPrices]);
 
   useEffect(() => {
-    updatePricesRef.current();
-    const portfolioInterval = setInterval(() => {
-      updatePricesRef.current();
-    }, 15000); // Live sync every 15 seconds
-    
     // Listen to manual or automatic feed source updates
     const handleSourceChange = () => {
       updatePricesRef.current();
@@ -1440,11 +1498,23 @@ export default function App() {
     window.addEventListener('vam-force-market-refresh', handleSourceChange);
     
     return () => {
-      clearInterval(portfolioInterval);
       window.removeEventListener('vam-feed-source-changed', handleSourceChange);
       window.removeEventListener('vam-force-market-refresh', handleSourceChange);
     };
   }, []);
+
+  useEffect(() => {
+    if (autoSyncEnabled) {
+      updatePricesRef.current();
+      const portfolioInterval = setInterval(() => {
+        updatePricesRef.current();
+      }, 15000); // Live sync every 15 seconds
+      
+      return () => {
+        clearInterval(portfolioInterval);
+      };
+    }
+  }, [autoSyncEnabled]);
 
   const updateInsights = useCallback(async () => {
     if (isFetchingRef.current) return;
@@ -1896,17 +1966,19 @@ export default function App() {
   useEffect(() => {
     // The high-freq tick and sync logic is now handled by the WebSocket stream in the previous useEffect.
     // We only keep a very occasional background sync for general metadata.
-    const backgroundSyncInterval = setInterval(() => {
-      if (!isMarketSyncingRef.current) {
-        updateStocks();
-        updateMarketNews();
-        syncMarketConnectivity();
-      }
-    }, 120000); // 2 minutes
-    
-    return () => clearInterval(backgroundSyncInterval);
+    if (autoSyncEnabled) {
+      const backgroundSyncInterval = setInterval(() => {
+        if (!isMarketSyncingRef.current) {
+          updateStocks();
+          updateMarketNews();
+          syncMarketConnectivity();
+        }
+      }, 120000); // 2 minutes
+      
+      return () => clearInterval(backgroundSyncInterval);
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [autoSyncEnabled]);
 
   // Handle custom manual market refresh requested from child components
   useEffect(() => {
@@ -3497,7 +3569,7 @@ export default function App() {
               </button>
               <h3 className="text-sm font-semibold text-slate-300 uppercase tracking-widest">Financial Reporting Ecosystem</h3>
             </div>
-            <FinancialReportingCenter portfolioData={portfolioData} cashBalance={cgsCashBalance} giroBalance={cgsGiroBalance} realizedPnL={cgsRealizedPnL} totalFees={cgsTotalFees} />
+            <FinancialReportingCenter portfolioData={portfolioData} cashBalance={cgsCashBalance} giroBalance={cgsGiroBalance} realizedPnL={cgsRealizedPnL} totalFees={cgsTotalFees} transactions={history} />
           </div>
         );
       case 'archive':
@@ -3573,7 +3645,7 @@ export default function App() {
       case 'my-company':
         return <MyCompanyOverview />;
       case 'audit-sync':
-        return <AuditSync />;
+        return <AuditSync autoSyncEnabled={autoSyncEnabled} />;
       case 'vamsmartscanner':
         return <VamSmartScanner />;
       case 'users':
@@ -3952,6 +4024,93 @@ export default function App() {
                 >
                   {language}
                 </button>
+              </div>
+
+              {/* Global Settings Menu */}
+              <div className="relative">
+                <button
+                  onClick={() => setIsSettingsOpen(!isSettingsOpen)}
+                  title={t('System Settings')}
+                  id="header-settings-button"
+                  className={`flex items-center justify-center w-8 h-8 rounded-xl border text-slate-400 hover:text-white transition-all duration-200 cursor-pointer ${
+                    isSettingsOpen
+                      ? 'bg-[#DFFF00]/10 border-[#DFFF00]/30 text-[#DFFF00]'
+                      : 'bg-zinc-950 border-zinc-800 hover:bg-zinc-900/40 hover:border-zinc-700'
+                  }`}
+                >
+                  <Settings2 className={`w-4 h-4 ${isSettingsOpen ? 'rotate-45' : ''} transition-transform duration-300`} />
+                </button>
+
+                <AnimatePresence>
+                  {isSettingsOpen && (
+                    <>
+                      {/* Invisible backdrop to close on outside click */}
+                      <div 
+                        className="fixed inset-0 z-40" 
+                        onClick={() => setIsSettingsOpen(false)}
+                      />
+                      <motion.div
+                        initial={{ opacity: 0, y: 10, scale: 0.95 }}
+                        animate={{ opacity: 1, y: 0, scale: 1 }}
+                        exit={{ opacity: 0, y: 10, scale: 0.95 }}
+                        transition={{ duration: 0.15 }}
+                        className="absolute right-0 mt-2 w-72 bg-zinc-950 border border-zinc-800 rounded-2xl p-4 shadow-2xl z-50 text-left"
+                      >
+                        <div className="flex flex-col gap-4">
+                          <div className="flex items-center justify-between pb-2 border-b border-zinc-800/80">
+                            <h3 className="text-xs font-black uppercase tracking-wider text-white">
+                              {t('System Settings')}
+                            </h3>
+                            <span className="text-[9px] text-[#DFFF00] font-mono font-bold bg-[#DFFF00]/10 px-2 py-0.5 rounded-full">
+                              V1.2
+                            </span>
+                          </div>
+
+                          {/* Auto-Sync Toggle */}
+                          <div className="flex items-start justify-between gap-4">
+                            <div className="flex flex-col gap-1">
+                              <span className="text-xs font-bold text-slate-200">
+                                {t('Auto-sync market data')}
+                              </span>
+                              <span className="text-[10px] text-zinc-500 leading-normal">
+                                {t('Allows users to pause the 15-second background price refreshing to save mobile data.')}
+                              </span>
+                            </div>
+                            
+                            {/* Toggle Switch */}
+                            <button
+                              onClick={() => handleSetAutoSyncEnabled(!autoSyncEnabled)}
+                              id="settings-autosync-toggle"
+                              className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${
+                                autoSyncEnabled ? 'bg-[#DFFF00]' : 'bg-zinc-800'
+                              }`}
+                            >
+                              <span
+                                className={`pointer-events-none inline-block h-4 w-4 transform rounded-full bg-black shadow ring-0 transition duration-200 ease-in-out ${
+                                  autoSyncEnabled ? 'translate-x-4' : 'translate-x-0'
+                                }`}
+                              />
+                            </button>
+                          </div>
+
+                          {/* Connection Status Detail */}
+                          <div className="pt-2 border-t border-zinc-800/80 flex flex-col gap-1 text-[10px]">
+                            <div className="flex justify-between">
+                              <span className="text-zinc-500">{t('Data Source')}:</span>
+                              <span className="text-zinc-300 font-mono">IBKR / CGS-CIMB</span>
+                            </div>
+                            <div className="flex justify-between">
+                              <span className="text-zinc-500">{t('Network Rate')}:</span>
+                              <span className="text-zinc-300 font-mono">
+                                {autoSyncEnabled ? '15s Interval' : 'Paused'}
+                              </span>
+                            </div>
+                          </div>
+                        </div>
+                      </motion.div>
+                    </>
+                  )}
+                </AnimatePresence>
               </div>
 
               {/* Manual Market Refresh Button */}

@@ -114,7 +114,7 @@ const INITIAL_LOGS: AuditLog[] = [
   }
 ];
 
-export function AuditSync() {
+export function AuditSync({ autoSyncEnabled = true }: { autoSyncEnabled?: boolean } = {}) {
   // State for active tickers list
   const [tickersList, setTickersList] = useState<typeof DEFAULT_TICKERS>(() => {
     try {
@@ -279,12 +279,13 @@ export function AuditSync() {
 
   // Handle auto-refresh in background every 15 seconds
   useEffect(() => {
+    if (!autoSyncEnabled) return;
     handleFetchPrices();
     const interval = setInterval(() => {
       handleFetchPrices();
     }, 15000);
     return () => clearInterval(interval);
-  }, [handleFetchPrices]);
+  }, [handleFetchPrices, autoSyncEnabled]);
 
   // Build dynamic detailed ticker state (drift%, status categories)
   const auditedTickersList = useMemo<TickerAuditData[]>(() => {
