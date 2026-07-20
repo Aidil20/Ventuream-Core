@@ -57,6 +57,7 @@ const TICKER_TO_SECTOR: Record<string, string> = {
   'DEFI.JK': 'Financial',
   'DSSA.JK': 'Energy',
   'KOTA.JK': 'Service',
+  'CTTH.JK': 'Basic Materials',
   'LAND.JK': 'Property',
   'LPKR.JK': 'Property',
   'PIPA.JK': 'Service',
@@ -133,6 +134,88 @@ const RebalanceTool: React.FC<RebalanceToolProps> = ({
 
     return recs.sort((a, b) => b.amount - a.amount);
   }, [currentAllocation, strategy, totalPortfolioValue]);
+
+  const handleExecuteRebalance = () => {
+    setIsExecuting(true);
+    
+    // Map of sectors to their primary ticker for buying
+    const sectorPrimaries: Record<string, string> = {
+      'Energy': 'BUMI.JK',
+      'Financial': 'DEFI.JK',
+      'Property': 'LAND.JK',
+      'Service': 'KOTA.JK',
+      'Basic Materials': 'CTTH.JK',
+      'Consumer': 'WMUU.JK',
+      'Technology': 'JECX.JK',
+      'Other': 'BUMI.JK'
+    };
+
+    const fallbackPrices: Record<string, number> = {
+      'BUMI.JK': 140,
+      'DSSA.JK': 775,
+      'DEFI.JK': 103,
+      'KOTA.JK': 96,
+      'CTTH.JK': 134,
+      'LAND.JK': 29,
+      'LPKR.JK': 81,
+      'PIPA.JK': 114,
+      'WMUU.JK': 50,
+      'BACH.JK': 550,
+      'JECX.JK': 1660
+    };
+
+    // Split recommendations into sells first, then buys
+    const sells = recommendations.filter(r => r.action === 'SELL');
+    const buys = recommendations.filter(r => r.action === 'BUY');
+
+    // Execute SELLs first to generate cash
+    sells.forEach(rec => {
+      let remainingAmount = rec.amount;
+      // Find held assets in this sector
+      const sectorAssets = portfolioAssets.filter(asset => {
+        const s = TICKER_TO_SECTOR[asset.ticker.toUpperCase()] || 'Other';
+        return s === rec.sector;
+      });
+
+      sectorAssets.forEach(asset => {
+        if (remainingAmount <= 0) return;
+        const mktPrice = asset.marketPrice || asset.averagePrice || fallbackPrices[asset.ticker.toUpperCase()] || 100;
+        const lotValue = mktPrice * 100;
+        const maxLotsToSell = asset.lots;
+        const neededLots = Math.floor(remainingAmount / lotValue);
+        const lotsToSell = Math.min(maxLotsToSell, neededLots);
+
+        if (lotsToSell > 0) {
+          onUpdatePortfolio(asset.ticker, 'SELL', mktPrice, lotsToSell);
+          remainingAmount -= lotsToSell * lotValue;
+        }
+      });
+    });
+
+    // Execute BUYs with available cash
+    let temporaryCash = cashBalance;
+    buys.forEach(rec => {
+      const ticker = sectorPrimaries[rec.sector] || 'BUMI.JK';
+      const mktPrice = portfolioAssets.find(a => a.ticker.toUpperCase() === ticker.toUpperCase())?.marketPrice || fallbackPrices[ticker] || 100;
+      const lotValue = mktPrice * 100;
+      
+      let lotsToBuy = Math.floor(rec.amount / lotValue);
+      // Ensure we don't buy more than temporaryCash (plus estimate 0.22% fee)
+      const maxCostWithFee = lotsToBuy * lotValue * 1.002215;
+      if (maxCostWithFee > temporaryCash) {
+        lotsToBuy = Math.floor(temporaryCash / (lotValue * 1.002215));
+      }
+
+      if (lotsToBuy > 0) {
+        onUpdatePortfolio(ticker, 'BUY', mktPrice, lotsToBuy);
+        temporaryCash -= lotsToBuy * lotValue * 1.002215;
+      }
+    });
+
+    setTimeout(() => {
+      setIsExecuting(false);
+    }, 1500);
+  };
 
   return (
     <div className="space-y-6">
@@ -244,10 +327,7 @@ const RebalanceTool: React.FC<RebalanceToolProps> = ({
 
             {recommendations.length > 0 && (
               <button 
-                onClick={() => {
-                  setIsExecuting(true);
-                  setTimeout(() => setIsExecuting(false), 2000);
-                }}
+                onClick={handleExecuteRebalance}
                 disabled={isExecuting}
                 className="w-full py-4 bg-white text-slate-950 rounded-2xl font-black text-[11px] uppercase tracking-[0.2em] shadow-xl hover:scale-[1.01] active:scale-[0.98] transition-all flex items-center justify-center gap-3"
               >

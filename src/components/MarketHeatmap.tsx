@@ -54,7 +54,8 @@ const IDX_TICKER_SECTORS: Record<string, { name: string; sector: string; baselin
   "TPIA": { name: "Chandra Asri Pacific", sector: "INFRA_CONGLOM", baseline: 8500 },
   "COAL": { name: "Black Diamond Resources", sector: "INFRA_CONGLOM", baseline: 75 },
   "DEFI": { name: "Danasupra Erapacific", sector: "INFRA_CONGLOM", baseline: 82 },
-  "DEWA": { name: "Darma Henwa", sector: "INFRA_CONGLOM", baseline: 65 }
+  "DEWA": { name: "Darma Henwa", sector: "INFRA_CONGLOM", baseline: 65 },
+  "CTTH": { name: "PT Citatah Tbk", sector: "INFRA_CONGLOM", baseline: 134 }
 };
 
 export const MarketHeatmap = ({ onViewAsset }: MarketHeatmapProps) => {

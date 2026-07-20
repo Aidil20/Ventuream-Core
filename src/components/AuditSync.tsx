@@ -75,7 +75,8 @@ const DEFAULT_TICKERS = [
   { symbol: 'DSSA', name: 'Dian Swastatika Sentosa Tbk', sector: 'Energy & Conglomerate', internalPrice: 820, externalPrice: 775, market: 'IDX' },
   { symbol: 'DEFI', name: 'Danasupra Erapacific Tbk', sector: 'Financial Services', internalPrice: 140, externalPrice: 145, market: 'IDX' },
   { symbol: 'LPKR', name: 'Lippo Karawaci Tbk', sector: 'Real Estate', internalPrice: 85, externalPrice: 81, market: 'IDX' },
-  { symbol: 'KOTA', name: 'DMS Propertindo Tbk', sector: 'Real Estate', internalPrice: 130, externalPrice: 134, market: 'IDX' }
+  { symbol: 'KOTA', name: 'DMS Propertindo Tbk', sector: 'Real Estate', internalPrice: 130, externalPrice: 134, market: 'IDX' },
+  { symbol: 'CTTH', name: 'PT Citatah Tbk', sector: 'Basic Materials', internalPrice: 134, externalPrice: 134, market: 'IDX' }
 ];
 
 const INITIAL_LOGS: AuditLog[] = [

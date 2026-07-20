@@ -22,7 +22,9 @@ import {
   Database,
   Lock,
   Server,
-  Code
+  Code,
+  Search,
+  Filter
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import Papa from 'papaparse';
@@ -84,11 +86,16 @@ export default function FinancialReportingCenter({
   totalFees = 0,
   transactions = []
 }: FinancialReportingCenterProps) {
-  const [activeTab, setActiveTabState] = useState<'REPORTS' | 'SECURE_VAULT'>('REPORTS');
+  const [activeTab, setActiveTabState] = useState<'REPORTS' | 'SECURE_VAULT' | 'TRANSACTIONS'>('REPORTS');
   const [kpiMetric, setKpiMetric] = useState<'ROA' | 'ROE' | 'GPM' | 'CR'>('ROA');
   const [isGenerating, setIsGenerating] = useState(false);
   const [generationProgress, setGenerationProgress] = useState(0);
   const [showPreview, setShowPreview] = useState<string | null>(null);
+
+  // Filter states for transaction history tab
+  const [txSearch, setTxSearch] = useState('');
+  const [txSideFilter, setTxSideFilter] = useState<'ALL' | 'BUY' | 'SELL'>('ALL');
+  const [txBrokerFilter, setTxBrokerFilter] = useState<'ALL' | 'CGS_INTERNATIONAL' | 'IBKR'>('ALL');
   
   // Staging area information
   const [retentionProgress, setRetentionProgress] = useState(100);
@@ -216,13 +223,18 @@ export default function FinancialReportingCenter({
       const totalBuyFees = (transactions || []).filter((tx: any) => tx.side === 'BUY').reduce((acc: number, tx: any) => {
         const rate = tx.currency === 'USD' ? 16000 : 1;
         const val = tx.quantity * tx.price * rate;
-        return acc + (val * 0.0018);
+        const commission = val * 0.001815; // 0.1815% Broker Fee (includes PPN)
+        const levy = val * 0.0004; // 0.04% IDX Levy
+        return acc + (commission + levy);
       }, 0);
 
       const totalSellFees = (transactions || []).filter((tx: any) => tx.side === 'SELL' || tx.side === 'STOP_LOSS').reduce((acc: number, tx: any) => {
         const rate = tx.currency === 'USD' ? 16000 : 1;
         const val = tx.quantity * tx.price * rate;
-        return acc + (val * 0.0029);
+        const commission = val * 0.002815; // 0.2815% Broker Fee (includes PPN)
+        const levy = val * 0.0004; // 0.04% IDX Levy
+        const pph = val * 0.001; // 0.1% PPh Final
+        return acc + (commission + levy + pph);
       }, 0);
 
       const sellTaxPPh = (transactions || []).filter((tx: any) => tx.side === 'SELL' || tx.side === 'STOP_LOSS').reduce((acc: number, tx: any) => {
@@ -230,8 +242,7 @@ export default function FinancialReportingCenter({
         return acc + (tx.quantity * tx.price * rate * 0.001); // 0.1% PPh Final
       }, 0);
 
-      const vatOnFees = (totalBuyFees + (totalSellFees - sellTaxPPh)) * 0.11; // 11% VAT on commission portion
-      const liveTax26 = 0 - Math.round(sellTaxPPh + vatOnFees); // Store as a negative expense
+      const liveTax26 = 0 - Math.round(sellTaxPPh); // Store PPh Final as a negative expense (CGS fee includes PPN, and no 12% PPN in transaction)
 
       // Subtract the tax portion from the totalFees to get the pure operating expense burden
       const liveOpex26 = -575000 - (totalFees - Math.abs(liveTax26));
@@ -1660,6 +1671,194 @@ VentureAM,Luxury watches,120000000`;
     }
   };
 
+  // Memoized transaction logic for the dedicated TRANSACTIONS tab
+  const filteredTx = useMemo(() => {
+    return (transactions || []).filter((tx: any) => {
+      const query = txSearch.toLowerCase();
+      const matchQuery = 
+        tx.ticker.toLowerCase().includes(query) ||
+        tx.broker.toLowerCase().includes(query) ||
+        tx.side.toLowerCase().includes(query) ||
+        tx.id.toLowerCase().includes(query);
+
+      if (!matchQuery) return false;
+
+      if (txSideFilter !== 'ALL') {
+        if (txSideFilter === 'BUY' && tx.side !== 'BUY') return false;
+        if (txSideFilter === 'SELL' && tx.side !== 'SELL' && tx.side !== 'STOP_LOSS') return false;
+      }
+
+      if (txBrokerFilter !== 'ALL' && tx.broker !== txBrokerFilter) return false;
+
+      return true;
+    });
+  }, [transactions, txSearch, txSideFilter, txBrokerFilter]);
+
+  const txAggregates = useMemo(() => {
+    let totalVolume = 0;
+    let totalGrossValue = 0;
+    let totalCommissions = 0;
+    let totalPPh = 0;
+    let totalPPN = 0; // We'll map IDX Levy here for display-field compatibility (avoids breaking schemas)
+    let totalFeesAndTaxes = 0;
+
+    (transactions || []).forEach((tx: any) => {
+      const rate = tx.currency === 'USD' ? 16000 : 1;
+      const valueRp = tx.quantity * tx.price * rate;
+      const isBuy = tx.side === 'BUY';
+      
+      const commissionRp = Math.round(valueRp * (isBuy ? 0.001815 : 0.002815));
+      const idxLevyRp = Math.round(valueRp * 0.0004);
+      const pphRp = isBuy ? 0 : Math.round(valueRp * 0.001);
+      const totalFeeRp = commissionRp + idxLevyRp + pphRp;
+
+      totalVolume += tx.quantity;
+      totalGrossValue += valueRp;
+      totalCommissions += commissionRp;
+      totalPPh += pphRp;
+      totalPPN += idxLevyRp; // Map IDX Levy here
+      totalFeesAndTaxes += totalFeeRp;
+    });
+
+    return {
+      totalVolume,
+      totalGrossValue,
+      totalCommissions,
+      totalPPh,
+      totalPPN,
+      totalFeesAndTaxes
+    };
+  }, [transactions]);
+
+  const handleExportTxCSV = () => {
+    const csvData = filteredTx.map((tx: any) => {
+      const rate = tx.currency === 'USD' ? 16000 : 1;
+      const valueRp = tx.quantity * tx.price * rate;
+      const isBuy = tx.side === 'BUY';
+      
+      const commissionRp = Math.round(valueRp * (isBuy ? 0.001815 : 0.002815));
+      const idxLevyRp = Math.round(valueRp * 0.0004);
+      const pphRp = isBuy ? 0 : Math.round(valueRp * 0.001);
+      const totalFeeRp = commissionRp + idxLevyRp + pphRp;
+
+      return {
+        'ID': tx.id,
+        'Timestamp': tx.timestamp,
+        'Ticker': tx.ticker,
+        'Side': tx.side,
+        'Quantity (Shares)': tx.quantity,
+        'Lots': tx.quantity / 100,
+        'Price': tx.price,
+        'Currency': tx.currency,
+        'Exchange Rate (IDR)': rate,
+        'Gross Value (IDR)': valueRp,
+        'Broker Commission (IDR)': commissionRp,
+        'IDX Levy (IDR)': idxLevyRp,
+        'PPh Final 0.1% (IDR)': pphRp,
+        'Total Fees & Taxes (IDR)': totalFeeRp,
+        'Net Settlement Value (IDR)': isBuy ? (valueRp + totalFeeRp) : (valueRp - totalFeeRp),
+        'Broker': tx.broker
+      };
+    });
+
+    const csvString = Papa.unparse(csvData);
+    const blob = new Blob([csvString], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.setAttribute('download', `VentureAM_Chronological_Transactions_${new Date().toISOString().split('T')[0]}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+
+    addAuditLog('TX_EXPORT_CSV', 'INFO', `Successfully compiled and downloaded Transaction History CSV.`);
+  };
+
+  const handleExportTxPDF = () => {
+    const doc = new jsPDF();
+
+    // Dark banner header matching the institutional system theme
+    doc.setFillColor(15, 15, 20);
+    doc.rect(0, 0, 210, 42, 'F');
+
+    doc.setFontSize(20);
+    doc.setTextColor(223, 255, 0); // VAM Brand Color #DFFF00
+    doc.setFont("helvetica", "bold");
+    doc.text('VENTURE ASSET MANAGEMENT', 15, 16);
+
+    doc.setFontSize(10);
+    doc.setTextColor(200, 200, 200);
+    doc.setFont("helvetica", "normal");
+    doc.text('CHRONOLOGICAL TRANSACTION LOG  |  TAX & FEES REPORT', 15, 23);
+
+    doc.setFontSize(8);
+    doc.setTextColor(140, 140, 140);
+    doc.text(`EXPORT TIME: ${new Date().toISOString()}  |  ISO 27001 COMPLIANT`, 15, 28);
+
+    doc.setFontSize(8);
+    doc.setTextColor(223, 255, 0);
+    doc.rect(155, 11, 40, 18);
+    doc.text('GATEWAY STATUS:', 158, 16);
+    doc.setFont("helvetica", "bold");
+    doc.text('CONNECTED SECURE', 158, 21);
+
+    // Let's draw the table of transactions
+    const headers = [['TIMESTAMP', 'TICKER', 'SIDE', 'QTY/LOTS', 'PRICE', 'GROSS VALUE', 'COMMISSION', 'TAX (LEVY/PPh)', 'NET SETTLE', 'BROKER']];
+    const data = filteredTx.map((tx: any) => {
+      const rate = tx.currency === 'USD' ? 16000 : 1;
+      const valueRp = tx.quantity * tx.price * rate;
+      const isBuy = tx.side === 'BUY';
+      
+      const commissionRp = Math.round(valueRp * (isBuy ? 0.001815 : 0.002815));
+      const idxLevyRp = Math.round(valueRp * 0.0004);
+      const pphRp = isBuy ? 0 : Math.round(valueRp * 0.001);
+      const totalFeeRp = commissionRp + idxLevyRp + pphRp;
+
+      const formattedPrice = tx.currency === 'USD' ? `$${tx.price.toLocaleString('en-US', { minimumFractionDigits: 2 })}` : `Rp ${tx.price.toLocaleString('id-ID')}`;
+      const formattedGross = `Rp ${valueRp.toLocaleString('id-ID')}`;
+      const formattedComm = `Rp ${commissionRp.toLocaleString('id-ID')}`;
+      const formattedTax = `Rp ${(pphRp + idxLevyRp).toLocaleString('id-ID')}`;
+      const formattedNet = `Rp ${(isBuy ? (valueRp + totalFeeRp) : (valueRp - totalFeeRp)).toLocaleString('id-ID')}`;
+
+      return [
+        new Date(tx.timestamp).toLocaleString('id-ID', { hour12: false }),
+        tx.ticker,
+        tx.side,
+        `${tx.quantity.toLocaleString('id-ID')} (${(tx.quantity / 100).toLocaleString('id-ID')} lot)`,
+        formattedPrice,
+        formattedGross,
+        formattedComm,
+        formattedTax,
+        formattedNet,
+        tx.broker
+      ];
+    });
+
+    autoTable(doc, {
+      startY: 48,
+      head: headers,
+      body: data,
+      theme: 'grid',
+      styles: {
+        fontSize: 7,
+        font: 'helvetica',
+        textColor: [40, 40, 40]
+      },
+      headStyles: {
+        fillColor: [15, 15, 20],
+        textColor: [223, 255, 0],
+        fontStyle: 'bold',
+        fontSize: 7.5
+      },
+      alternateRowStyles: {
+        fillColor: [248, 248, 250]
+      }
+    });
+
+    doc.save(`VentureAM_Transactions_Ledger_${new Date().toISOString().split('T')[0]}.pdf`);
+    addAuditLog('TX_EXPORT_PDF', 'SECURE', `Successfully exported & certified ${data.length} transactions as compliance PDF ledger.`);
+  };
+
   return (
     <div className="space-y-6">
       <AnimatePresence>
@@ -1813,10 +2012,20 @@ VentureAM,Luxury watches,120000000`;
           >
             <ShieldCheck className="w-3.5 h-3.5 inline mr-1.5 text-[#deff9a]" /> SECURE DOCUMENT VAULT (SOP-IT-VAM-003)
           </button>
+          <button
+            onClick={() => setActiveTabState('TRANSACTIONS')}
+            className={`px-4 py-2 rounded-lg text-[10px] font-mono font-black uppercase tracking-wider transition-all ${
+              activeTab === 'TRANSACTIONS' 
+                ? 'bg-blue-500/10 text-blue-450 border border-blue-500/20' 
+                : 'text-zinc-400 hover:text-white'
+            }`}
+          >
+            <History className="w-3.5 h-3.5 inline mr-1.5 text-blue-400" /> TRANSACTION HISTORY (FEES & TAX)
+          </button>
         </div>
       </div>
 
-      {activeTab === 'REPORTS' ? (
+      {activeTab === 'REPORTS' && (
         /* TAB 1: REPORTS AND COMPILATION DRAFTS */
         <div className="space-y-6">
           <div className="flex items-center justify-between">
@@ -2553,7 +2762,9 @@ VentureAM,Luxury watches,120000000`;
           {/* Daily Realized P&L Trends & Rebalancing Performance History (Recharts) */}
           <RealizedPnLChart realizedPnL={realizedPnL} />
         </div>
-      ) : (
+      )}
+
+      {activeTab === 'SECURE_VAULT' && (
         /* TAB 2: SECURE DOCUMENT VAULT (SOP-IT-VAM-003) PIPELINE */
         <div className="space-y-6">
           {/* SOP Metadata Header Block */}
@@ -2917,6 +3128,228 @@ VentureAM,Luxury watches,120000000`;
                 </div>
               </div>
             </div>
+          </div>
+        </div>
+      )}
+
+      {activeTab === 'TRANSACTIONS' && (
+        <div className="space-y-6">
+          {/* Header Metadata Block */}
+          <div className="bg-zinc-950/80 border border-zinc-850 p-5 rounded-2xl flex flex-col md:flex-row md:items-center justify-between gap-4">
+            <div className="space-y-1">
+              <span className="text-[8px] font-mono font-black text-blue-400 uppercase tracking-widest block bg-blue-500/10 px-2.5 py-1 rounded w-fit border border-blue-500/20">
+                COMPLIANCE REFERENCE: AUDIT-TX-LOG-PSAK
+              </span>
+              <h3 className="text-sm font-black text-white uppercase tracking-wider">
+                CHRONOLOGICAL TRANSACTION HISTORY & AUDIT LEDGER
+              </h3>
+              <p className="text-[10px] text-zinc-400 max-w-2xl">
+                Real-time tracking of all buy and sell order executions, broker commissions, value added taxes (VAT 11%), and final income taxes (PPh 0.1% for sell executions) conforming to capital market regulations.
+              </p>
+            </div>
+            <div className="flex gap-2.5 shrink-0">
+              <button
+                onClick={handleExportTxCSV}
+                className="flex items-center gap-1.5 bg-zinc-900 hover:bg-zinc-850 border border-zinc-800 text-zinc-300 hover:text-white px-3.5 py-2 rounded-xl text-[10px] font-mono font-black uppercase tracking-wider transition-all cursor-pointer"
+              >
+                <FileSpreadsheet className="w-3.5 h-3.5 text-emerald-500" /> Export CSV
+              </button>
+              <button
+                onClick={handleExportTxPDF}
+                className="flex items-center gap-1.5 bg-blue-500 hover:bg-blue-600 text-white px-3.5 py-2 rounded-xl text-[10px] font-mono font-black uppercase tracking-wider transition-all active:scale-95 shadow-lg shadow-blue-500/20 cursor-pointer"
+              >
+                <Download className="w-3.5 h-3.5" /> Export PDF Ledger
+              </button>
+            </div>
+          </div>
+
+          {/* KPI Dashboard Row */}
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+            <div className="p-4 rounded-xl border border-zinc-900 bg-zinc-950/60 flex flex-col justify-between">
+              <span className="text-[9px] font-mono font-bold text-zinc-500 uppercase tracking-wider">Total Executions</span>
+              <div className="mt-2 flex items-baseline gap-1.5">
+                <span className="text-xl font-bold text-white tracking-tight">{(transactions || []).length}</span>
+                <span className="text-[8px] font-mono text-zinc-600">txs</span>
+              </div>
+              <span className="text-[8.5px] font-mono text-zinc-500 mt-1 uppercase">Cumulative Gateway Vol</span>
+            </div>
+
+            <div className="p-4 rounded-xl border border-zinc-900 bg-zinc-950/60 flex flex-col justify-between">
+              <span className="text-[9px] font-mono font-bold text-zinc-500 uppercase tracking-wider">Total Gross Volume</span>
+              <div className="mt-2">
+                <span className="text-base font-bold text-white tracking-tight">Rp {formatIdr(txAggregates.totalGrossValue)}</span>
+              </div>
+              <span className="text-[8.5px] font-mono text-zinc-500 mt-1 uppercase">Consolidated Turn</span>
+            </div>
+
+            <div className="p-4 rounded-xl border border-zinc-900 bg-zinc-950/60 flex flex-col justify-between">
+              <span className="text-[9px] font-mono font-bold text-zinc-500 uppercase tracking-wider">Total Broker Commission</span>
+              <div className="mt-2">
+                <span className="text-base font-bold text-[#DFFF00] tracking-tight">Rp {formatIdr(txAggregates.totalCommissions)}</span>
+              </div>
+              <span className="text-[8.5px] font-mono text-zinc-500 mt-1 uppercase">Includes PPN/VAT</span>
+            </div>
+
+            <div className="p-4 rounded-xl border border-zinc-900 bg-zinc-950/60 flex flex-col justify-between">
+              <span className="text-[9px] font-mono font-bold text-zinc-500 uppercase tracking-wider">Taxes & Levies Deducted</span>
+              <div className="mt-2">
+                <span className="text-base font-bold text-rose-450 tracking-tight">Rp {formatIdr(txAggregates.totalPPh + txAggregates.totalPPN)}</span>
+              </div>
+              <div className="flex gap-2 text-[7.5px] font-mono text-zinc-600 uppercase mt-1">
+                <span>PPh: Rp {formatIdr(txAggregates.totalPPh)}</span>
+                <span>•</span>
+                <span>Levy: Rp {formatIdr(txAggregates.totalPPN)}</span>
+              </div>
+            </div>
+          </div>
+
+          {/* Filtering Console */}
+          <div className="p-4.5 rounded-xl border border-zinc-900 bg-zinc-950/40 flex flex-col sm:flex-row gap-4 items-center justify-between">
+            {/* Search Input */}
+            <div className="relative w-full sm:max-w-xs">
+              <div className="absolute inset-y-0 left-3 flex items-center pointer-events-none text-zinc-600">
+                <Search className="w-3.5 h-3.5" />
+              </div>
+              <input
+                type="text"
+                value={txSearch}
+                onChange={(e) => setTxSearch(e.target.value)}
+                placeholder="Search ticker, broker, side..."
+                className="w-full bg-zinc-950 border border-zinc-850 rounded-xl py-2 pl-9 pr-4 text-xs text-white placeholder-zinc-500 font-mono focus:outline-none focus:border-blue-500/50 transition-all"
+              />
+            </div>
+
+            {/* Filter Dropdowns */}
+            <div className="flex flex-wrap items-center gap-2.5 w-full sm:w-auto justify-end">
+              <div className="flex items-center gap-1.5 bg-zinc-950 px-2.5 py-1.5 border border-zinc-850 rounded-xl">
+                <Filter className="w-3 h-3 text-zinc-500" />
+                <span className="text-[9px] font-mono font-bold text-zinc-500 uppercase">Side:</span>
+                <select
+                  value={txSideFilter}
+                  onChange={(e: any) => setTxSideFilter(e.target.value)}
+                  className="bg-transparent text-white font-mono text-[10px] font-black focus:outline-none cursor-pointer uppercase border-0 outline-none"
+                >
+                  <option value="ALL" className="bg-zinc-950 text-white">All Sides</option>
+                  <option value="BUY" className="bg-zinc-950 text-emerald-400">Buy Orders</option>
+                  <option value="SELL" className="bg-zinc-950 text-rose-400">Sell Orders</option>
+                </select>
+              </div>
+
+              <div className="flex items-center gap-1.5 bg-zinc-950 px-2.5 py-1.5 border border-zinc-850 rounded-xl">
+                <span className="text-[9px] font-mono font-bold text-zinc-500 uppercase">Broker:</span>
+                <select
+                  value={txBrokerFilter}
+                  onChange={(e: any) => setTxBrokerFilter(e.target.value)}
+                  className="bg-transparent text-white font-mono text-[10px] font-black focus:outline-none cursor-pointer uppercase border-0 outline-none"
+                >
+                  <option value="ALL" className="bg-zinc-950 text-white">All Brokers</option>
+                  <option value="CGS_INTERNATIONAL" className="bg-zinc-950 text-zinc-350">CGS Intl</option>
+                  <option value="IBKR" className="bg-zinc-950 text-zinc-350">IBKR</option>
+                </select>
+              </div>
+            </div>
+          </div>
+
+          {/* Transaction Ledger Table Container */}
+          <div className="rounded-xl border border-zinc-900 bg-zinc-950/20 overflow-hidden">
+            <div className="overflow-x-auto font-mono">
+              <table className="w-full text-left border-collapse">
+                <thead>
+                  <tr className="border-b border-zinc-900 bg-zinc-950 text-zinc-500 uppercase text-[8.5px] font-mono font-bold tracking-wider">
+                    <th className="py-3 px-4">Timestamp (Waktu)</th>
+                    <th className="py-3 px-4">ID</th>
+                    <th className="py-3 px-4">Sec / Ticker</th>
+                    <th className="py-3 px-4">Side</th>
+                    <th className="py-3 px-4 text-right">Shares (Lots)</th>
+                    <th className="py-3 px-4 text-right">Price</th>
+                    <th className="py-3 px-4 text-right">Gross (IDR)</th>
+                    <th className="py-3 px-4 text-right">Commission</th>
+                    <th className="py-3 px-4 text-right">Tax (VAT/PPh)</th>
+                    <th className="py-3 px-4 text-right">Net Settle</th>
+                    <th className="py-3 px-4">Broker / Channel</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-zinc-900/65">
+                  {filteredTx.length === 0 ? (
+                    <tr>
+                      <td colSpan={11} className="py-12 text-center text-zinc-500 font-mono text-[10px]">
+                        NO CRYPTOGRAPHIC LEDGER TRANSACTIONS FOUND MATCHING FILTERS
+                      </td>
+                    </tr>
+                  ) : (
+                    filteredTx.map((tx: any) => {
+                      const rate = tx.currency === 'USD' ? 16000 : 1;
+                      const valueRp = tx.quantity * tx.price * rate;
+                      const isBuy = tx.side === 'BUY';
+                      
+                      const commissionRp = Math.round(valueRp * (isBuy ? 0.001815 : 0.002815));
+                      const idxLevyRp = Math.round(valueRp * 0.0004);
+                      const pphRp = isBuy ? 0 : Math.round(valueRp * 0.001);
+                      const totalFeeRp = commissionRp + idxLevyRp + pphRp;
+
+                      const taxTotal = pphRp + idxLevyRp;
+                      const netSettleVal = isBuy ? (valueRp + totalFeeRp) : (valueRp - totalFeeRp);
+
+                      return (
+                        <tr key={tx.id} className="hover:bg-zinc-950/40 transition-colors font-mono text-[10px] text-zinc-300">
+                          <td className="py-3.5 px-4 text-[9.5px] text-zinc-500 whitespace-nowrap">
+                             {new Date(tx.timestamp).toLocaleString('id-ID', { hour12: false })}
+                          </td>
+                          <td className="py-3.5 px-4 text-[9px] text-zinc-400 uppercase whitespace-nowrap font-bold">
+                            {tx.id}
+                          </td>
+                          <td className="py-3.5 px-4 font-bold text-white whitespace-nowrap">
+                            {tx.ticker}
+                          </td>
+                          <td className="py-3.5 px-4 whitespace-nowrap">
+                            <span className={`px-2 py-0.5 rounded-full text-[8.5px] font-black tracking-tighter ${
+                              isBuy 
+                                ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20' 
+                                : 'bg-rose-500/10 text-rose-400 border border-rose-500/20'
+                            }`}>
+                              {tx.side}
+                            </span>
+                          </td>
+                          <td className="py-3.5 px-4 text-right whitespace-nowrap text-zinc-200">
+                            {tx.quantity.toLocaleString('id-ID')} <span className="text-zinc-500 text-[8.5px]">({(tx.quantity / 100).toLocaleString('id-ID')} lot)</span>
+                          </td>
+                          <td className="py-3.5 px-4 text-right whitespace-nowrap">
+                            {tx.currency === 'USD' ? (
+                              <span className="text-zinc-450 font-bold">${tx.price.toLocaleString('en-US', { minimumFractionDigits: 2 })}</span>
+                            ) : (
+                              <span>Rp {tx.price.toLocaleString('id-ID')}</span>
+                            )}
+                          </td>
+                          <td className="py-3.5 px-4 text-right whitespace-nowrap font-bold text-white">
+                            Rp {formatIdr(valueRp)}
+                          </td>
+                          <td className="py-3.5 px-4 text-right whitespace-nowrap text-zinc-400">
+                            Rp {formatIdr(commissionRp)}
+                          </td>
+                          <td className="py-3.5 px-4 text-right whitespace-nowrap text-zinc-400">
+                            <span className="hover:text-white cursor-help" title={`PPh: Rp ${formatIdr(pphRp)} | IDX Levy: Rp ${formatIdr(idxLevyRp)}`}>
+                              Rp {formatIdr(taxTotal)}
+                            </span>
+                          </td>
+                          <td className="py-3.5 px-4 text-right whitespace-nowrap font-bold text-[#DFFF00]">
+                            Rp {formatIdr(netSettleVal)}
+                          </td>
+                          <td className="py-3.5 px-4 whitespace-nowrap text-[9px] text-zinc-500">
+                            {tx.broker}
+                          </td>
+                        </tr>
+                      );
+                    })
+                  )}
+                </tbody>
+              </table>
+            </div>
+            {filteredTx.length > 0 && (
+              <div className="bg-zinc-950 p-3 px-4 border-t border-zinc-900 flex justify-between items-center text-[9px] font-mono text-zinc-500 uppercase">
+                <span>Showing {filteredTx.length} of {transactions.length} record(s)</span>
+                <span className="text-zinc-650">Secure Cryptographic Audit Ledger Connected</span>
+              </div>
+            )}
           </div>
         </div>
       )}

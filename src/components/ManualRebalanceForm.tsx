@@ -19,6 +19,7 @@ const PRESET_TICKERS = [
   { symbol: 'BUMI.JK', name: 'Bumi Resources Tbk' },
   { symbol: 'DEFI.JK', name: 'Danasupra Erapacific' },
   { symbol: 'KOTA.JK', name: 'DMS Propertindo' },
+  { symbol: 'CTTH.JK', name: 'PT Citatah Tbk' },
   { symbol: 'LAND.JK', name: 'Trimitra Propertindo' },
   { symbol: 'LPKR.JK', name: 'Lippo Karawaci' },
   { symbol: 'PIPA.JK', name: 'Multi Makmur Lemindo' },
@@ -65,6 +66,7 @@ const ALL_SUGGESTIONS = [
   { symbol: 'DEWA.JK', name: 'Darma Henwa', priceKey: 'DEWA', market: 'IDX' },
   { symbol: 'DSSA.JK', name: 'Dian Swastatika Sentosa', priceKey: 'DSSA', market: 'IDX' },
   { symbol: 'KOTA.JK', name: 'DMS Propertindo Tbk', priceKey: 'KOTA', market: 'IDX' },
+  { symbol: 'CTTH.JK', name: 'PT Citatah Tbk', priceKey: 'CTTH', market: 'IDX' },
   { symbol: 'LAND.JK', name: 'Trinitan Land Tbk', priceKey: 'LAND', market: 'IDX' },
   { symbol: 'PIPA.JK', name: 'Multi Spunindo Jaya Tbk', priceKey: 'PIPA', market: 'IDX' },
   { symbol: 'LPKR.JK', name: 'Lippo Karawaci Tbk', priceKey: 'LPKR', market: 'IDX' },
@@ -180,6 +182,7 @@ export const ManualRebalanceForm: React.FC<ManualRebalanceFormProps> = ({
         else if (activeTicker === 'WMUU.JK') fallback = '50';
         else if (activeTicker === 'DSSA.JK') fallback = '775';
         else if (activeTicker === 'BUMI.JK') fallback = '140';
+        else if (activeTicker === 'CTTH.JK') fallback = '134';
         
         setPriceInput(fallback);
         const p = parseFloat(fallback) || 0;
@@ -248,13 +251,13 @@ export const ManualRebalanceForm: React.FC<ManualRebalanceFormProps> = ({
       return;
     }
 
-    const feeRate = action === 'BUY' ? 0.0018 : 0.0029;
+    const feeRate = action === 'BUY' ? 0.002215 : 0.004215;
     const feeAmount = Math.round(amount * feeRate);
     const netTotal = action === 'BUY' ? amount + feeAmount : amount - feeAmount;
 
     if (action === 'BUY') {
       if (netTotal > cashBalance) {
-        setErrorMessage(`Insufficient cash balance. Required (with fee): Rp ${netTotal.toLocaleString('id-ID')} (including 0.18% buy fee of Rp ${feeAmount.toLocaleString('id-ID')}) but RDN holds Rp ${cashBalance.toLocaleString('id-ID')}.`);
+        setErrorMessage(`Insufficient cash balance. Required (with fee): Rp ${netTotal.toLocaleString('id-ID')} (including 0.2215% buy fee of Rp ${feeAmount.toLocaleString('id-ID')}) but RDN holds Rp ${cashBalance.toLocaleString('id-ID')}.`);
         return;
       }
     } else {
@@ -556,7 +559,7 @@ export const ManualRebalanceForm: React.FC<ManualRebalanceFormProps> = ({
 
         </div>
 
-        {/* Dynamic Ticket Preview with Fee detail structure (Buy: 0.18%, Sell: 0.29%) */}
+        {/* Dynamic Ticket Preview with Fee detail structure (Buy: 0.2215%, Sell: 0.4215%) */}
         {(() => {
           const parsedPrice = parseFloat(priceInput) || 0;
           const parsedLots = parseFloat(lotsInput) || 0;
@@ -564,7 +567,7 @@ export const ManualRebalanceForm: React.FC<ManualRebalanceFormProps> = ({
           
           if (grossAmountVal <= 0) return null;
 
-          const currentFeeRate = action === 'BUY' ? 0.0018 : 0.0029;
+          const currentFeeRate = action === 'BUY' ? 0.002215 : 0.004215;
           const calculatedFeeVal = Math.round(grossAmountVal * currentFeeRate);
           const calculatedNetTotal = action === 'BUY' ? grossAmountVal + calculatedFeeVal : grossAmountVal - calculatedFeeVal;
 
@@ -708,7 +711,7 @@ export const ManualRebalanceForm: React.FC<ManualRebalanceFormProps> = ({
                   <span className="font-mono text-zinc-300">Rp {grossAmountVal.toLocaleString('id-ID')}</span>
                 </div>
                 <div className="flex justify-between items-center text-zinc-500 font-bold uppercase tracking-wider">
-                  <span>Brokerage Fee ({action === 'BUY' ? 'Buy: 0.18%' : 'Sell: 0.29%'})</span>
+                  <span>Brokerage Fee ({action === 'BUY' ? 'Buy: 0.2215%' : 'Sell: 0.4215%'})</span>
                   <span className="font-mono text-[#deff9a]">Rp {calculatedFeeVal.toLocaleString('id-ID')}</span>
                 </div>
                 <div className="h-px bg-slate-850 my-1"></div>

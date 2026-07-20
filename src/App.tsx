@@ -592,11 +592,11 @@ export default function App() {
     }));
   }, []);
 
-  const { history, recordTransaction } = useTransactionManager();
+  const { history, recordTransaction, resetHistory } = useTransactionManager();
 
   const handleUpdatePortfolio = useCallback((ticker: string, action: 'BUY' | 'SELL', price: number, lots: number) => {
     const cost = price * lots * 100;
-    const feeRate = action === 'BUY' ? 0.0018 : 0.0029;
+    const feeRate = action === 'BUY' ? 0.002215 : 0.004215;
     const fee = Math.round(cost * feeRate);
     const balanceAdjustment = action === 'BUY' ? cost + fee : cost - fee;
     
@@ -692,12 +692,13 @@ export default function App() {
     setCgsGiroBalance(711000.00);
     setCgsRealizedPnL(0);
     setCgsTotalFees(0);
+    resetHistory();
     localStorage.removeItem('cgsAssets_v3');
     localStorage.removeItem('cgsCashBalance_v3');
     localStorage.removeItem('cgsGiroBalance_v3');
     localStorage.removeItem('cgsRealizedPnL_v3');
     localStorage.removeItem('cgsTotalFees_v3');
-  }, []);
+  }, [resetHistory]);
 
   const [selectedStudies, setSelectedStudies] = useState<string[]>(["MASimple@tv-basicstudies", "MAExp@tv-basicstudies"]);
   const [livePrices, setLivePrices] = useState<Record<string, number>>({});
@@ -1245,16 +1246,23 @@ export default function App() {
   const [alerts, setAlerts] = useState<PriceAlert[]>([]);
   const [notifications, setNotifications] = useState<AlertNotification[]>([]);
 
+  // Sync a Ref to avoid alertThresholds trigger loop in the price monitor
+  const alertThresholdsRef = React.useRef(alertThresholds);
+  useEffect(() => {
+    alertThresholdsRef.current = alertThresholds;
+  }, [alertThresholds]);
+
   // Monitor portfolio prices and trigger alerts dynamically
   useEffect(() => {
     if (!globalAlertsEnabled || portfolioData.length === 0) return;
 
+    const currentThresholds = alertThresholdsRef.current;
     const newNotifications: AlertNotification[] = [];
     let thresholdsUpdated = false;
-    const updatedThresholds = { ...alertThresholds };
+    const updatedThresholds = { ...currentThresholds };
 
     portfolioData.forEach(asset => {
-      const config = alertThresholds[asset.ticker];
+      const config = currentThresholds[asset.ticker];
       if (config && config.active) {
         const currentPrice = asset.currentPrice || asset.marketPrice;
         if (!currentPrice) return;
@@ -1327,7 +1335,7 @@ export default function App() {
         console.warn("Audio chime block or not allowed:", err);
       }
     }
-  }, [portfolioData, globalAlertsEnabled, alertThresholds]);
+  }, [portfolioData, globalAlertsEnabled]);
 
   // Auto-dismiss notifications after 8 seconds
   useEffect(() => {
@@ -2957,6 +2965,68 @@ export default function App() {
                     </button>
                   </div>
                 </div>
+
+                {/* Real-time Holdings Market Value Summary Card */}
+                <motion.div
+                  initial={{ opacity: 0, y: -12 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ duration: 0.5, ease: "easeOut" }}
+                  className="bg-slate-900/50 p-5 rounded-2xl border border-slate-800/80 shadow-lg relative overflow-hidden group"
+                >
+                  <div className="absolute top-0 right-0 p-8 bg-[#deff9a]/5 blur-2xl rounded-full -mr-4 -mt-4 group-hover:bg-[#deff9a]/10 transition-all duration-500"></div>
+                  <div className="relative z-10 flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+                    <div className="space-y-1">
+                      <div className="flex items-center gap-2">
+                        <span className="w-1.5 h-1.5 bg-[#DFFF00] rounded-full animate-pulse"></span>
+                        <p className="text-[10px] text-zinc-400 font-bold uppercase tracking-[0.25em]">HOLDINGS MARKET VALUE</p>
+                      </div>
+                      <h2 className="text-2xl lg:text-3.5xl font-black text-[#DFFF00] font-mono tracking-tight">
+                        Rp {typeof totalPortfolioValue === 'number' ? totalPortfolioValue.toLocaleString('id-ID') : '0'}
+                      </h2>
+                    </div>
+
+                    <div className="flex flex-wrap items-center gap-3 md:gap-4 text-xs font-mono">
+                      <div className="bg-slate-950/60 p-2.5 px-4 rounded-xl border border-slate-800/60 min-w-[120px]">
+                        <p className="text-[9px] text-zinc-500 uppercase tracking-wider mb-0.5 font-bold">Total Cost</p>
+                        <p className="font-bold text-slate-300">
+                          Rp {(() => {
+                            const totalCost = portfolioData.reduce((acc, curr) => {
+                              const assetCost = new Decimal(curr.averagePrice || 0).times(curr.lots || 0).times(100);
+                              return new Decimal(acc).plus(assetCost).toNumber();
+                            }, 0);
+                            return totalCost.toLocaleString('id-ID');
+                          })()}
+                        </p>
+                      </div>
+
+                      <div className="bg-slate-950/60 p-2.5 px-4 rounded-xl border border-slate-800/60 min-w-[150px]">
+                        <p className="text-[9px] text-zinc-500 uppercase tracking-wider mb-0.5 font-bold">Unrealized P&L</p>
+                        {(() => {
+                          const totalCost = portfolioData.reduce((acc, curr) => {
+                            const assetCost = new Decimal(curr.averagePrice || 0).times(curr.lots || 0).times(100);
+                            return new Decimal(acc).plus(assetCost).toNumber();
+                          }, 0);
+                          const totalPL = new Decimal(totalPortfolioValue).minus(totalCost).toNumber();
+                          const plPercentage = totalCost === 0 ? 0 : new Decimal(totalPL).div(totalCost).times(100).toNumber();
+                          const isPositive = totalPL >= 0;
+                          return (
+                            <p className={`font-bold flex items-center gap-1.5 ${isPositive ? 'text-green-400' : 'text-red-400'}`}>
+                              {isPositive ? '+' : ''}{plPercentage.toFixed(2)}%
+                              <span className="text-[10px] font-normal text-zinc-500">
+                                ({isPositive ? '+' : ''}{totalPL.toLocaleString('id-ID')})
+                              </span>
+                            </p>
+                          );
+                        })()}
+                      </div>
+
+                      <div className="bg-slate-950/60 p-2.5 px-4 rounded-xl border border-slate-800/60 min-w-[80px] text-center">
+                        <p className="text-[9px] text-zinc-500 uppercase tracking-wider mb-0.5 font-bold font-sans">Positions</p>
+                        <p className="font-bold text-[#deff9a]">{portfolioData.length}</p>
+                      </div>
+                    </div>
+                  </div>
+                </motion.div>
 
                 {/* Bloomberg Portfolio Monitor (Moved to very top) */}
                 <BloombergTable 

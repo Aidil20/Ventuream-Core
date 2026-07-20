@@ -54,6 +54,7 @@ const TICKER_RISK_METADATA: Record<string, { name: string; dailyVol: number; exp
   'DSSA': { name: "DSSA (Energy Conglo)", dailyVol: 0.021, expectedReturn: 0.12, beta: 0.85, sector: "Energy" },
   'BUMI': { name: "BUMI (Bumi Resources Tbk)", dailyVol: 0.038, expectedReturn: 0.15, beta: 1.45, sector: "Energy" },
   'KOTA': { name: "KOTA (Service & Logistics)", dailyVol: 0.052, expectedReturn: 0.18, beta: 1.75, sector: "Service" },
+  'CTTH': { name: "CTTH (PT Citatah Tbk)", dailyVol: 0.032, expectedReturn: 0.11, beta: 1.05, sector: "Basic Materials" },
   'LAND': { name: "LAND (Property & Dev)", dailyVol: 0.035, expectedReturn: 0.14, beta: 1.30, sector: "Property" },
   'LPKR': { name: "LPKR (Lippo Karawaci)", dailyVol: 0.025, expectedReturn: 0.10, beta: 1.10, sector: "Property" },
   'PIPA': { name: "PIPA (Metal & Piping)", dailyVol: 0.039, expectedReturn: 0.16, beta: 1.40, sector: "Service" },

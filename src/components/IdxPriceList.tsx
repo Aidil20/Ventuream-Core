@@ -64,6 +64,7 @@ const MARKET_SYMBOLS: Record<string, Record<string, string>> = {
     "DEWA": "Darma Henwa Tbk",
     "DSSA": "Dian Swastatika Sentosa Tbk",
     "BUMI": "PT Bumi Resources Tbk",
+    "CTTH": "PT Citatah Tbk",
     "BACH": "Batavia Alumina Chemical Tbk",
     "EMMI": "Eka Mas Mandiri Indonesia Tbk",
     "JECX": "Jakarta Electronic Commerce Tbk",

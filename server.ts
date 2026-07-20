@@ -2234,6 +2234,7 @@ Status Pengiriman        : CONVERTED LIVE RESILIENCE STYLING ACTIVE
     { symbol: "DEWA", yahooSymbol: "DEWA.JK", name: "Darma Henwa", market: "IDX", basePrice: 81 },
     { symbol: "DSSA", yahooSymbol: "DSSA.JK", name: "Dian Swastatika Sentosa", market: "IDX", basePrice: 82000 },
     { symbol: "KOTA", yahooSymbol: "KOTA.JK", name: "DMS Propertindo Tbk", market: "IDX", basePrice: 134 },
+    { symbol: "CTTH", yahooSymbol: "CTTH.JK", name: "PT Citatah Tbk", market: "IDX", basePrice: 134 },
     { symbol: "LAND", yahooSymbol: "LAND.JK", name: "Trinitan Land Tbk", market: "IDX", basePrice: 89 },
     { symbol: "PIPA", yahooSymbol: "PIPA.JK", name: "Multi Spunindo Jaya Tbk", market: "IDX", basePrice: 116 },
     { symbol: "LPKR", yahooSymbol: "LPKR.JK", name: "Lippo Karawaci Tbk", market: "IDX", basePrice: 81 },
