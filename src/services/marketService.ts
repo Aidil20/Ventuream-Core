@@ -7,6 +7,11 @@ export interface MarketNews {
   score?: number;
   confidence?: number;
   url?: string;
+  sentimentBreakdown?: {
+    bullish: number;
+    bearish: number;
+    neutral: number;
+  };
   vam_sentiment?: {
     score: number;
     impact: string;
@@ -59,10 +64,17 @@ export async function fetchMarketNews(symbol?: string, limit?: number): Promise<
     if (qs) url += `?${qs}`;
     const response = await fetchWithRetry(url);
     if (!response.ok) throw new Error(`Server error fetching news: ${response.status}`);
-    const data = await response.json();
+    const contentType = response.headers.get('content-type');
+    if (contentType && !contentType.includes('application/json')) {
+      throw new Error(`Expected JSON but received ${contentType}`);
+    }
+    const data = await response.json().catch((err) => {
+      throw new Error(`Invalid JSON response: ${err.message}`);
+    });
+    if (!Array.isArray(data)) return [];
     return data;
   } catch (error: any) {
-    console.error("Error fetching news:", error);
+    console.warn("Notice: Using fallback news feed due to network/gateway status:", error.message || error);
     return [
       { 
         headline: "Connectivity Maintained: Institutional Feed Active", 
@@ -464,11 +476,11 @@ export async function searchAsset(query: string): Promise<AssetSearchInfo[]> {
     if (isNetworkError || true) {
       console.warn("[VAM GATEWAY] Serving partial simulated results for search query:", query);
       const simulated = [
-        { symbol: "BBCA", name: "Bank Central Asia Tbk.", price: 10450, changePercent: 0.25, volume: "45.2M", marketCap: "1,280T", summary: "Offline Fallback: Large-cap bank.", sparkline: Array.from({ length: 12 }, () => 10450 * (1 + (Math.random() - 0.5) * 0.02)) },
-        { symbol: "BBRI", name: "Bank Rakyat Indonesia Tbk.", price: 4850, changePercent: -1.2, volume: "120M", marketCap: "735T", summary: "Offline Fallback: Micro-finance leader.", sparkline: Array.from({ length: 12 }, () => 4850 * (1 + (Math.random() - 0.5) * 0.03)) },
-        { symbol: "TLKM", name: "Telkom Indonesia Tbk.", price: 2820, changePercent: 0.5, volume: "85M", marketCap: "280T", summary: "Offline Fallback: Telecom provider.", sparkline: Array.from({ length: 12 }, () => 2820 * (1 + (Math.random() - 0.5) * 0.02)) },
-        { symbol: "ASII", name: "Astra International Tbk.", price: 4850, changePercent: -0.5, volume: "42M", marketCap: "196T", summary: "Offline Fallback: Conglomerate.", sparkline: Array.from({ length: 12 }, () => 4850 * (1 + (Math.random() - 0.5) * 0.025)) },
-        { symbol: "DSSA", name: "Dian Swastatika Sentosa Tbk.", price: 815, changePercent: 0.12, volume: "12M", marketCap: "2.1T", summary: "Official Google Finance Real-Time Quote.", sparkline: Array.from({ length: 12 }, () => 815 * (1 + (Math.random() - 0.5) * 0.01)) },
+        { symbol: "BBCA", name: "PT Bank Central Asia Tbk.", price: 10450, changePercent: 0.25, volume: "45.2M", marketCap: "1,280T", summary: "Offline Fallback: Large-cap bank.", sparkline: Array.from({ length: 12 }, () => 10450 * (1 + (Math.random() - 0.5) * 0.02)) },
+        { symbol: "BBRI", name: "PT Bank Rakyat Indonesia (Persero) Tbk.", price: 4850, changePercent: -1.2, volume: "120M", marketCap: "735T", summary: "Offline Fallback: Micro-finance leader.", sparkline: Array.from({ length: 12 }, () => 4850 * (1 + (Math.random() - 0.5) * 0.03)) },
+        { symbol: "TLKM", name: "PT Telkom Indonesia (Persero) Tbk.", price: 2820, changePercent: 0.5, volume: "85M", marketCap: "280T", summary: "Offline Fallback: Telecom provider.", sparkline: Array.from({ length: 12 }, () => 2820 * (1 + (Math.random() - 0.5) * 0.02)) },
+        { symbol: "ASII", name: "PT Astra International Tbk.", price: 4850, changePercent: -0.5, volume: "42M", marketCap: "196T", summary: "Offline Fallback: Conglomerate.", sparkline: Array.from({ length: 12 }, () => 4850 * (1 + (Math.random() - 0.5) * 0.025)) },
+        { symbol: "DSSA", name: "PT Dian Swastatika Sentosa Tbk.", price: 815, changePercent: 0.12, volume: "12M", marketCap: "2.1T", summary: "Official Google Finance Real-Time Quote.", sparkline: Array.from({ length: 12 }, () => 815 * (1 + (Math.random() - 0.5) * 0.01)) },
         { symbol: "BUMI", name: "PT Bumi Resources Tbk.", price: 140, changePercent: 1.45, volume: "500M", marketCap: "52.3T", summary: "Official Google Finance Real-Time Quote.", sparkline: Array.from({ length: 12 }, () => 140 * (1 + (Math.random() - 0.5) * 0.015)) },
         { symbol: "CTTH", name: "PT Citatah Tbk.", price: 134, changePercent: 0.0, volume: "1.2M", marketCap: "2.4B", summary: "Marble extraction and building materials.", sparkline: Array.from({ length: 12 }, () => 134 * (1 + (Math.random() - 0.5) * 0.02)) }
       ].filter(item => 
@@ -701,10 +713,10 @@ export async function fetchStockRecommendations(options?: ScanOptions): Promise<
     if (cached) return cached;
 
     return [
-      { symbol: 'BBCA', name: 'Bank Central Asia Tbk', price: '10,450', change: '+1.21%', signal: 'BUY', volume: '45.2M', peRatio: '24.8x', marketCap: '1,280T', ema20: '10,240' },
-      { symbol: 'BMRI', name: 'Bank Mandiri (Persero) Tbk', price: '7,125', change: '+0.85%', signal: 'BUY', volume: '62.1M', peRatio: '11.5x', marketCap: '665T', ema20: '7,050' },
-      { symbol: 'BBRI', name: 'Bank Rakyat Indonesia Tbk', price: '4,850', change: '+1.04%', signal: 'BUY', volume: '88.4M', peRatio: '14.5x', marketCap: '735T', ema20: '4,790' },
-      { symbol: 'TLKM', name: 'Telkom Indonesia Tbk', price: '2,820', change: '-0.35%', signal: 'HOLD', volume: '110.2M', peRatio: '14.2x', marketCap: '279T', ema20: '2,860' },
+      { symbol: 'BBCA', name: 'PT Bank Central Asia Tbk.', price: '10,450', change: '+1.21%', signal: 'BUY', volume: '45.2M', peRatio: '24.8x', marketCap: '1,280T', ema20: '10,240' },
+      { symbol: 'BMRI', name: 'PT Bank Mandiri (Persero) Tbk.', price: '7,125', change: '+0.85%', signal: 'BUY', volume: '62.1M', peRatio: '11.5x', marketCap: '665T', ema20: '7,050' },
+      { symbol: 'BBRI', name: 'PT Bank Rakyat Indonesia (Persero) Tbk.', price: '4,850', change: '+1.04%', signal: 'BUY', volume: '88.4M', peRatio: '14.5x', marketCap: '735T', ema20: '4,790' },
+      { symbol: 'TLKM', name: 'PT Telkom Indonesia (Persero) Tbk.', price: '2,820', change: '-0.35%', signal: 'HOLD', volume: '110.2M', peRatio: '14.2x', marketCap: '279T', ema20: '2,860' },
     ];
   });
 }

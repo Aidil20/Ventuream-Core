@@ -67,16 +67,16 @@ interface AuditLog {
 }
 
 const DEFAULT_TICKERS = [
-  { symbol: 'BBCA', name: 'Bank Central Asia Tbk', sector: 'Financials', internalPrice: 10050, externalPrice: 10125, market: 'IDX' },
-  { symbol: 'BBRI', name: 'Bank Rakyat Indonesia Tbk', sector: 'Financials', internalPrice: 4950, externalPrice: 4850, market: 'IDX' },
-  { symbol: 'BMRI', name: 'Bank Mandiri (Persero) Tbk', sector: 'Financials', internalPrice: 7000, externalPrice: 6975, market: 'IDX' },
-  { symbol: 'TLKM', name: 'Telkom Indonesia Tbk', sector: 'Infrastructure', internalPrice: 2750, externalPrice: 2780, market: 'IDX' },
-  { symbol: 'GOTO', name: 'GoTo Gojek Tokopedia Tbk', sector: 'Technology', internalPrice: 55, externalPrice: 52, market: 'IDX' },
-  { symbol: 'DSSA', name: 'Dian Swastatika Sentosa Tbk', sector: 'Energy & Conglomerate', internalPrice: 820, externalPrice: 775, market: 'IDX' },
-  { symbol: 'DEFI', name: 'Danasupra Erapacific Tbk', sector: 'Financial Services', internalPrice: 140, externalPrice: 145, market: 'IDX' },
-  { symbol: 'LPKR', name: 'Lippo Karawaci Tbk', sector: 'Real Estate', internalPrice: 85, externalPrice: 81, market: 'IDX' },
-  { symbol: 'KOTA', name: 'DMS Propertindo Tbk', sector: 'Real Estate', internalPrice: 130, externalPrice: 134, market: 'IDX' },
-  { symbol: 'CTTH', name: 'PT Citatah Tbk', sector: 'Basic Materials', internalPrice: 134, externalPrice: 134, market: 'IDX' }
+  { symbol: 'BBCA', name: 'PT Bank Central Asia Tbk.', sector: 'Financials', internalPrice: 10050, externalPrice: 10125, market: 'IDX' },
+  { symbol: 'BBRI', name: 'PT Bank Rakyat Indonesia (Persero) Tbk.', sector: 'Financials', internalPrice: 4950, externalPrice: 4850, market: 'IDX' },
+  { symbol: 'BMRI', name: 'PT Bank Mandiri (Persero) Tbk.', sector: 'Financials', internalPrice: 7000, externalPrice: 6975, market: 'IDX' },
+  { symbol: 'TLKM', name: 'PT Telkom Indonesia (Persero) Tbk.', sector: 'Infrastructure', internalPrice: 2750, externalPrice: 2780, market: 'IDX' },
+  { symbol: 'GOTO', name: 'PT GoTo Gojek Tokopedia Tbk.', sector: 'Technology', internalPrice: 55, externalPrice: 52, market: 'IDX' },
+  { symbol: 'DSSA', name: 'PT Dian Swastatika Sentosa Tbk.', sector: 'Energy & Conglomerate', internalPrice: 820, externalPrice: 775, market: 'IDX' },
+  { symbol: 'DEFI', name: 'PT Danasupra Erapacific Tbk.', sector: 'Financial Services', internalPrice: 140, externalPrice: 145, market: 'IDX' },
+  { symbol: 'LPKR', name: 'PT Lippo Karawaci Tbk.', sector: 'Real Estate', internalPrice: 85, externalPrice: 81, market: 'IDX' },
+  { symbol: 'KOTA', name: 'PT DMS Propertindo Tbk.', sector: 'Real Estate', internalPrice: 130, externalPrice: 134, market: 'IDX' },
+  { symbol: 'CTTH', name: 'PT Citatah Tbk.', sector: 'Basic Materials', internalPrice: 134, externalPrice: 134, market: 'IDX' }
 ];
 
 const INITIAL_LOGS: AuditLog[] = [
@@ -1234,7 +1234,7 @@ export function AuditSync({ autoSyncEnabled = true }: { autoSyncEnabled?: boolea
                   </td>
                 </tr>
               ) : (
-                filteredTickers.map((item) => {
+                filteredTickers.map((item, idx) => {
                   const isUp = item.driftPercent > 0;
                   const isZero = item.driftPercent === 0;
 
@@ -1250,7 +1250,7 @@ export function AuditSync({ autoSyncEnabled = true }: { autoSyncEnabled?: boolea
                   }
 
                   return (
-                    <tr key={item.symbol} className="hover:bg-zinc-900/20 transition-all group">
+                    <tr key={`${item.symbol}-${idx}`} className="hover:bg-zinc-900/20 transition-all group">
                       {/* Ticker Symbol */}
                       <td className="px-6 py-4.5">
                         <span className="font-mono text-xs font-black text-white px-2 py-0.5 rounded bg-zinc-900 group-hover:bg-[#deff9a]/10 group-hover:text-[#deff9a] transition-colors">{item.symbol}</span>
@@ -1386,11 +1386,11 @@ export function AuditSync({ autoSyncEnabled = true }: { autoSyncEnabled?: boolea
 
         {/* List of audit items */}
         <div className="space-y-3 max-h-72 overflow-y-auto pr-1">
-          {auditLogs.map((log) => {
+          {auditLogs.map((log, idx) => {
             const isSync = log.action === 'ALIGNMENT_SYNC';
             return (
               <div 
-                key={log.id} 
+                key={`${log.id}-${idx}`} 
                 className="bg-zinc-950/60 p-4 rounded-xl border border-zinc-900/80 flex flex-col md:flex-row md:items-center justify-between gap-4 text-xs font-medium"
               >
                 <div className="space-y-1 md:space-y-1.5">

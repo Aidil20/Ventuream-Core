@@ -46,7 +46,8 @@ import {
   Building,
   BellRing,
   Edit2,
-  Check
+  Check,
+  Calendar
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { Decimal } from 'decimal.js';
@@ -96,12 +97,14 @@ import { StockExplorer } from './components/StockExplorer';
 import { FundamentalAnalyst } from './components/FundamentalAnalyst';
 import { initAuth, googleSignIn, logout as googleLogout, db } from './lib/auth';
 import { WorkspaceHub } from './components/WorkspaceHub';
+import EconomicCalendarWidget from './components/EconomicCalendarWidget';
 import { User } from 'firebase/auth';
 import { doc, onSnapshot } from 'firebase/firestore';
 import { GlobalSearch } from './components/GlobalSearch';
 import HoldingCard from './components/HoldingCard';
 import BulkActionPanel from './components/BulkActionPanel';
 import { AuditSync } from './components/AuditSync';
+import { SystemUpdateModal } from './components/SystemUpdateModal';
 
 const ASSETS = [
   {
@@ -193,6 +196,7 @@ const SIDEBAR_MENU = [
   { id: 21, label: "M&A Factor issue", icon: Activity, path: "vamsmartscanner", color: "#DFFF00" },
   { id: 13, label: "Fundamental Analyst", icon: BrainCircuit, path: "fundamental", color: "#DFFF00" },
   { id: 8, label: "Monitor Pasar", icon: Search, path: "market", color: "#deff9a" },
+  { id: 22, label: "Kalender Ekonomi", icon: Calendar, path: "calendar", color: "#deff9a" },
   { id: 1, label: "Analisis Portofolio", icon: BarChart3, path: "portfolio", color: "#deff9a" },
   { id: 10, label: "Permintaan Dokumen", icon: PenTool, path: "legal", color: "#deff9a" },
   { id: 5, label: "Laporan Keuangan", icon: Calculator, path: "financial", color: "orange-400" },
@@ -240,6 +244,7 @@ import BloombergTable from './components/BloombergTable';
 import VAMTerminalScanner from './components/VAMTerminalScanner';
 import RebalanceTool from './components/RebalanceTool';
 import { TechnicalRecommendations } from './components/TechnicalRecommendations';
+import DailyTradingAutoAnalyst from './components/DailyTradingAutoAnalyst';
 import RiskAnalytics from './components/RiskAnalytics';
 import { ManualRebalanceForm } from './components/ManualRebalanceForm';
 
@@ -415,6 +420,7 @@ export default function App() {
   const [assetsData, setAssetsData] = useState(ASSETS);
   const [activeTab, setActiveTab] = useState('home');
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+  const [isSystemUpdateModalOpen, setIsSystemUpdateModalOpen] = useState(false);
   const [autoSyncEnabled, setAutoSyncEnabled] = useState(() => {
     try {
       const saved = localStorage.getItem('vam_auto_sync_enabled');
@@ -1948,6 +1954,12 @@ export default function App() {
       // We could add this to a live news state if added in the future
     });
 
+    socket.on('system-update', (updateData: any) => {
+      console.log('[VAM SYSTEM UPDATE] Received system-wide update broadcast:', updateData);
+      syncMarketConnectivity();
+      window.dispatchEvent(new CustomEvent('vam-system-update', { detail: updateData }));
+    });
+
     socket.on('disconnect', () => {
       console.log('[VAM PROTOCOL] Gateway Tunnel Interrupted');
     });
@@ -2072,6 +2084,21 @@ export default function App() {
           <div className="space-y-6">
             {/* Global Gateway Sync Status Banner */}
             <GlobalGatewayBanner />
+
+            {/* Saham Trading Harian - Auto Analis AI */}
+            <motion.section
+              initial={{ opacity: 0, y: 15 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.5 }}
+              className="mt-4"
+            >
+              <DailyTradingAutoAnalyst 
+                onSelectStock={(sym) => {
+                  setSelectedAssetId(sym);
+                  setActiveTab('market');
+                }}
+              />
+            </motion.section>
 
             {/* AI Technical Engine Recommendations Section */}
             <motion.section
@@ -2293,7 +2320,10 @@ export default function App() {
                 </div>
               </div>
               <div className="flex items-center gap-2">
-                <span className="text-[10px] text-green-400 font-bold bg-green-900/20 px-2 py-0.5 rounded-full border border-green-800/30">IDX OPEN</span>
+                <span className="text-[10px] text-[#deff9a] font-black bg-[#deff9a]/10 px-2.5 py-0.5 rounded-full border border-[#deff9a]/20 flex items-center gap-1.5">
+                  <span className="w-1.5 h-1.5 bg-[#deff9a] rounded-full animate-ping"></span>
+                  BURSA OPERASIONAL & ANTI-LAG STABIL
+                </span>
               </div>
             </div>
 
@@ -2359,7 +2389,6 @@ export default function App() {
               </div>
             ) : (
               <div className="space-y-6">
-                <MarketSentimentBanner news={marketNews} isLoading={isFetchingNews} />
                 <GlobalIntelFeed />
                 <IdxPriceList />
                 <MarketHeatmap 
@@ -3867,6 +3896,8 @@ export default function App() {
           </div>
         );
       }
+      case 'calendar':
+        return <EconomicCalendarWidget />;
       default:
         return null;
     }
@@ -4176,12 +4207,35 @@ export default function App() {
                               </span>
                             </div>
                           </div>
+
+                          {/* System App Update Button inside Settings */}
+                          <button
+                            onClick={() => {
+                              setIsSettingsOpen(false);
+                              setIsSystemUpdateModalOpen(true);
+                            }}
+                            className="w-full py-2 bg-[#DFFF00]/10 hover:bg-[#DFFF00]/20 border border-[#DFFF00]/30 rounded-xl text-[10px] font-extrabold uppercase text-[#DFFF00] tracking-wider transition-all flex items-center justify-center gap-2 mt-1"
+                          >
+                            <Zap className="w-3.5 h-3.5" />
+                            System App Update (v2.5.4)
+                          </button>
                         </div>
                       </motion.div>
                     </>
                   )}
                 </AnimatePresence>
               </div>
+
+              {/* System App Update Quick Button */}
+              <button
+                onClick={() => setIsSystemUpdateModalOpen(true)}
+                title="System App Update Center"
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-[#DFFF00]/30 bg-[#DFFF00]/10 hover:bg-[#DFFF00]/20 text-[9px] font-black uppercase text-[#DFFF00] tracking-wider transition-all cursor-pointer"
+              >
+                <Zap className="w-3.5 h-3.5 text-[#DFFF00] animate-pulse" />
+                <span className="hidden lg:inline">Update System</span>
+                <span className="text-[8px] bg-[#DFFF00] text-black font-extrabold px-1.5 py-0.2 rounded-full">v2.5.4</span>
+              </button>
 
               {/* Manual Market Refresh Button */}
               <button
@@ -4419,6 +4473,13 @@ export default function App() {
           </AnimatePresence>
         </div>
       </div>
+
+      {/* System App Update & Maintenance Modal */}
+      <SystemUpdateModal 
+        isOpen={isSystemUpdateModalOpen} 
+        onClose={() => setIsSystemUpdateModalOpen(false)} 
+        onTriggerSystemRefresh={syncMarketConnectivity} 
+      />
     </div>
   );
 }

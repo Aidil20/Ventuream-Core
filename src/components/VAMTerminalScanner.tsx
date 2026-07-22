@@ -168,18 +168,20 @@ const VAMTerminalScanner: React.FC<VAMTerminalScannerProps> = ({
     }, [results.length]);
 
     useEffect(() => {
-        if (defaultTab !== subActiveTab) {
-            setSubActiveTab(defaultTab);
+        setSubActiveTab(defaultTab);
+    }, [defaultTab]);
+
+    useEffect(() => {
+        if (activeMarket) {
+            setMarketType(activeMarket);
         }
-        if (defaultTab === 'SCANNER') {
-            if (activeMarket && activeMarket !== marketType) {
-                setMarketType(activeMarket);
-            }
-            if (activeModule && activeModule !== selectedScanner) {
-                handleStartScan(activeModule);
-            }
+    }, [activeMarket]);
+
+    useEffect(() => {
+        if (activeModule) {
+            handleStartScan(activeModule);
         }
-    }, [defaultTab, activeMarket, activeModule, handleStartScan]);
+    }, [activeModule, handleStartScan]);
 
     return (
         <div className="bg-[#050505] min-h-screen font-sans relative">

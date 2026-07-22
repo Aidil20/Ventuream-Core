@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { Search, Plus, TrendingUp, TrendingDown, Clock, Newspaper, BarChart2, Star, X, Zap, Bell, Trash2, ChevronDown, ExternalLink, Activity, Info, Loader2, BrainCircuit, RefreshCw, ShieldAlert } from 'lucide-react';
+import { Search, Plus, TrendingUp, TrendingDown, Clock, Newspaper, BarChart2, Star, X, Zap, Bell, Trash2, ChevronDown, ExternalLink, Activity, Info, Loader2, BrainCircuit, RefreshCw, ShieldAlert, ChartCandlestick } from 'lucide-react';
 import TradingViewWidget from './TradingViewWidget';
+import AdvanceChartModal from './AdvanceChartModal';
 import TradingViewTechnicalAnalysisWidget from './TradingViewTechnicalAnalysisWidget';
 import TechnicalIndicatorsChart from './TechnicalIndicatorsChart';
 import Sparkline from './Sparkline';
@@ -50,6 +51,7 @@ export const StockExplorer: React.FC<StockExplorerProps> = ({
 }) => {
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedStock, setSelectedStock] = useState<string | null>(null);
+  const [isAdvanceChartOpen, setIsAdvanceChartOpen] = useState(false);
   const [stockInfo, setStockInfo] = useState<AssetSearchInfo | null>(null);
   const [searchResults, setSearchResults] = useState<AssetSearchInfo[]>([]);
   const [isSearching, setIsSearching] = useState(false);
@@ -818,7 +820,14 @@ export const StockExplorer: React.FC<StockExplorerProps> = ({
                 </div>
               )}
 
-              <div className="flex items-center gap-3">
+              <div className="flex items-center gap-3 flex-wrap">
+                <button 
+                  onClick={() => setIsAdvanceChartOpen(true)}
+                  className="flex items-center gap-2 px-4 py-2 rounded-2xl bg-sky-500/10 border border-sky-500/30 text-sky-400 font-black text-[11px] uppercase tracking-widest hover:bg-sky-500/20 transition-all cursor-pointer shadow-lg shadow-sky-500/10"
+                >
+                  <ChartCandlestick className="w-4 h-4 text-sky-400" />
+                  Advance Chart
+                </button>
                 {onFundamentalAudit && (
                   <button 
                     onClick={() => onFundamentalAudit(selectedStock!)}
@@ -1559,6 +1568,12 @@ export const StockExplorer: React.FC<StockExplorerProps> = ({
           </div>
         )}
       </AnimatePresence>
+
+      <AdvanceChartModal
+        symbol={selectedStock || 'IDX:BBCA'}
+        isOpen={isAdvanceChartOpen}
+        onClose={() => setIsAdvanceChartOpen(false)}
+      />
     </div>
   );
 };

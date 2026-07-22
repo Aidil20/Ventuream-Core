@@ -23,39 +23,39 @@ const SECTORS: Record<string, SectorInfo> = {
 };
 
 const IDX_TICKER_SECTORS: Record<string, { name: string; sector: string; baseline: number }> = {
-  "BBCA": { name: "Bank Central Asia", sector: "FINANCE", baseline: 10200 },
-  "BBRI": { name: "Bank Rakyat Indonesia", sector: "FINANCE", baseline: 4400 },
-  "BMRI": { name: "Bank Mandiri (Persero)", sector: "FINANCE", baseline: 6150 },
-  "BBNI": { name: "Bank Negara Indonesia", sector: "FINANCE", baseline: 4500 },
+  "BBCA": { name: "PT Bank Central Asia Tbk.", sector: "FINANCE", baseline: 10200 },
+  "BBRI": { name: "PT Bank Rakyat Indonesia (Persero) Tbk.", sector: "FINANCE", baseline: 4400 },
+  "BMRI": { name: "PT Bank Mandiri (Persero) Tbk.", sector: "FINANCE", baseline: 6150 },
+  "BBNI": { name: "PT Bank Negara Indonesia (Persero) Tbk.", sector: "FINANCE", baseline: 4500 },
   
-  "ADRO": { name: "Adaro Energy Indonesia", sector: "ENERGY_MINERAL", baseline: 2750 },
-  "ANTM": { name: "Aneka Tambang", sector: "ENERGY_MINERAL", baseline: 1450 },
-  "MDKA": { name: "Merdeka Copper Gold", sector: "ENERGY_MINERAL", baseline: 2350 },
-  "PTBA": { name: "Bukit Asam", sector: "ENERGY_MINERAL", baseline: 2450 },
-  "ITMG": { name: "Indo Tambangraya", sector: "ENERGY_MINERAL", baseline: 25800 },
-  "HRUM": { name: "Harum Energy", sector: "ENERGY_MINERAL", baseline: 1150 },
-  "MEDC": { name: "Medco Energi", sector: "ENERGY_MINERAL", baseline: 1210 },
-  "BRMS": { name: "Bumi Resources Minerals", sector: "ENERGY_MINERAL", baseline: 155 },
-  "BREN": { name: "Barito Renewables Energy", sector: "ENERGY_MINERAL", baseline: 6500 },
-  "AMMN": { name: "Amman Mineral", sector: "ENERGY_MINERAL", baseline: 8250 },
+  "ADRO": { name: "PT Adaro Energy Indonesia Tbk.", sector: "ENERGY_MINERAL", baseline: 2750 },
+  "ANTM": { name: "PT Aneka Tambang Tbk.", sector: "ENERGY_MINERAL", baseline: 1450 },
+  "MDKA": { name: "PT Merdeka Copper Gold Tbk.", sector: "ENERGY_MINERAL", baseline: 2350 },
+  "PTBA": { name: "PT Bukit Asam Tbk.", sector: "ENERGY_MINERAL", baseline: 2450 },
+  "ITMG": { name: "PT Indo Tambangraya Megah Tbk.", sector: "ENERGY_MINERAL", baseline: 25800 },
+  "HRUM": { name: "PT Harum Energy Tbk.", sector: "ENERGY_MINERAL", baseline: 1150 },
+  "MEDC": { name: "PT Medco Energi Internasional Tbk.", sector: "ENERGY_MINERAL", baseline: 1210 },
+  "BRMS": { name: "PT Bumi Resources Minerals Tbk.", sector: "ENERGY_MINERAL", baseline: 155 },
+  "BREN": { name: "PT Barito Renewables Energy Tbk.", sector: "ENERGY_MINERAL", baseline: 6500 },
+  "AMMN": { name: "PT Amman Mineral Internasional Tbk.", sector: "ENERGY_MINERAL", baseline: 8250 },
   
-  "UNVR": { name: "Unilever Indonesia", sector: "CONSUMER_RETAIL", baseline: 2850 },
-  "AMRT": { name: "Sumber Alfaria Trijaya", sector: "CONSUMER_RETAIL", baseline: 2820 },
-  "ICBP": { name: "Indofood CBP", sector: "CONSUMER_RETAIL", baseline: 10450 },
-  "CPIN": { name: "Charoen Pokphand", sector: "CONSUMER_RETAIL", baseline: 4850 },
+  "UNVR": { name: "PT Unilever Indonesia Tbk.", sector: "CONSUMER_RETAIL", baseline: 2850 },
+  "AMRT": { name: "PT Sumber Alfaria Trijaya Tbk.", sector: "CONSUMER_RETAIL", baseline: 2820 },
+  "ICBP": { name: "PT Indofood CBP Sukses Makmur Tbk.", sector: "CONSUMER_RETAIL", baseline: 10450 },
+  "CPIN": { name: "PT Charoen Pokphand Indonesia Tbk.", sector: "CONSUMER_RETAIL", baseline: 4850 },
   
-  "TLKM": { name: "Telkom Indonesia", sector: "TECH_TELCO", baseline: 3650 },
-  "GOTO": { name: "GoTo Gojek Tokopedia", sector: "TECH_TELCO", baseline: 62 },
-  "BUKA": { name: "Bukalapak.com", sector: "TECH_TELCO", baseline: 118 },
+  "TLKM": { name: "PT Telkom Indonesia (Persero) Tbk.", sector: "TECH_TELCO", baseline: 3650 },
+  "GOTO": { name: "PT GoTo Gojek Tokopedia Tbk.", sector: "TECH_TELCO", baseline: 62 },
+  "BUKA": { name: "PT Bukalapak.com Tbk.", sector: "TECH_TELCO", baseline: 118 },
   
-  "ASII": { name: "Astra International", sector: "INFRA_CONGLOM", baseline: 4850 },
-  "SMGR": { name: "Semen Indonesia", sector: "INFRA_CONGLOM", baseline: 3820 },
-  "BRPT": { name: "Barito Pacific", sector: "INFRA_CONGLOM", baseline: 980 },
-  "TPIA": { name: "Chandra Asri Pacific", sector: "INFRA_CONGLOM", baseline: 8500 },
-  "COAL": { name: "Black Diamond Resources", sector: "INFRA_CONGLOM", baseline: 75 },
-  "DEFI": { name: "Danasupra Erapacific", sector: "INFRA_CONGLOM", baseline: 82 },
-  "DEWA": { name: "Darma Henwa", sector: "INFRA_CONGLOM", baseline: 65 },
-  "CTTH": { name: "PT Citatah Tbk", sector: "INFRA_CONGLOM", baseline: 134 }
+  "ASII": { name: "PT Astra International Tbk.", sector: "INFRA_CONGLOM", baseline: 4850 },
+  "SMGR": { name: "PT Semen Indonesia (Persero) Tbk.", sector: "INFRA_CONGLOM", baseline: 3820 },
+  "BRPT": { name: "PT Barito Pacific Tbk.", sector: "INFRA_CONGLOM", baseline: 980 },
+  "TPIA": { name: "PT Chandra Asri Pacific Tbk.", sector: "INFRA_CONGLOM", baseline: 8500 },
+  "COAL": { name: "PT Black Diamond Resources Tbk.", sector: "INFRA_CONGLOM", baseline: 75 },
+  "DEFI": { name: "PT Danasupra Erapacific Tbk.", sector: "INFRA_CONGLOM", baseline: 82 },
+  "DEWA": { name: "PT Darma Henwa Tbk.", sector: "INFRA_CONGLOM", baseline: 65 },
+  "CTTH": { name: "PT Citatah Tbk.", sector: "INFRA_CONGLOM", baseline: 134 }
 };
 
 export const MarketHeatmap = ({ onViewAsset }: MarketHeatmapProps) => {

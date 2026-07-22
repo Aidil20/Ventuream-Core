@@ -16,9 +16,22 @@ import {
   XCircle,
   HelpCircle,
   Clock,
-  Briefcase
+  Briefcase,
+  Flame,
+  ShieldAlert,
+  Target
 } from 'lucide-react';
 import TradingViewWidget from './TradingViewWidget';
+
+export interface AraPotentialInfo {
+  isAraCandidate: boolean;
+  araPrice: string;
+  distanceToAra: string;
+  volumeSpikeMultiplier: string;
+  araScore: number;
+  bidOfferRatio: string;
+  catalyst: string;
+}
 
 export interface RecommendationItem {
   symbol: string;
@@ -38,6 +51,7 @@ export interface RecommendationItem {
   sparkline: number[];
   lastTick?: 'up' | 'down' | null;
   lastTickTime?: number;
+  araPotential?: AraPotentialInfo;
 }
 
 const getTradingViewSymbol = (item: RecommendationItem, market: 'IDX' | 'SGX' | 'US' | 'GLOBAL'): string => {
@@ -61,8 +75,138 @@ const getTradingViewSymbol = (item: RecommendationItem, market: 'IDX' | 'SGX' | 
 const INITIAL_RECOMMENDATIONS: Record<'IDX' | 'SGX' | 'US' | 'GLOBAL', RecommendationItem[]> = {
   IDX: [
     {
+      symbol: 'BRMS',
+      name: 'PT Bumi Resources Minerals Tbk.',
+      price: 'IDR 392',
+      change: '+22.50%',
+      changePercent: 22.50,
+      signal: 'BUY',
+      rsi: 68,
+      macd: 'Ultra Bullish Spike',
+      ema20Score: 'Bullish',
+      confidence: 99,
+      rationale: 'Volume lonjakan tertinggi 9.1x lipat rata-rata harian. Antrean offer di fraksi atas sangat tipis dengan dorongan masif menuju penguncian Auto Rejection Atas (ARA 25%).',
+      timeframe: '15m',
+      volume: '842.1M',
+      marketCap: '55.6T',
+      sparkline: [20, 25, 30, 38, 45, 52, 60, 72, 85, 92, 98, 105, 120],
+      araPotential: {
+        isAraCandidate: true,
+        araPrice: 'IDR 400',
+        distanceToAra: '+2.0%',
+        volumeSpikeMultiplier: '9.1x',
+        araScore: 99,
+        bidOfferRatio: '6.8 : 1',
+        catalyst: 'Lonjakan volume transaksi historis, terserapnya antrean offer fraksi atas menuju penguncian ARA harian.'
+      }
+    },
+    {
+      symbol: 'BREN',
+      name: 'PT Barito Renewables Energy Tbk.',
+      price: 'IDR 7,850',
+      change: '+16.30%',
+      changePercent: 16.30,
+      signal: 'BUY',
+      rsi: 71,
+      macd: 'Parabolic Expansion',
+      ema20Score: 'Bullish',
+      confidence: 97,
+      rationale: 'Akumulasi agresif konsorsium institusi besar. Penembusan resistensi All-Time High memicu gelombang FOMO ritel menuju penguncian ceiling ARA.',
+      timeframe: '1H',
+      volume: '142.8M',
+      marketCap: '1,050T',
+      sparkline: [50, 52, 58, 65, 70, 78, 85, 95, 108, 115, 122, 130, 140],
+      araPotential: {
+        isAraCandidate: true,
+        araPrice: 'IDR 8,550',
+        distanceToAra: '+8.9%',
+        volumeSpikeMultiplier: '6.8x',
+        araScore: 97,
+        bidOfferRatio: '5.2 : 1',
+        catalyst: 'Breakout All-Time High dengan aliran modal masuk asing terbesar di bursa.'
+      }
+    },
+    {
+      symbol: 'PANI',
+      name: 'PT Pantai Indah Kapuk Dua Tbk.',
+      price: 'IDR 15,200',
+      change: '+17.80%',
+      changePercent: 17.80,
+      signal: 'BUY',
+      rsi: 74,
+      macd: 'Breakout Divergence',
+      ema20Score: 'Bullish',
+      confidence: 98,
+      rationale: 'Tekanan beli berkelanjutan menyapu seluruh kolom offer. Struktur antrean bid menebal di harga batas atas.',
+      timeframe: '15m',
+      volume: '68.4M',
+      marketCap: '245T',
+      sparkline: [40, 42, 48, 55, 62, 72, 85, 96, 110, 122, 135, 145, 155],
+      araPotential: {
+        isAraCandidate: true,
+        araPrice: 'IDR 15,500',
+        distanceToAra: '+1.9%',
+        volumeSpikeMultiplier: '11.2x',
+        araScore: 99,
+        bidOfferRatio: '8.4 : 1',
+        catalyst: 'Volume spike 11x lipat dengan penguncian bid tebal di fraksi harga atas.'
+      }
+    },
+    {
+      symbol: 'AMMN',
+      name: 'PT Amman Mineral Internasional Tbk.',
+      price: 'IDR 11,450',
+      change: '+14.50%',
+      changePercent: 14.50,
+      signal: 'BUY',
+      rsi: 66,
+      macd: 'Golden Cross Momentum',
+      ema20Score: 'Bullish',
+      confidence: 94,
+      rationale: 'Inflow agregat asing menyerap penawaran di fraksi atas. Terkonfirmasi dorongan harga mendekati batas Auto Rejection Atas.',
+      timeframe: '4H',
+      volume: '95.1M',
+      marketCap: '830T',
+      sparkline: [35, 38, 42, 48, 55, 62, 70, 80, 92, 102, 112, 120, 128],
+      araPotential: {
+        isAraCandidate: true,
+        araPrice: 'IDR 12,000',
+        distanceToAra: '+4.8%',
+        volumeSpikeMultiplier: '5.2x',
+        araScore: 94,
+        bidOfferRatio: '3.9 : 1',
+        catalyst: 'Inflow asing masif menyerap seluruh penawaran di fraksi harga atas.'
+      }
+    },
+    {
+      symbol: 'CUAN',
+      name: 'PT Petrindo Jaya Kreasi Tbk.',
+      price: 'IDR 8,950',
+      change: '+16.40%',
+      changePercent: 16.40,
+      signal: 'BUY',
+      rsi: 69,
+      macd: 'V-Shape Reversal',
+      ema20Score: 'Bullish',
+      confidence: 96,
+      rationale: 'Pola pembalikan arah V-shape sangat agresif setelah pengumuman ekspansi aset. Berpotensi tinggi menembus ceiling ARA harian.',
+      timeframe: '1H',
+      volume: '54.2M',
+      marketCap: '101T',
+      sparkline: [30, 32, 38, 45, 52, 60, 72, 84, 96, 108, 118, 126, 134],
+      araPotential: {
+        isAraCandidate: true,
+        araPrice: 'IDR 9,225',
+        distanceToAra: '+3.1%',
+        volumeSpikeMultiplier: '7.6x',
+        araScore: 96,
+        bidOfferRatio: '4.6 : 1',
+        catalyst: 'Lompatan harga eksponensial dengan pola V-shape breakout mengarah ke batas ARA.'
+      }
+    },
+    {
       symbol: 'BBCA',
-      name: 'Bank Central Asia Tbk',
+      name: 'PT Bank Central Asia Tbk.',
       price: 'IDR 10,475',
       change: '+1.45%',
       changePercent: 1.45,
@@ -75,11 +219,20 @@ const INITIAL_RECOMMENDATIONS: Record<'IDX' | 'SGX' | 'US' | 'GLOBAL', Recommend
       timeframe: '1D',
       volume: '48.9M',
       marketCap: '1,290T',
-      sparkline: [40, 42, 41, 43, 45, 44, 46, 48, 47, 49, 48, 51, 53]
+      sparkline: [40, 42, 41, 43, 45, 44, 46, 48, 47, 49, 48, 51, 53],
+      araPotential: {
+        isAraCandidate: false,
+        araPrice: 'IDR 12,575',
+        distanceToAra: '+20.0%',
+        volumeSpikeMultiplier: '1.2x',
+        araScore: 18,
+        bidOfferRatio: '1.2 : 1',
+        catalyst: 'Saham perbankan large-cap dengan pergerakan stabil dan volatilitas terukur.'
+      }
     },
     {
       symbol: 'BMRI',
-      name: 'Bank Mandiri (Persero) Tbk',
+      name: 'PT Bank Mandiri (Persero) Tbk.',
       price: 'IDR 7,150',
       change: '+1.78%',
       changePercent: 1.78,
@@ -92,11 +245,20 @@ const INITIAL_RECOMMENDATIONS: Record<'IDX' | 'SGX' | 'US' | 'GLOBAL', Recommend
       timeframe: '4H',
       volume: '59.2M',
       marketCap: '667T',
-      sparkline: [30, 31, 29, 32, 34, 33, 35, 34, 36, 38, 37, 40, 42]
+      sparkline: [30, 31, 29, 32, 34, 33, 35, 34, 36, 38, 37, 40, 42],
+      araPotential: {
+        isAraCandidate: false,
+        araPrice: 'IDR 8,575',
+        distanceToAra: '+19.9%',
+        volumeSpikeMultiplier: '1.4x',
+        araScore: 22,
+        bidOfferRatio: '1.4 : 1',
+        catalyst: 'Pergerakan organik terukur mengikuti tren indeks perbankan nasional.'
+      }
     },
     {
       symbol: 'TLKM',
-      name: 'Telkom Indonesia Tbk',
+      name: 'PT Telkom Indonesia (Persero) Tbk.',
       price: 'IDR 2,810',
       change: '-0.71%',
       changePercent: -0.71,
@@ -109,11 +271,20 @@ const INITIAL_RECOMMENDATIONS: Record<'IDX' | 'SGX' | 'US' | 'GLOBAL', Recommend
       timeframe: '1D',
       volume: '112.5M',
       marketCap: '278T',
-      sparkline: [50, 51, 50, 49, 48, 47, 49, 48, 48, 49, 48, 47, 48]
+      sparkline: [50, 51, 50, 49, 48, 47, 49, 48, 48, 49, 48, 47, 48],
+      araPotential: {
+        isAraCandidate: false,
+        araPrice: 'IDR 3,500',
+        distanceToAra: '+24.5%',
+        volumeSpikeMultiplier: '0.8x',
+        araScore: 12,
+        bidOfferRatio: '0.9 : 1',
+        catalyst: 'Fase konsolidasi terikat di area rentang terbatas.'
+      }
     },
     {
       symbol: 'ADRO',
-      name: 'Adaro Energy Indonesia Tbk',
+      name: 'PT Adaro Energy Indonesia Tbk.',
       price: 'IDR 3,590',
       change: '-3.23%',
       changePercent: -3.23,
@@ -126,7 +297,16 @@ const INITIAL_RECOMMENDATIONS: Record<'IDX' | 'SGX' | 'US' | 'GLOBAL', Recommend
       timeframe: '1H',
       volume: '78.1M',
       marketCap: '115T',
-      sparkline: [60, 59, 58, 59, 61, 62, 60, 58, 57, 55, 53, 52, 50]
+      sparkline: [60, 59, 58, 59, 61, 62, 60, 58, 57, 55, 53, 52, 50],
+      araPotential: {
+        isAraCandidate: false,
+        araPrice: 'IDR 4,480',
+        distanceToAra: '+24.8%',
+        volumeSpikeMultiplier: '0.6x',
+        araScore: 5,
+        bidOfferRatio: '0.4 : 1',
+        catalyst: 'Tekanan jual mendominasi di area resistensi atas.'
+      }
     }
   ],
   SGX: [
@@ -295,6 +475,9 @@ export const TechnicalRecommendations: React.FC = () => {
   const [recommendations, setRecommendations] = useState(INITIAL_RECOMMENDATIONS);
   const [selectedItemState, setSelectedItem] = useState<RecommendationItem | null>(null);
   
+  // Filter state including ARA (Auto Rejection Atas) screening mode
+  const [signalFilter, setSignalFilter] = useState<'ALL' | 'ARA' | 'BUY' | 'HIGH_CONF'>('ALL');
+
   // Dynamically derive the active selectedItem from recommendations to always show live updated prices
   const selectedItem = selectedItemState
     ? (recommendations[activeMarket].find(item => item.symbol.toUpperCase() === selectedItemState.symbol.toUpperCase()) || selectedItemState)
@@ -312,6 +495,47 @@ export const TechnicalRecommendations: React.FC = () => {
 
   // Listen to system-wide Live Market updates from TradingView/Gateway to sync recommendations in real-time
   useEffect(() => {
+    // Initial sync with live prices endpoint
+    fetch('/api/market/realtime-prices')
+      .then(res => res.json())
+      .then((data: Record<string, { price: number; changePercent?: number; rsi?: number }>) => {
+        if (!data || typeof data !== 'object') return;
+        setRecommendations(prev => {
+          const next = { ...prev };
+          Object.keys(next).forEach(marketKey => {
+            const key = marketKey as 'IDX' | 'SGX' | 'US' | 'GLOBAL';
+            next[key] = next[key].map(item => {
+              const cleanItemSymbol = item.symbol.toUpperCase();
+              const match = data[cleanItemSymbol] || data[`${cleanItemSymbol}.JK`];
+              if (match && typeof match.price === 'number' && match.price > 0) {
+                const price = match.price;
+                const changePercent = match.changePercent !== undefined ? match.changePercent : item.changePercent;
+                const prefix = item.price.startsWith('IDR') ? 'IDR ' : item.price.startsWith('SGD') ? 'SGD ' : item.price.startsWith('USD') ? 'USD ' : '';
+                let formattedPrice = '';
+                if (prefix === 'IDR ') {
+                  formattedPrice = `${prefix}${Math.round(price).toLocaleString('id-ID')}`;
+                } else if (prefix === 'SGD ' || prefix === 'USD ') {
+                  formattedPrice = `${prefix}${price.toFixed(2)}`;
+                } else {
+                  formattedPrice = price.toFixed(4);
+                }
+                const formattedChange = `${changePercent >= 0 ? '+' : ''}${changePercent.toFixed(2)}%`;
+                return {
+                  ...item,
+                  price: formattedPrice,
+                  change: formattedChange,
+                  changePercent,
+                  rsi: match.rsi ? Math.round(match.rsi) : item.rsi
+                };
+              }
+              return item;
+            });
+          });
+          return next;
+        });
+      })
+      .catch(err => console.warn("Failed initial recommendations live price sync:", err));
+
     const handleSystemMarketUpdate = (e: Event) => {
       const customEvent = e as CustomEvent<{
         symbol: string;
@@ -475,10 +699,26 @@ export const TechnicalRecommendations: React.FC = () => {
     }, 1100);
   };
 
-  const currentList = recommendations[activeMarket].filter(
-    item => item.symbol.toLowerCase().includes(searchQuery.toLowerCase()) || 
-            item.name.toLowerCase().includes(searchQuery.toLowerCase())
-  );
+  const currentList = recommendations[activeMarket].filter(item => {
+    const matchesSearch = item.symbol.toLowerCase().includes(searchQuery.toLowerCase()) || 
+                          item.name.toLowerCase().includes(searchQuery.toLowerCase());
+    if (!matchesSearch) return false;
+
+    if (signalFilter === 'ARA') {
+      return item.araPotential?.isAraCandidate || item.changePercent >= 10;
+    }
+    if (signalFilter === 'BUY') {
+      return item.signal === 'BUY';
+    }
+    if (signalFilter === 'HIGH_CONF') {
+      return item.confidence >= 85;
+    }
+    return true;
+  });
+
+  const araCandidateCount = recommendations[activeMarket].filter(
+    item => item.araPotential?.isAraCandidate || item.changePercent >= 10
+  ).length;
 
   const executePaperOrder = (item: RecommendationItem) => {
     setOrderExecutedMsg(`[TRANSAKSI SECURE] Perintah simulasi institutional ${item.signal} untuk 100 Lot / $10k nominal pada instrumen ${item.symbol} telah dikirim ke CGS/IBKR Gateway.`);
@@ -537,7 +777,7 @@ export const TechnicalRecommendations: React.FC = () => {
         </div>
 
         {/* Market Category Selector */}
-        <div className="grid grid-cols-4 gap-1 bg-zinc-900/30 p-1 rounded-2xl border border-zinc-900/80 mb-4">
+        <div className="grid grid-cols-4 gap-1 bg-zinc-900/30 p-1 rounded-2xl border border-zinc-900/80 mb-3">
           {(['IDX', 'SGX', 'US', 'GLOBAL'] as const).map(market => (
             <button
               key={market}
@@ -551,6 +791,70 @@ export const TechnicalRecommendations: React.FC = () => {
               {market}
             </button>
           ))}
+        </div>
+
+        {/* Strategy & ARA Filter Bar */}
+        <div className="flex flex-wrap items-center justify-between gap-2 mb-4 p-2.5 bg-zinc-950/80 border border-zinc-900 rounded-2xl">
+          <div className="flex items-center gap-1.5 overflow-x-auto py-0.5 max-w-full">
+            <span className="text-[9px] text-zinc-500 font-mono font-bold uppercase mr-1 tracking-wider">Penyaringan:</span>
+            
+            <button
+              onClick={() => setSignalFilter('ALL')}
+              className={`px-3 py-1 rounded-xl text-[9.5px] font-bold font-mono uppercase transition-all cursor-pointer ${
+                signalFilter === 'ALL'
+                  ? 'bg-zinc-800 text-white border border-zinc-700'
+                  : 'text-zinc-500 hover:text-zinc-300'
+              }`}
+            >
+              Semua ({recommendations[activeMarket].length})
+            </button>
+
+            <button
+              onClick={() => setSignalFilter('ARA')}
+              className={`flex items-center gap-1.5 px-3.5 py-1 rounded-xl text-[9.5px] font-black font-mono uppercase transition-all cursor-pointer border ${
+                signalFilter === 'ARA'
+                  ? 'bg-amber-400 text-slate-950 border-amber-300 shadow-[0_0_12px_rgba(251,191,36,0.35)]'
+                  : 'bg-amber-500/10 text-amber-400 border-amber-500/25 hover:bg-amber-500/20'
+              }`}
+            >
+              <Zap className="w-3 h-3 fill-amber-400 text-amber-400 animate-pulse" />
+              <span>Saring Potensi ARA</span>
+              <span className={`ml-1 px-1.5 py-0.2 rounded text-[8px] font-extrabold ${
+                signalFilter === 'ARA' ? 'bg-slate-950 text-amber-400' : 'bg-amber-500/20 text-amber-300'
+              }`}>
+                {araCandidateCount}
+              </span>
+            </button>
+
+            <button
+              onClick={() => setSignalFilter('BUY')}
+              className={`px-3 py-1 rounded-xl text-[9.5px] font-bold font-mono uppercase transition-all cursor-pointer ${
+                signalFilter === 'BUY'
+                  ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30'
+                  : 'text-zinc-500 hover:text-zinc-300'
+              }`}
+            >
+              Signal BUY
+            </button>
+
+            <button
+              onClick={() => setSignalFilter('HIGH_CONF')}
+              className={`px-3 py-1 rounded-xl text-[9.5px] font-bold font-mono uppercase transition-all cursor-pointer ${
+                signalFilter === 'HIGH_CONF'
+                  ? 'bg-cyan-500/20 text-cyan-400 border border-cyan-500/30'
+                  : 'text-zinc-500 hover:text-zinc-300'
+              }`}
+            >
+              Kepercayaan &gt;85%
+            </button>
+          </div>
+
+          {signalFilter === 'ARA' && (
+            <div className="flex items-center gap-1.5 text-[8.5px] font-mono text-amber-400 bg-amber-500/10 px-2.5 py-1 rounded-lg border border-amber-500/20">
+              <Flame className="w-3 h-3 text-amber-400" />
+              <span>Menampilkan saham berpotensi menembus Auto Rejection Atas (ARA)</span>
+            </div>
+          )}
         </div>
 
         {/* Live Mapped TradingView Connection Bridge Monitor Banner */}
@@ -653,9 +957,17 @@ export const TechnicalRecommendations: React.FC = () => {
                       >
                         <td className="py-3.5 pl-2">
                           <div className="flex flex-col">
-                            <span className="font-mono font-extrabold text-[#DFFF00] group-hover:text-white transition-colors">
-                              {item.symbol}
-                            </span>
+                            <div className="flex items-center gap-1.5">
+                              <span className="font-mono font-extrabold text-[#DFFF00] group-hover:text-white transition-colors">
+                                {item.symbol}
+                              </span>
+                              {item.araPotential?.isAraCandidate && (
+                                <span className="px-1.5 py-0.2 rounded bg-amber-400/10 border border-amber-400/30 text-amber-400 text-[7.5px] font-black uppercase tracking-wider flex items-center gap-0.5">
+                                  <Zap className="w-2.5 h-2.5 fill-amber-400" />
+                                  ARA {item.araPotential.distanceToAra}
+                                </span>
+                              )}
+                            </div>
                             <span className="text-[9px] text-zinc-500 truncate max-w-[140px] md:max-w-xs">
                               {item.name}
                             </span>
@@ -792,6 +1104,58 @@ export const TechnicalRecommendations: React.FC = () => {
                       {selectedItem.rationale}
                     </p>
                   </div>
+
+                  {/* ARA Potential Matrix Card */}
+                  {selectedItem.araPotential && (
+                    <div className="p-3.5 bg-gradient-to-br from-amber-950/30 via-zinc-950 to-black border border-amber-500/20 rounded-2xl space-y-2.5">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-1.5 text-amber-400">
+                          <Zap className="w-3.5 h-3.5 fill-amber-400" />
+                          <span className="text-[9.5px] font-black uppercase tracking-wider font-mono">Potensi Auto Rejection Atas (ARA)</span>
+                        </div>
+                        <span className="px-2 py-0.5 bg-amber-400/10 border border-amber-400/30 text-amber-300 text-[8.5px] font-mono font-black rounded-full">
+                          SKOR ARA: {selectedItem.araPotential.araScore}%
+                        </span>
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-2 text-[9.5px] font-mono">
+                        <div className="bg-zinc-900/50 p-2 rounded-xl border border-zinc-800">
+                          <span className="text-zinc-500 text-[7.5px] uppercase block">Batas Ceiling ARA</span>
+                          <span className="text-amber-300 font-extrabold">{selectedItem.araPotential.araPrice}</span>
+                        </div>
+                        <div className="bg-zinc-900/50 p-2 rounded-xl border border-zinc-800">
+                          <span className="text-zinc-500 text-[7.5px] uppercase block">Jarak ke ARA</span>
+                          <span className="text-emerald-400 font-extrabold">{selectedItem.araPotential.distanceToAra}</span>
+                        </div>
+                        <div className="bg-zinc-900/50 p-2 rounded-xl border border-zinc-800">
+                          <span className="text-zinc-500 text-[7.5px] uppercase block">Volume Spike</span>
+                          <span className="text-white font-extrabold">{selectedItem.araPotential.volumeSpikeMultiplier}</span>
+                        </div>
+                        <div className="bg-zinc-900/50 p-2 rounded-xl border border-zinc-800">
+                          <span className="text-zinc-500 text-[7.5px] uppercase block">Rasio Bid/Offer</span>
+                          <span className="text-white font-extrabold">{selectedItem.araPotential.bidOfferRatio}</span>
+                        </div>
+                      </div>
+
+                      <div className="space-y-1">
+                        <div className="flex justify-between text-[8px] font-mono text-zinc-400">
+                          <span>Tingkat Kesiapan Breakout ARA</span>
+                          <span className="text-amber-400 font-bold">{selectedItem.araPotential.araScore}%</span>
+                        </div>
+                        <div className="w-full bg-zinc-900 rounded-full h-1.5 overflow-hidden">
+                          <div 
+                            className="h-full bg-gradient-to-r from-amber-500 via-yellow-400 to-[#DFFF00]" 
+                            style={{ width: `${selectedItem.araPotential.araScore}%` }}
+                          />
+                        </div>
+                      </div>
+
+                      <p className="text-[9px] text-zinc-400 leading-normal font-sans italic border-t border-zinc-900/80 pt-2">
+                        <span className="text-amber-400 font-bold font-mono not-italic mr-1">Katalis AI:</span>
+                        {selectedItem.araPotential.catalyst}
+                      </p>
+                    </div>
+                  )}
 
                   {/* Live Synced TradingView Advanced Chart Panel */}
                   <div className="h-44 bg-[#020407] border border-zinc-800 rounded-2xl overflow-hidden relative group">

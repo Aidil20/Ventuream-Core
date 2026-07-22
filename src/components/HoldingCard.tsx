@@ -1,8 +1,9 @@
 import React, { useEffect, useState, useRef } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { Decimal } from 'decimal.js';
-import { TrendingUp, TrendingDown, ArrowUpRight, ArrowDownRight, Bell } from 'lucide-react';
+import { TrendingUp, TrendingDown, ArrowUpRight, ArrowDownRight, Bell, ChartCandlestick } from 'lucide-react';
 import Sparkline from './Sparkline';
+import AdvanceChartModal from './AdvanceChartModal';
 
 interface PortfolioAsset {
   ticker: string;
@@ -128,6 +129,7 @@ export default function HoldingCard({
 
   const unitPrice = asset.currentPrice || asset.marketPrice || 100;
   const [isAlertPanelOpen, setIsAlertPanelOpen] = useState(false);
+  const [isAdvanceChartOpen, setIsAdvanceChartOpen] = useState(false);
   const [targetPriceInput, setTargetPriceInput] = useState(
     alertConfig?.targetPrice !== undefined ? alertConfig.targetPrice.toString() : unitPrice.toFixed(0)
   );
@@ -359,7 +361,19 @@ export default function HoldingCard({
           />
         </div>
 
-        <div className="flex items-center gap-4 relative z-10 text-right w-1/3 justify-end min-w-[150px]">
+        <div className="flex items-center gap-2 relative z-10 text-right w-1/3 justify-end min-w-[150px]">
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              setIsAdvanceChartOpen(true);
+            }}
+            className="p-1.5 rounded-lg border bg-sky-500/10 border-sky-500/30 text-sky-400 hover:bg-sky-500 hover:text-black transition-all shrink-0 flex items-center gap-1"
+            title={`Advance Chart for ${tickerCode}`}
+          >
+            <ChartCandlestick className="w-3 h-3" />
+            <span className="hidden md:inline text-[9px] font-black uppercase tracking-wider">Chart</span>
+          </button>
+
           {onSaveAlert && (
             <button
               onClick={(e) => {
@@ -509,6 +523,12 @@ export default function HoldingCard({
           </motion.div>
         )}
       </AnimatePresence>
+
+      <AdvanceChartModal
+        symbol={`IDX:${tickerCode.replace('.JK', '').toUpperCase()}`}
+        isOpen={isAdvanceChartOpen}
+        onClose={() => setIsAdvanceChartOpen(false)}
+      />
     </div>
   );
 }

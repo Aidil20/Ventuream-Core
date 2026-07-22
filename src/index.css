@@ -76,6 +76,25 @@
   width: 100%;
 }
 
+/* Hide TradingView copyright elements, links, and attribution overlays */
+.tradingview-widget-copyright,
+.tradingview-widget-copyright__link,
+.tradingview-widget-container div.tradingview-widget-copyright,
+.tradingview-widget-container__widget + div,
+a[href*="utm_campaign=ticker-tape-logo"],
+a[href*="tradingview.com/?utm_campaign="] {
+  display: none !important;
+  visibility: hidden !important;
+  opacity: 0 !important;
+  pointer-events: none !important;
+  height: 0 !important;
+  width: 0 !important;
+  overflow: hidden !important;
+  position: absolute !important;
+  top: -9999px !important;
+  left: -9999px !important;
+}
+
 /* Penyesuaian untuk Layar Desktop (Lebar > 1024px) */
 @media (min-width: 1024px) {
   .main-dashboard-container {

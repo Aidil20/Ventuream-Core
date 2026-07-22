@@ -84,7 +84,7 @@ const BloombergTable: React.FC<BloombergTableProps> = ({
                         </tr>
                     </thead>
                     <tbody>
-                        {portfolioData.map((item) => {
+                        {portfolioData.map((item, idx) => {
                             const plPercentage = (item.unrealized / (item.averagePrice * item.lots * 100)) * 100;
                             const ticker = item.ticker.replace('.JK', '');
                             
@@ -95,7 +95,7 @@ const BloombergTable: React.FC<BloombergTableProps> = ({
                             const isDailyGain = dailyChg >= 0;
 
                             return (
-                                <tr key={item.ticker} className={`border-b border-zinc-900/40 hover:bg-white/[0.01] ${selectedTickers.includes(item.ticker) ? 'bg-white/[0.01]' : ''}`}>
+                                <tr key={`${item.ticker}-${idx}`} className={`border-b border-zinc-900/40 hover:bg-white/[0.01] ${selectedTickers.includes(item.ticker) ? 'bg-white/[0.01]' : ''}`}>
                                     {onSelectTickerToggle && (
                                         <td className="py-3 text-center">
                                             <div 

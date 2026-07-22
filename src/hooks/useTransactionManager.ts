@@ -12,36 +12,19 @@ export interface Transaction {
   broker: 'CGS_INTERNATIONAL' | 'IBKR';
 }
 
-const DEFAULT_HISTORY: Transaction[] = [
-  {
-    id: 'TX-1',
-    timestamp: new Date(Date.now() - 86400000).toISOString(),
-    assetType: 'EQUITY',
-    ticker: 'BBRI',
-    side: 'BUY',
-    quantity: 1000,
-    price: 4820,
-    currency: 'IDR',
-    broker: 'CGS_INTERNATIONAL'
-  },
-  {
-    id: 'TX-2',
-    timestamp: new Date(Date.now() - 172800000).toISOString(),
-    assetType: 'EQUITY',
-    ticker: 'GOTO',
-    side: 'SELL',
-    quantity: 50000,
-    price: 68,
-    currency: 'IDR',
-    broker: 'CGS_INTERNATIONAL'
-  }
-];
+const DEFAULT_HISTORY: Transaction[] = [];
 
 export const useTransactionManager = () => {
   const [history, setHistory] = useState<Transaction[]>(() => {
     try {
       const saved = localStorage.getItem('transaction_history_v3');
-      if (saved) return JSON.parse(saved);
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed)) {
+          // Filter out dummy items if any are present from previous sessions
+          return parsed.filter((tx: any) => tx.id !== 'TX-1' && tx.id !== 'TX-2');
+        }
+      }
     } catch (e) {
       console.error("Failed to parse transaction history", e);
     }

@@ -13,6 +13,11 @@ export interface MarketNewsItem {
   score?: number;
   confidence?: number;
   url?: string;
+  sentimentBreakdown?: {
+    bullish: number;
+    bearish: number;
+    neutral: number;
+  };
 }
 
 function getCachedNews(key: string): MarketNewsItem[] | null {
@@ -64,7 +69,13 @@ export async function fetchMarketNewsSummary(forceRefresh = false, symbol?: stri
        return cached || getFallbackNews();
     }
 
-    const news = await response.json();
+    const contentType = response.headers.get('content-type');
+    if (contentType && !contentType.includes('application/json')) {
+      console.warn(`[VAM GATEWAY] News API returned non-JSON content (${contentType}). Using cached/fallback.`);
+      return cached || getFallbackNews();
+    }
+
+    const news = await response.json().catch(() => null);
     
     if (!news || !Array.isArray(news) || news.length === 0) {
        return cached || getFallbackNews();
