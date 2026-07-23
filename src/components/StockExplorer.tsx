@@ -307,7 +307,7 @@ export const StockExplorer: React.FC<StockExplorerProps> = ({
         setTickHistory(seededTicks);
       }
     }
-  }, [selectedStock, stockInfo, tickHistory.length]);
+  }, [selectedStock, stockInfo?.symbol, stockInfo?.price, tickHistory.length]);
 
   const toggleWatchlist = (symbol: string) => {
     setWatchlist(prev => 

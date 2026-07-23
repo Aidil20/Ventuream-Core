@@ -269,6 +269,239 @@ const DAILY_STOCKS_DATABASE: DailyTradingStock[] = [
     sparkline: [200, 210, 225, 240, 255, 270, 284]
   },
   {
+    symbol: 'DEFI',
+    name: 'PT Danasupra Ekaputra Tbk.',
+    market: 'IDX',
+    price: 'IDR 142',
+    priceNum: 142,
+    change: '+34.58%',
+    changePercent: 34.58,
+    volume: '210.5M',
+    volRatio: 14.80,
+    orderBook: {
+      bidOfferRatio: 18.5,
+      bidVolumeRatioStr: '3.5M Lot Bid vs 189K Lot Offer (18.5 : 1)',
+      isWallBuy: true,
+      volumeVsMa20: '14.8x MA20',
+      volumeVsMa50: '21.0x MA50'
+    },
+    momentum: {
+      macdStatus: 'Golden Cross Positif',
+      macdIsPositiveGoldenCross: true,
+      bbBreakout: true,
+      bbUpperBandLevel: 'IDR 115',
+      rsiVal: 88.5,
+      rsiHotMomentum: true
+    },
+    bandarAndFundamentals: {
+      topBrokersAccumulation: 'MG, YP, EP',
+      brokerNetBuyVal: 'Net Buy Rp 28.4 Miliar',
+      isBandarAccumulation: true,
+      catalystType: 'IPO_LOW_FLOAT',
+      catalystDetail: 'Volatilitas Tinggi Saham Lapis 3 (Penny Stock) Rebound Akumulasi Bandar MG/YP Lock ARA',
+      isIpoLowFloat: true,
+      ipoOversubscription: 'Micro Cap High Volatility'
+    },
+    maEmaCross: {
+      status: 'Golden Cross',
+      ma10: 108,
+      ema10: 122,
+      diffPercent: 12.5
+    },
+    rsi: 88.5,
+    rsiStatus: 'Bullish Momentum',
+    chartBreakout: {
+      isBreakout: true,
+      resistanceLevel: 'IDR 115',
+      breakoutType: '52-Week High Breakout'
+    },
+    volumeBreakout: {
+      isVolumeBreakout: true,
+      volMultiplier: '14.8x 10MA'
+    },
+    entryZone: '138 - 142',
+    targetPrice: '190 (+33.8%)',
+    stopLoss: '128 (-9.8%)',
+    riskReward: '1 : 3.4',
+    aiRationale: 'Kandidat Utama Penny Stock ARA Lock: Harga Murah IDR 142, Volatilitas Ekstrem, Wall Buy 18.5:1 (3.5M Lot Bid), Volume Surge 14.8x & Akumulasi Bandar MG/YP.',
+    matchScore: 99,
+    sparkline: [98, 102, 108, 115, 125, 134, 142]
+  },
+  {
+    symbol: 'KOTA',
+    name: 'PT DMS Propertindo Tbk.',
+    market: 'IDX',
+    price: 'IDR 62',
+    priceNum: 62,
+    change: '+34.78%',
+    changePercent: 34.78,
+    volume: '380.2M',
+    volRatio: 16.50,
+    orderBook: {
+      bidOfferRatio: 21.0,
+      bidVolumeRatioStr: '5.2M Lot Bid vs 248K Lot Offer (21.0 : 1)',
+      isWallBuy: true,
+      volumeVsMa20: '16.5x MA20',
+      volumeVsMa50: '24.2x MA50'
+    },
+    momentum: {
+      macdStatus: 'Golden Cross Positif',
+      macdIsPositiveGoldenCross: true,
+      bbBreakout: true,
+      bbUpperBandLevel: 'IDR 48',
+      rsiVal: 86.2,
+      rsiHotMomentum: true
+    },
+    bandarAndFundamentals: {
+      topBrokersAccumulation: 'YP, CC, PD',
+      brokerNetBuyVal: 'Net Buy Rp 19.8 Miliar',
+      isBandarAccumulation: true,
+      catalystType: 'IPO_LOW_FLOAT',
+      catalystDetail: 'Penny Stock Murah (< IDR 100) Volatilitas Super Tinggi & Antrean Dinding Bid ARA 35%',
+      isIpoLowFloat: true
+    },
+    maEmaCross: {
+      status: 'Golden Cross',
+      ma10: 46,
+      ema10: 52,
+      diffPercent: 14.2
+    },
+    rsi: 86.2,
+    rsiStatus: 'Bullish Momentum',
+    chartBreakout: {
+      isBreakout: true,
+      resistanceLevel: 'IDR 48',
+      breakoutType: '20-Day High Breakout'
+    },
+    volumeBreakout: {
+      isVolumeBreakout: true,
+      volMultiplier: '16.5x 10MA'
+    },
+    entryZone: '58 - 62',
+    targetPrice: '82 (+32.2%)',
+    stopLoss: '54 (-12.9%)',
+    riskReward: '1 : 2.5',
+    aiRationale: 'Super Low Cap & High Volatility ARA Candidate: Harga sangat murah IDR 62, Wall Buy Bid 21:1 (5.2M Lot Antrean Beli) & Volume Surge 16.5x MA20.',
+    matchScore: 98,
+    sparkline: [42, 44, 46, 48, 52, 57, 62]
+  },
+  {
+    symbol: 'PJHB',
+    name: 'PT Primarindo Asia Infrastructure Tbk.',
+    market: 'IDX',
+    price: 'IDR 98',
+    priceNum: 98,
+    change: '+28.95%',
+    changePercent: 28.95,
+    volume: '152.4M',
+    volRatio: 11.20,
+    orderBook: {
+      bidOfferRatio: 12.4,
+      bidVolumeRatioStr: '2.1M Lot Bid vs 169K Lot Offer (12.4 : 1)',
+      isWallBuy: true,
+      volumeVsMa20: '11.2x MA20',
+      volumeVsMa50: '15.8x MA50'
+    },
+    momentum: {
+      macdStatus: 'Golden Cross Positif',
+      macdIsPositiveGoldenCross: true,
+      bbBreakout: true,
+      bbUpperBandLevel: 'IDR 80',
+      rsiVal: 81.4,
+      rsiHotMomentum: true
+    },
+    bandarAndFundamentals: {
+      topBrokersAccumulation: 'XC, HD, YP',
+      brokerNetBuyVal: 'Net Buy Rp 14.2 Miliar',
+      isBandarAccumulation: true,
+      catalystType: 'IPO_LOW_FLOAT',
+      catalystDetail: 'Micro Cap High Beta Volatilitas Rebound Kuat & Borong Bandar Ritel/Lokal',
+      isIpoLowFloat: true
+    },
+    maEmaCross: {
+      status: 'Golden Cross',
+      ma10: 76,
+      ema10: 84,
+      diffPercent: 10.8
+    },
+    rsi: 81.4,
+    rsiStatus: 'Bullish Momentum',
+    chartBreakout: {
+      isBreakout: true,
+      resistanceLevel: 'IDR 80',
+      breakoutType: '20-Day High Breakout'
+    },
+    volumeBreakout: {
+      isVolumeBreakout: true,
+      volMultiplier: '11.2x 10MA'
+    },
+    entryZone: '94 - 98',
+    targetPrice: '128 (+30.6%)',
+    stopLoss: '88 (-10.2%)',
+    riskReward: '1 : 3.0',
+    aiRationale: 'Penny Stock Volatilitas Tinggi (< IDR 100): Dinding Bid Wall Buy 12.4x Offer, Volume Surge 11.2x MA20 & Akumulasi Bandar XC/HD.',
+    matchScore: 97,
+    sparkline: [70, 72, 76, 80, 86, 92, 98]
+  },
+  {
+    symbol: 'BUMI',
+    name: 'PT Bumi Resources Tbk.',
+    market: 'IDX',
+    price: 'IDR 148',
+    priceNum: 148,
+    change: '+14.73%',
+    changePercent: 14.73,
+    volume: '2.84B',
+    volRatio: 10.40,
+    orderBook: {
+      bidOfferRatio: 9.2,
+      bidVolumeRatioStr: '18.5M Lot Bid vs 2.01M Lot Offer (9.2 : 1)',
+      isWallBuy: true,
+      volumeVsMa20: '10.4x MA20',
+      volumeVsMa50: '14.2x MA50'
+    },
+    momentum: {
+      macdStatus: 'Golden Cross Positif',
+      macdIsPositiveGoldenCross: true,
+      bbBreakout: true,
+      bbUpperBandLevel: 'IDR 132',
+      rsiVal: 76.8,
+      rsiHotMomentum: true
+    },
+    bandarAndFundamentals: {
+      topBrokersAccumulation: 'BK, AK, YU, ZP',
+      brokerNetBuyVal: 'Net Buy Rp 124.8 Miliar',
+      isBandarAccumulation: true,
+      catalystType: 'SECTORAL',
+      catalystDetail: 'Volume Transaksi Terbesar Bursa, Volatilitas Super Tinggi & Akumulasi Bandar Asing BK/AK',
+      isIpoLowFloat: false
+    },
+    maEmaCross: {
+      status: 'Golden Cross',
+      ma10: 128,
+      ema10: 136,
+      diffPercent: 8.8
+    },
+    rsi: 76.8,
+    rsiStatus: 'Bullish Momentum',
+    chartBreakout: {
+      isBreakout: true,
+      resistanceLevel: 'IDR 132',
+      breakoutType: '20-Day High Breakout'
+    },
+    volumeBreakout: {
+      isVolumeBreakout: true,
+      volMultiplier: '10.4x 10MA'
+    },
+    entryZone: '144 - 148',
+    targetPrice: '178 (+20.2%)',
+    stopLoss: '136 (-8.1%)',
+    riskReward: '1 : 2.5',
+    aiRationale: 'Saham Terfavorit Volatilitas Tinggi Harga Murah (IDR 148): Volume Transaksi Raksasa 2.84 Billion Lot, Antrean Bid 18.5M Lot (9.2:1 Wall Buy) & Net Buy Asing Rp 124.8B.',
+    matchScore: 98,
+    sparkline: [120, 124, 128, 132, 138, 142, 148]
+  },
+  {
     symbol: 'CUAN',
     name: 'PT Petrindo Jaya Kreasi Tbk.',
     market: 'IDX',
@@ -569,7 +802,7 @@ export const DailyTradingAutoAnalyst: React.FC<DailyTradingAutoAnalystProps> = (
   const [selectedMarket, setSelectedMarket] = useState<'ALL' | 'IDX' | 'US'>('ALL');
   
   // Filtering states
-  const [activeFilterCategory, setActiveFilterCategory] = useState<'ALL' | 'ARA_POTENTIAL' | 'PILLAR_1_ORDERBOOK' | 'PILLAR_2_MOMENTUM' | 'PILLAR_3_BANDAR'>('ALL');
+  const [activeFilterCategory, setActiveFilterCategory] = useState<'ALL' | 'ARA_POTENTIAL' | 'PENNY_HIGH_VOL' | 'PILLAR_1_ORDERBOOK' | 'PILLAR_2_MOMENTUM' | 'PILLAR_3_BANDAR'>('ALL');
   const [showMethodologyGuide, setShowMethodologyGuide] = useState<boolean>(false);
   
   const [filter4of4Only, setFilter4of4Only] = useState<boolean>(false);
@@ -684,13 +917,18 @@ export const DailyTradingAutoAnalyst: React.FC<DailyTradingAutoAnalystProps> = (
     let result = stocks.filter(stock => {
       if (selectedMarket !== 'ALL' && stock.market !== selectedMarket) return false;
       
-      // Category Screener based on 3 pillars
+      // Category Screener based on 3 pillars & Penny Stocks
       if (activeFilterCategory === 'ARA_POTENTIAL') {
         // Stock must satisfy key indicators from all 3 pillars
         const pillar1 = stock.orderBook.bidOfferRatio >= 3.0 && stock.orderBook.isWallBuy;
         const pillar2 = stock.momentum.macdIsPositiveGoldenCross && stock.momentum.bbBreakout;
         const pillar3 = stock.bandarAndFundamentals.isBandarAccumulation || stock.bandarAndFundamentals.isIpoLowFloat;
         if (!(pillar1 && pillar2 && pillar3)) return false;
+      } else if (activeFilterCategory === 'PENNY_HIGH_VOL') {
+        // High volatility, cheap price (< Rp 500 or low float), high ARA potential
+        const isCheapOrPenny = stock.priceNum <= 500 || stock.bandarAndFundamentals.isIpoLowFloat;
+        const isHighVolAndStrong = stock.volRatio >= 7.0 || stock.changePercent >= 12.0 || stock.orderBook.bidOfferRatio >= 8.0;
+        if (!(isCheapOrPenny && isHighVolAndStrong)) return false;
       } else if (activeFilterCategory === 'PILLAR_1_ORDERBOOK') {
         const passOrderBook = stock.orderBook.bidOfferRatio >= 3.0 || stock.volRatio >= 5.0;
         if (!passOrderBook) return false;
@@ -1085,8 +1323,8 @@ export const DailyTradingAutoAnalyst: React.FC<DailyTradingAutoAnalystProps> = (
         )}
       </AnimatePresence>
 
-      {/* Primary Filter Tabs Header (3 Pillars Quick Toggle) */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-2 relative z-10">
+      {/* Primary Filter Tabs Header (3 Pillars & Penny ARA Quick Toggle) */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-6 gap-2 relative z-10">
         <button
           onClick={() => setActiveFilterCategory('ALL')}
           className={`p-2.5 rounded-2xl border transition-all text-left cursor-pointer ${
@@ -1118,6 +1356,26 @@ export const DailyTradingAutoAnalyst: React.FC<DailyTradingAutoAnalystProps> = (
             <span>Lolos 3/3 Pilar</span>
             <span className="px-1.5 py-0.2 bg-black/40 text-amber-300 text-[8.5px] rounded font-bold">
               {stocks.filter(s => s.orderBook.bidOfferRatio >= 3.0 && s.momentum.macdIsPositiveGoldenCross && (s.bandarAndFundamentals.isBandarAccumulation || s.bandarAndFundamentals.isIpoLowFloat)).length}
+            </span>
+          </div>
+        </button>
+
+        <button
+          onClick={() => setActiveFilterCategory('PENNY_HIGH_VOL')}
+          className={`p-2.5 rounded-2xl border transition-all text-left cursor-pointer ${
+            activeFilterCategory === 'PENNY_HIGH_VOL'
+              ? 'bg-rose-500/20 border-rose-500/80 text-rose-200 font-black shadow-lg shadow-rose-500/20 ring-1 ring-rose-400/50'
+              : 'bg-zinc-900/80 border-zinc-800 text-zinc-300 hover:border-rose-500/40'
+          }`}
+        >
+          <div className="text-[9px] font-mono uppercase font-bold text-rose-400 mb-0.5 flex items-center gap-1">
+            <Zap className="w-3 h-3 fill-rose-400 text-rose-400" />
+            <span>Penny ARA High Vol</span>
+          </div>
+          <div className="text-[11px] font-black font-mono flex items-center justify-between">
+            <span>Saham Murah / Low Cap</span>
+            <span className="px-1.5 py-0.2 bg-rose-500/30 text-rose-300 text-[8.5px] rounded font-bold">
+              {stocks.filter(s => (s.priceNum <= 500 || s.bandarAndFundamentals.isIpoLowFloat) && (s.volRatio >= 7.0 || s.changePercent >= 12.0 || s.orderBook.bidOfferRatio >= 8.0)).length}
             </span>
           </div>
         </button>

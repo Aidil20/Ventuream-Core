@@ -309,10 +309,19 @@ export default function FinancialReportingCenter({
 
   // Keep report lastUpdate values synced with lastUpdateTime
   useEffect(() => {
-    setReports(prev => prev.map(r => ({
-      ...r,
-      lastUpdate: `Updated: ${lastUpdateTime}`
-    })));
+    if (!lastUpdateTime) return;
+    const updateStr = `Updated: ${lastUpdateTime}`;
+    setReports(prev => {
+      let changed = false;
+      const next = prev.map(r => {
+        if (r.lastUpdate !== updateStr) {
+          changed = true;
+          return { ...r, lastUpdate: updateStr };
+        }
+        return r;
+      });
+      return changed ? next : prev;
+    });
   }, [lastUpdateTime]);
 
   // Vault states

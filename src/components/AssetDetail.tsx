@@ -1,5 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
+import jsPDF from 'jspdf';
+import autoTable from 'jspdf-autotable';
 import { 
   ArrowLeft, 
   TrendingUp, 
@@ -22,7 +24,9 @@ import {
   Target,
   Briefcase,
   Star,
-  ExternalLink
+  ExternalLink,
+  Download,
+  FileText
 } from 'lucide-react';
 import { Sparkline } from './Sparkline';
 import { fetchCorrelationScore, CorrelationResult, fetchMarketNews, MarketNews } from '../services/marketService';
@@ -82,6 +86,205 @@ export function AssetDetail({ asset, onBack }: AssetDetailProps) {
   const [profile, setProfile] = useState<CompanyProfile | null>(null);
   const [profileTab, setProfileTab] = useState<'fundamental' | 'business' | 'management'>('fundamental');
   const [isLoadingProfile, setIsLoadingProfile] = useState(false);
+  const [isExporting, setIsExporting] = useState(false);
+
+  const handleDownloadPDF = () => {
+    try {
+      setIsExporting(true);
+      const doc = new jsPDF();
+
+      // Page dimensions
+      const pageWidth = doc.internal.pageSize.getWidth(); // 210
+      const pageHeight = doc.internal.pageSize.getHeight(); // 297
+
+      // Header Banner Background
+      doc.setFillColor(15, 23, 42); // slate-900
+      doc.rect(0, 0, pageWidth, 42, 'F');
+
+      // Decorative Accent Line
+      doc.setFillColor(223, 255, 0); // #DFFF00
+      doc.rect(0, 42, pageWidth, 2, 'F');
+
+      // Title & Branding
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(20);
+      doc.setTextColor(223, 255, 0);
+      doc.text("VentureAM", 14, 18);
+
+      doc.setFontSize(8);
+      doc.setFont("helvetica", "normal");
+      doc.setTextColor(148, 163, 184); // slate-400
+      doc.text("INSTITUTIONAL ASSET MANAGEMENT & RESEARCH DIVISION", 14, 25);
+      doc.text(`GROUNDED RESEARCH DOSSIER FOR ${asset.symbol.toUpperCase()}`, 14, 30);
+
+      // Metadata Right Side
+      doc.setFont("helvetica", "bold");
+      doc.setTextColor(255, 255, 255);
+      doc.setFontSize(10);
+      doc.text("SINGLE ASSET REPORT", pageWidth - 14, 18, { align: 'right' });
+
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(8);
+      doc.setTextColor(148, 163, 184);
+      const now = new Date().toLocaleString('id-ID', { dateStyle: 'medium', timeStyle: 'short' });
+      doc.text(`Generated: ${now}`, pageWidth - 14, 25, { align: 'right' });
+      doc.text(`Ref: VAM-${asset.symbol.replace(/[^a-zA-Z0-9]/g, '')}-8821`, pageWidth - 14, 30, { align: 'right' });
+
+      let currentY = 52;
+
+      // Asset Hero Box
+      doc.setFillColor(248, 250, 252); // slate-50
+      doc.setDrawColor(226, 232, 240); // slate-200
+      doc.roundedRect(14, currentY, pageWidth - 28, 38, 3, 3, 'FD');
+
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(14);
+      doc.setTextColor(15, 23, 42); // slate-900
+      doc.text(`${asset.name} (${asset.symbol})`, 20, currentY + 11);
+
+      doc.setFontSize(9);
+      doc.setFont("helvetica", "normal");
+      doc.setTextColor(100, 116, 139);
+      doc.text(`Category: ${asset.category}  |  Type: ${asset.type}  |  Safety Tier: TIER 1`, 20, currentY + 18);
+
+      // Price & Change
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(16);
+      doc.setTextColor(15, 23, 42);
+      doc.text(`Rp ${asset.value.replace('Rp ', '')}`, 20, currentY + 30);
+
+      const isPos = asset.status === 'Bullish' || asset.status === 'Performing' || asset.status === 'Stable';
+      doc.setFontSize(11);
+      if (isPos) {
+        doc.setTextColor(22, 163, 74); // green-600
+      } else {
+        doc.setTextColor(220, 38, 38); // red-600
+      }
+      doc.text(`${asset.percentage} (${asset.status})`, 95, currentY + 30);
+
+      doc.setFontSize(9);
+      doc.setFont("helvetica", "normal");
+      doc.setTextColor(71, 85, 105);
+      doc.text(`Liquidity: ${asset.liquidity}`, pageWidth - 20, currentY + 30, { align: 'right' });
+
+      currentY += 46;
+
+      // Section: Key Asset Metrics & Financial Ratios
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(11);
+      doc.setTextColor(15, 23, 42);
+      doc.text("1. CORE METRICS & FINANCIAL RATIOS", 14, currentY);
+      currentY += 4;
+
+      const metricsRows = [
+        ['Market Capitalization', profile?.fundamentalInfo.marketCap || 'Rp 42.8 T', 'P/E Ratio', profile?.fundamentalInfo.keyRatios.peRatio || '14.2x'],
+        ['Volume (24h)', '1.24M Shares', 'Dividend Yield', profile?.fundamentalInfo.keyRatios.divYield || '2.8%'],
+        ['52-Week High / Low', 'Rp 280k / Rp 195k', 'Return on Equity (ROE)', profile?.fundamentalInfo.keyRatios.roe || '18.5%'],
+        ['ATR (14)', '4.82', 'Debt to Equity (DER)', profile?.fundamentalInfo.keyRatios.der || '0.62x'],
+        ['Annualized Volatility', '18.4%', 'Sector / Industry', profile?.fundamentalInfo.sector || asset.category],
+        ['Liquidity Profile', asset.liquidity, 'Headquarters', profile?.fundamentalInfo.location || 'Jakarta, Indonesia']
+      ];
+
+      autoTable(doc, {
+        startY: currentY,
+        head: [['Metric', 'Value', 'Ratio / Parameter', 'Value']],
+        body: metricsRows,
+        theme: 'striped',
+        headStyles: { fillColor: [15, 23, 42], textColor: [223, 255, 0], fontStyle: 'bold', fontSize: 8 },
+        bodyStyles: { fontSize: 8, textColor: [30, 41, 59] },
+        margin: { left: 14, right: 14 }
+      });
+
+      currentY = (doc as any).lastAutoTable.finalY + 10;
+
+      // Section: Company Description & Business Model
+      if (profile) {
+        if (currentY + 40 > pageHeight - 20) {
+          doc.addPage();
+          currentY = 20;
+        }
+
+        doc.setFont("helvetica", "bold");
+        doc.setFontSize(11);
+        doc.setTextColor(15, 23, 42);
+        doc.text("2. CORPORATE PROFILE & BUSINESS MODEL", 14, currentY);
+        currentY += 6;
+
+        doc.setFont("helvetica", "normal");
+        doc.setFontSize(8.5);
+        doc.setTextColor(51, 65, 85);
+        const descLines = doc.splitTextToSize(profile.fundamentalInfo.generalDescription, pageWidth - 28);
+        doc.text(descLines, 14, currentY);
+        currentY += descLines.length * 4.5 + 6;
+
+        // Revenue Streams Table
+        if (profile.businessModel.streams && profile.businessModel.streams.length > 0) {
+          const streamsData = profile.businessModel.streams.map((s, idx) => [`Stream ${idx + 1}`, s]);
+          autoTable(doc, {
+            startY: currentY,
+            head: [['Primary Operations', 'Description']],
+            body: streamsData,
+            theme: 'grid',
+            headStyles: { fillColor: [30, 41, 59], textColor: [255, 255, 255], fontStyle: 'bold', fontSize: 8 },
+            bodyStyles: { fontSize: 8, textColor: [51, 65, 85] },
+            margin: { left: 14, right: 14 }
+          });
+          currentY = (doc as any).lastAutoTable.finalY + 8;
+        }
+      }
+
+      // Section: Institutional Correlation
+      if (correlation) {
+        if (currentY + 35 > pageHeight - 20) {
+          doc.addPage();
+          currentY = 20;
+        }
+
+        doc.setFont("helvetica", "bold");
+        doc.setFontSize(11);
+        doc.setTextColor(15, 23, 42);
+        doc.text("3. INSTITUTIONAL CORRELATION MONITOR", 14, currentY);
+        currentY += 6;
+
+        const corrTable = [
+          ['Benchmark Commodity / Proxy', correlation.commodity],
+          ['Pearson Correlation Score', `${correlation.correlation_score}%`],
+          ['Market Interpretation', correlation.interpretation],
+          ['Institutional Insight', `Returns are ${correlation.correlation_score > 50 ? 'synchronized with' : 'independent from'} global ${correlation.commodity} price movements.`]
+        ];
+
+        autoTable(doc, {
+          startY: currentY,
+          head: [['Metric', 'Details']],
+          body: corrTable,
+          theme: 'plain',
+          headStyles: { fillColor: [241, 245, 249], textColor: [15, 23, 42], fontStyle: 'bold', fontSize: 8 },
+          bodyStyles: { fontSize: 8, textColor: [30, 41, 59] },
+          margin: { left: 14, right: 14 }
+        });
+
+        currentY = (doc as any).lastAutoTable.finalY + 10;
+      }
+
+      // Legal Footer on last page
+      const footerY = Math.max(currentY + 5, pageHeight - 22);
+      doc.setDrawColor(203, 213, 225);
+      doc.line(14, footerY, pageWidth - 14, footerY);
+
+      doc.setFont("helvetica", "italic");
+      doc.setFontSize(7);
+      doc.setTextColor(148, 163, 184);
+      doc.text("DISCLAIMER: VentureAM Research Dossier provided for institutional evaluation only. Subject to regulatory compliance & market risk disclosures.", 14, footerY + 5);
+      doc.text("Confidentiality Notice: Venture Asset Management (VAM) International Gateway Security Protocol.", 14, footerY + 9);
+
+      // Save PDF
+      doc.save(`VentureAM_${asset.symbol.replace(/[^a-zA-Z0-9]/g, '_')}_Asset_Report.pdf`);
+    } catch (error) {
+      console.error('Error generating PDF report:', error);
+    } finally {
+      setIsExporting(false);
+    }
+  };
 
   const [isWatchlisted, setIsWatchlisted] = useState<boolean>(() => {
     try {
@@ -181,10 +384,11 @@ export function AssetDetail({ asset, onBack }: AssetDetailProps) {
     >
       {/* Header */}
       <div className="flex items-center justify-between px-1">
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           <button 
             onClick={onBack}
             className="p-2 bg-slate-900/50 text-[#deff9a] rounded-xl border border-slate-800 hover:bg-slate-800 transition-colors"
+            title="Back"
           >
             <ArrowLeft className="w-5 h-5" />
           </button>
@@ -198,6 +402,14 @@ export function AssetDetail({ asset, onBack }: AssetDetailProps) {
           >
             <Star className={`w-3.5 h-3.5 ${isWatchlisted ? 'fill-[#DFFF00]' : ''}`} />
             <span>{isWatchlisted ? 'Watchlisted' : 'Watchlist'}</span>
+          </button>
+          <button 
+            onClick={handleDownloadPDF}
+            disabled={isExporting}
+            className="p-2 bg-[#DFFF00]/10 hover:bg-[#DFFF00]/20 border border-[#DFFF00]/30 text-[#DFFF00] rounded-xl transition-all flex items-center gap-1.5 text-[10px] uppercase font-black tracking-wider disabled:opacity-50"
+          >
+            {isExporting ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Download className="w-3.5 h-3.5" />}
+            <span>{isExporting ? 'Exporting...' : 'Download Report'}</span>
           </button>
         </div>
         <div className="text-right">
@@ -651,20 +863,28 @@ export function AssetDetail({ asset, onBack }: AssetDetailProps) {
       </section>
 
       {/* Action Buttons */}
-      <div className="grid grid-cols-2 gap-4">
-        <button className="py-4 rounded-2xl bg-[#deff9a] text-slate-950 font-black text-[11px] uppercase tracking-widest shadow-[0_0_20px_rgba(222,255,154,0.2)] hover:scale-[1.02] active:scale-[0.98] transition-all">
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+        <button className="py-4 px-4 rounded-2xl bg-[#deff9a] text-slate-950 font-black text-[11px] uppercase tracking-widest shadow-[0_0_20px_rgba(222,255,154,0.2)] hover:scale-[1.02] active:scale-[0.98] transition-all flex items-center justify-center gap-2">
           Execute Buy Order
         </button>
         <button 
+          onClick={handleDownloadPDF}
+          disabled={isExporting}
+          className="py-4 px-4 rounded-2xl bg-zinc-900 border border-zinc-700 text-[#DFFF00] hover:bg-zinc-800 font-black text-[11px] uppercase tracking-widest active:scale-[0.98] transition-all flex items-center justify-center gap-2 disabled:opacity-50"
+        >
+          {isExporting ? <Loader2 className="w-4 h-4 animate-spin text-[#DFFF00]" /> : <Download className="w-4 h-4 text-[#DFFF00]" />}
+          <span>{isExporting ? 'Exporting PDF...' : 'Download Asset Report'}</span>
+        </button>
+        <button 
           onClick={toggleWatchlist}
-          className={`py-4 rounded-2xl border font-black text-[11px] uppercase tracking-widest active:scale-[0.98] transition-all flex items-center justify-center gap-2 ${
+          className={`py-4 px-4 rounded-2xl border font-black text-[11px] uppercase tracking-widest active:scale-[0.98] transition-all flex items-center justify-center gap-2 ${
             isWatchlisted
               ? 'bg-[#DFFF00]/10 border-[#DFFF00]/30 text-[#DFFF00] hover:bg-[#DFFF00]/20'
               : 'bg-slate-900 border-slate-800 text-slate-100 hover:bg-slate-800'
           }`}
         >
           <Star className={`w-4 h-4 ${isWatchlisted ? 'fill-[#DFFF00]' : ''}`} />
-          {isWatchlisted ? 'Remove from Watchlist' : 'Add to Watchlist'}
+          {isWatchlisted ? 'Remove Watchlist' : 'Add Watchlist'}
         </button>
       </div>
 

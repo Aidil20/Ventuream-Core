@@ -6,8 +6,8 @@ function GlobalIndicesFeed() {
   
   // State for simulated live Indonesian Volatility Index
   const [vix, setVix] = useState(15.34);
-  const [vixChange, setVixChange] = useState(-1.12);
   const dailyOpen = 15.51;
+  const vixChange = Number((((vix - dailyOpen) / dailyOpen) * 100).toFixed(2));
 
   useEffect(() => {
     const currentContainer = container.current;
@@ -40,12 +40,7 @@ function GlobalIndicesFeed() {
     const timer = setInterval(() => {
       setVix((prev) => {
         const change = (Math.random() - 0.48) * 0.16;
-        const nextVix = Math.max(12.00, Math.min(22.00, Number((prev + change).toFixed(2))));
-        const relativeChange = ((nextVix - dailyOpen) / dailyOpen) * 100;
-        setTimeout(() => {
-          setVixChange(Number(relativeChange.toFixed(2)));
-        }, 0);
-        return nextVix;
+        return Math.max(12.00, Math.min(22.00, Number((prev + change).toFixed(2))));
       });
     }, 4000);
 

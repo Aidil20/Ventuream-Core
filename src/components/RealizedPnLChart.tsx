@@ -36,18 +36,36 @@ interface DailyPnLRecord {
 }
 
 const HISTORICAL_PNL_DATA: DailyPnLRecord[] = [
-  { date: '2026-06-05', pnl: 185000, event: 'Trim BBRI/MDKA Tranche 1 rebalancing', efficiency: 94 },
-  { date: '2026-06-06', pnl: 420000, event: 'ASII Dividend payout reallocation', efficiency: 100 },
-  { date: '2026-06-08', pnl: -110000, event: 'Stop-loss exit GOTO Tranche 2', efficiency: 68 },
-  { date: '2026-06-09', pnl: 280000, event: 'Rebalance Consumer Sector weights', efficiency: 89 },
-  { date: '2026-06-10', pnl: 150000, event: 'Adaro Energy dividend trimming', efficiency: 92 },
-  { date: '2026-06-11', pnl: -65000, event: 'Index hedging option swap expiry', efficiency: 75 },
-  { date: '2026-06-12', pnl: 320000, event: 'Overweight TLKM structural correction', efficiency: 91 },
-  { date: '2026-06-15', pnl: 210000, event: 'Commodity swap execution on PTBA/INCO', efficiency: 86 },
-  { date: '2026-06-16', pnl: 135000, event: 'Trim high banking peak exposure', efficiency: 88 },
-  { date: '2026-06-17', pnl: -40000, event: 'Slippage correction on illiquid stock', efficiency: 80 },
-  { date: '2026-06-18', pnl: 295000, event: 'Sector shift to Infrastructure bonds', efficiency: 93 },
-  { date: '2026-06-19', pnl: 180000, event: 'Dynamic hedging currency allocation', efficiency: 90 },
+  { date: '23 Jun', pnl: 145000, event: 'Trimmed BBRI position after 3.2% rally', efficiency: 94 },
+  { date: '24 Jun', pnl: 220000, event: 'ASII Dividend payout reallocation', efficiency: 98 },
+  { date: '25 Jun', pnl: -95000, event: 'Stop-loss exit GOTO Tranche 2', efficiency: 70 },
+  { date: '26 Jun', pnl: 310000, event: 'Rebalance Consumer Sector weights', efficiency: 91 },
+  { date: '27 Jun', pnl: 180000, event: 'Adaro Energy dividend trimming', efficiency: 93 },
+  { date: '28 Jun', pnl: -45000, event: 'Index hedging option swap expiry', efficiency: 82 },
+  { date: '29 Jun', pnl: 290000, event: 'Overweight TLKM structural correction', efficiency: 90 },
+  { date: '30 Jun', pnl: 410000, event: 'Commodity swap execution on PTBA/INCO', efficiency: 95 },
+  { date: '01 Jul', pnl: 165000, event: 'Trimmed high banking peak exposure', efficiency: 88 },
+  { date: '02 Jul', pnl: -80000, event: 'Slippage correction on illiquid stock', efficiency: 76 },
+  { date: '03 Jul', pnl: 340000, event: 'Sector shift to Infrastructure bonds', efficiency: 94 },
+  { date: '04 Jul', pnl: 210000, event: 'Dynamic hedging currency allocation', efficiency: 92 },
+  { date: '05 Jul', pnl: -120000, event: 'Short-term tech sector profit taking', efficiency: 68 },
+  { date: '06 Jul', pnl: 275000, event: 'BMRI Tranche 1 rebalancing gain', efficiency: 89 },
+  { date: '07 Jul', pnl: 195000, event: 'ICBP defensive sector rotation', efficiency: 91 },
+  { date: '08 Jul', pnl: 380000, event: 'UNTR heavy equipment rally exit', efficiency: 96 },
+  { date: '09 Jul', pnl: -60000, event: 'FX hedge rebalancing adjustments', efficiency: 84 },
+  { date: '10 Jul', pnl: 450000, event: 'BBNI record high profit lock', efficiency: 99 },
+  { date: '11 Jul', pnl: 130000, event: 'CPIN poultry sector weight adjustment', efficiency: 87 },
+  { date: '12 Jul', pnl: -110000, event: 'Energy sector pullback stop loss', efficiency: 72 },
+  { date: '13 Jul', pnl: 285000, event: 'AMRT retail expansion allocation', efficiency: 93 },
+  { date: '14 Jul', pnl: 320000, event: 'MDKA gold rally partial liquidation', efficiency: 95 },
+  { date: '15 Jul', pnl: 175000, event: 'TLKM fiber optical growth realization', efficiency: 89 },
+  { date: '16 Jul', pnl: -85000, event: 'Automotive sector margin pressure', efficiency: 78 },
+  { date: '17 Jul', pnl: 490000, event: 'SBN government bond coupon maturity', efficiency: 100 },
+  { date: '18 Jul', pnl: 230000, event: 'KLBF pharmaceutical sector rotation', efficiency: 90 },
+  { date: '19 Jul', pnl: 160000, event: 'PGAS gas distribution dividend trim', efficiency: 86 },
+  { date: '20 Jul', pnl: -50000, event: 'Minor volatility rebalancing cost', efficiency: 81 },
+  { date: '21 Jul', pnl: 350000, event: 'INDF consumer goods quarterly rebalance', efficiency: 94 },
+  { date: '22 Jul', pnl: 280000, event: 'Bank Mandiri liquidity optimization', efficiency: 92 },
 ];
 
 interface RealizedPnLChartProps {
@@ -61,12 +79,14 @@ export default function RealizedPnLChart({ realizedPnL = 0 }: RealizedPnLChartPr
   // Sync with live realized P&L from the active workspace session
   const combinedData = useMemo(() => {
     const base = [...HISTORICAL_PNL_DATA];
-    base.push({
-      date: '2026-06-20 (Today)',
-      pnl: realizedPnL,
-      event: realizedPnL !== 0 ? 'Active Session Rebalancing Execution' : 'No active trades submitted today',
-      efficiency: realizedPnL !== 0 ? (realizedPnL > 0 ? 96 : 74) : 100
-    });
+    if (realizedPnL !== 0) {
+      base.push({
+        date: 'Today',
+        pnl: realizedPnL,
+        event: 'Active Session Rebalancing Execution',
+        efficiency: realizedPnL > 0 ? 96 : 74
+      });
+    }
     return base;
   }, [realizedPnL]);
 

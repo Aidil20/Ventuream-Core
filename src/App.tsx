@@ -47,7 +47,9 @@ import {
   BellRing,
   Edit2,
   Check,
-  Calendar
+  Calendar,
+  Presentation,
+  BookOpen
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { Decimal } from 'decimal.js';
@@ -63,6 +65,7 @@ import {
 import { fetchMarketNewsSummary, MarketNewsItem } from './services/geminiService';
 import TradingViewWidget from './components/TradingViewWidget';
 import PortfolioChart from './components/PortfolioChart';
+import RealizedPnLChart from './components/RealizedPnLChart';
 import { useTransactionManager } from './hooks/useTransactionManager';
 import { TransactionTable } from './components/TransactionTable';
 import { UserManagement } from './components/UserManagement';
@@ -101,10 +104,11 @@ import EconomicCalendarWidget from './components/EconomicCalendarWidget';
 import { User } from 'firebase/auth';
 import { doc, onSnapshot } from 'firebase/firestore';
 import { GlobalSearch } from './components/GlobalSearch';
-import HoldingCard from './components/HoldingCard';
+import HoldingCard, { GroupedHoldingCards } from './components/HoldingCard';
 import BulkActionPanel from './components/BulkActionPanel';
 import { AuditSync } from './components/AuditSync';
 import { SystemUpdateModal } from './components/SystemUpdateModal';
+import PortfolioTreemap from './components/PortfolioTreemap';
 
 const ASSETS = [
   {
@@ -1153,7 +1157,7 @@ export default function App() {
     }
 
     if (userRole === 'Public') {
-      const allowedPaths = ['home', 'my-company', 'market', 'fundamental', 'scanner', 'asset-detail', 'users', 'vamsmartscanner', 'audit-sync'];
+      const allowedPaths = ['home', 'my-company', 'market', 'calendar', 'fundamental', 'scanner', 'asset-detail', 'users', 'vamsmartscanner', 'audit-sync'];
       return !allowedPaths.includes(path);
     }
     const item = SIDEBAR_MENU.find(m => m.path === path);
@@ -3141,6 +3145,25 @@ export default function App() {
                   </div>
                 </motion.div>
 
+                {/* Interactive Portfolio Treemap Visualization */}
+                <motion.div
+                  initial={{ opacity: 0, y: 15 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: 0.08 }}
+                >
+                  <PortfolioTreemap 
+                    portfolioData={portfolioData}
+                    onSelectSymbol={(s) => {
+                      setSelectedSymbol(s);
+                      setActiveTab('home');
+                    }}
+                    onFundamentalAudit={(symbol) => {
+                      setFundamentalSymbol(symbol);
+                      setActiveTab('fundamental');
+                    }}
+                  />
+                </motion.div>
+
                 {/* Performance Chart */}
                 <motion.div
                   initial={{ opacity: 0, scale: 0.95 }}
@@ -3148,6 +3171,15 @@ export default function App() {
                   transition={{ delay: 0.1 }}
                 >
                   <PortfolioChart currentValue={totalPortfolioValue} />
+                </motion.div>
+
+                {/* 30-Day Daily Realized P&L Chart */}
+                <motion.div
+                  initial={{ opacity: 0, y: 15 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: 0.12 }}
+                >
+                  <RealizedPnLChart realizedPnL={cgsRealizedPnL} />
                 </motion.div>
 
                 {/* Risk Analytics Module */}
@@ -3201,25 +3233,19 @@ export default function App() {
                     </div>
                   </div>
                   
-                  <div className="space-y-3">
-                    {portfolioData.map((asset, idx) => (
-                      <HoldingCard
-                        key={`${asset.ticker}-${idx}`}
-                        asset={asset}
-                        idx={idx}
-                        onClick={() => {
-                          const cleanTicker = asset.ticker.split('.')[0];
-                          const foundAsset = ASSETS.find(a => a.symbol === cleanTicker);
-                          if (foundAsset) {
-                            setSelectedAssetId(foundAsset.id);
-                            setActiveTab('asset-detail');
-                          }
-                        }}
-                        alertConfig={alertThresholds[asset.ticker]}
-                        onSaveAlert={handleSaveAlert}
-                      />
-                    ))}
-                  </div>
+                  <GroupedHoldingCards
+                    portfolioData={portfolioData}
+                    onAssetClick={(asset) => {
+                      const cleanTicker = asset.ticker.split('.')[0];
+                      const foundAsset = ASSETS.find(a => a.symbol === cleanTicker);
+                      if (foundAsset) {
+                        setSelectedAssetId(foundAsset.id);
+                        setActiveTab('asset-detail');
+                      }
+                    }}
+                    alertThresholds={alertThresholds}
+                    onSaveAlert={handleSaveAlert}
+                  />
                 </div>
 
 
@@ -3591,21 +3617,16 @@ export default function App() {
                     setActiveTab('fundamental');
                   }}
                 />
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  {portfolioData.map((asset, idx) => (
-                    <HoldingCard
-                      key={`${asset.ticker}-${idx}`}
-                      asset={asset}
-                      idx={idx}
-                      onClick={() => {
-                        setSelectedSymbol(`IDX:${asset.ticker.replace('.JK', '')}`);
-                        setActiveTab('home');
-                      }}
-                      alertConfig={alertThresholds[asset.ticker]}
-                      onSaveAlert={handleSaveAlert}
-                    />
-                  ))}
-                </div>
+                <GroupedHoldingCards
+                  portfolioData={portfolioData}
+                  onAssetClick={(asset) => {
+                    setSelectedSymbol(`IDX:${asset.ticker.replace('.JK', '')}`);
+                    setActiveTab('home');
+                  }}
+                  alertThresholds={alertThresholds}
+                  onSaveAlert={handleSaveAlert}
+                  layoutMode="grid"
+                />
               </div>
             }
           />
@@ -4061,7 +4082,8 @@ export default function App() {
             <div className="flex items-center gap-6">
               <button 
                 onClick={() => setIsSidebarOpen(true)}
-                className="w-12 h-12 flex items-center justify-center bg-[#11141b] rounded-2xl border border-white/5 hover:bg-zinc-800 transition-all shadow-xl"
+                title={t('Open Menu')}
+                className="w-12 h-12 flex items-center justify-center bg-[#11141b] rounded-2xl border border-white/5 hover:bg-zinc-800 transition-all shadow-xl cursor-pointer"
               >
                 <Menu className="w-6 h-6 text-[#DFFF00]" />
               </button>
@@ -4077,7 +4099,16 @@ export default function App() {
 
             <GlobalSearch />
             
-            <div className="text-right flex items-center gap-4">
+            <div className="text-right flex items-center gap-3">
+              <button
+                onClick={() => setActiveTab('legal')}
+                className="hidden sm:flex items-center gap-2 px-3 py-2 bg-[#DFFF00]/10 hover:bg-[#DFFF00] hover:text-black text-[#DFFF00] text-[10px] font-black uppercase tracking-wider rounded-xl border border-[#DFFF00]/30 transition-all cursor-pointer shadow-md"
+                title="Cetak Dokumen Presentasi & Manual User"
+              >
+                <Presentation className="w-3.5 h-3.5" />
+                <span>Cetak Dokumen & Presentasi</span>
+              </button>
+
               {googleUser ? (
                 <button
                   onClick={googleLogout}
@@ -4269,7 +4300,7 @@ export default function App() {
             </div>
           </header>
 
-          <main className="p-4 lg:p-10 space-y-8 flex-1">
+          <main className="p-4 lg:p-10 space-y-8 flex-1 pb-24 lg:pb-10">
             <AnimatePresence mode="wait">
               <motion.div
                 key={activeTab}
@@ -4285,7 +4316,51 @@ export default function App() {
           </main>
         </div>
 
-        {/* Mobile Overlay Sidebar - Keep for small screen menu */}
+        {/* Mobile Bottom Navigation Tab Bar */}
+        <nav className="fixed bottom-0 left-0 right-0 z-[80] bg-zinc-950/95 backdrop-blur-xl border-t border-zinc-800/80 px-3 py-2 flex items-center justify-around lg:hidden shadow-[0_-10px_25px_rgba(0,0,0,0.9)]">
+          <NavButton 
+            icon={<Home className="w-5 h-5" />} 
+            label={t('Dashboard')} 
+            active={activeTab === 'home'} 
+            onClick={() => {
+              setActiveTab('home');
+              setActiveScannerModule(null);
+              window.scrollTo({ top: 0, behavior: 'smooth' });
+            }} 
+          />
+          <NavButton 
+            icon={<Search className="w-5 h-5" />} 
+            label={t('Market')} 
+            active={activeTab === 'market'} 
+            onClick={() => {
+              setActiveTab('market');
+              setActiveScannerModule(null);
+              window.scrollTo({ top: 0, behavior: 'smooth' });
+            }} 
+          />
+          <NavButton 
+            icon={<BarChart3 className="w-5 h-5" />} 
+            label={t('Portfolio')} 
+            active={activeTab === 'portfolio'} 
+            onClick={() => {
+              setActiveTab('portfolio');
+              setActiveScannerModule(null);
+              window.scrollTo({ top: 0, behavior: 'smooth' });
+            }} 
+          />
+          <NavButton 
+            icon={<ListTodo className="w-5 h-5" />} 
+            label={t('Tasks')} 
+            active={activeTab === 'tasks'} 
+            onClick={() => {
+              setActiveTab('tasks');
+              setActiveScannerModule(null);
+              window.scrollTo({ top: 0, behavior: 'smooth' });
+            }} 
+          />
+        </nav>
+
+        {/* Overlay Sidebar Menu */}
         <AnimatePresence>
           {isSidebarOpen && (
             <motion.div 
@@ -4294,7 +4369,7 @@ export default function App() {
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
               onClick={() => setIsSidebarOpen(false)}
-              className="fixed inset-0 bg-black/80 backdrop-blur-sm z-[60] lg:hidden"
+              className="fixed inset-0 bg-black/80 backdrop-blur-sm z-[90]"
             />
           )}
           {isSidebarOpen && (
@@ -4304,7 +4379,7 @@ export default function App() {
               animate={{ x: 0 }}
               exit={{ x: '-100%' }}
               transition={{ type: 'spring', damping: 25, stiffness: 200 }}
-              className="fixed inset-y-0 left-0 w-4/5 max-w-[320px] bg-black border-r border-slate-800 z-[70] p-6 flex flex-col lg:hidden"
+              className="fixed inset-y-0 left-0 w-4/5 max-w-[320px] bg-black border-r border-slate-800 z-[100] p-6 flex flex-col shadow-2xl"
             >
                 <div className="flex justify-between items-center mb-8">
                   <div>
