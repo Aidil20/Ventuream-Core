@@ -5,6 +5,7 @@ import {
   Sparkles, 
   TrendingUp, 
   BarChart2, 
+  BarChart3,
   Activity, 
   Filter, 
   RefreshCw, 
@@ -20,7 +21,11 @@ import {
   HelpCircle,
   Download,
   FileSpreadsheet,
-  FileText
+  FileText,
+  Globe,
+  Newspaper,
+  Eye,
+  Search
 } from 'lucide-react';
 import AdvanceChartModal from './AdvanceChartModal';
 
@@ -65,6 +70,23 @@ export interface DailyTradingStock {
     ipoOversubscription?: string; // e.g. "Oversubscribed 98.4x (Free Float 15%)"
   };
 
+  // TradingView Screener Technical Indicators (Price > EMA20, EPS growth YoY < 10%)
+  tradingViewScreener: {
+    priceAboveEma20: boolean;
+    ema20Value: string;
+    epsGrowthYoY: string;
+    sector: string;
+    screenerMatch: string; // e.g. "Price > EMA20 | Low Float Volatile"
+  };
+
+  // Google Search AI News Grounding Sentiment
+  googleNewsSentiment: {
+    score: number; // e.g. 92 (%)
+    sentimentStatus: 'VERY_BULLISH' | 'BULLISH' | 'ACCUMULATION' | 'NEUTRAL';
+    headline: string;
+    source: string;
+  };
+
   // Existing technical fields
   maEmaCross: {
     status: 'Golden Cross' | 'Bullish Continuation' | 'Testing Cross';
@@ -93,6 +115,576 @@ export interface DailyTradingStock {
 }
 
 const DAILY_STOCKS_DATABASE: DailyTradingStock[] = [
+  {
+    symbol: 'TNCA',
+    name: 'PT Trimuda Nuansa Citra Tbk.',
+    market: 'IDX',
+    price: 'IDR 173',
+    priceNum: 173,
+    change: '+18.50%',
+    changePercent: 18.50,
+    volume: '24.5M',
+    volRatio: 9.80,
+    orderBook: {
+      bidOfferRatio: 6.4,
+      bidVolumeRatioStr: '820K Lot Bid vs 128K Lot Offer (6.4 : 1)',
+      isWallBuy: true,
+      volumeVsMa20: '9.8x MA20',
+      volumeVsMa50: '14.2x MA50'
+    },
+    momentum: {
+      macdStatus: 'Golden Cross Positif',
+      macdIsPositiveGoldenCross: true,
+      bbBreakout: true,
+      bbUpperBandLevel: 'IDR 158',
+      rsiVal: 78.4,
+      rsiHotMomentum: true
+    },
+    bandarAndFundamentals: {
+      topBrokersAccumulation: 'YP, MG, CC',
+      brokerNetBuyVal: 'Net Buy Rp 18.4 Miliar',
+      isBandarAccumulation: true,
+      catalystType: 'STRATEGIC_ACQUISITION',
+      catalystDetail: 'Penguatan Efisiensi Kurir Ekspres Logistik & Ekspansi E-Commerce',
+      isIpoLowFloat: false
+    },
+    tradingViewScreener: {
+      priceAboveEma20: true,
+      ema20Value: 'IDR 155',
+      epsGrowthYoY: '+9.2%',
+      sector: 'Industrials / Courier & Logistics',
+      screenerMatch: 'Price > EMA20 | Vol Surge 9.8x | Low Cap Breakout'
+    },
+    googleNewsSentiment: {
+      score: 94,
+      sentimentStatus: 'VERY_BULLISH',
+      headline: 'Google AI Intel: Akumulasi Asing & Lonjakan Volume Transaksi Logistik TNCA',
+      source: 'Google Search AI Grounding'
+    },
+    maEmaCross: {
+      status: 'Golden Cross',
+      ma10: 152,
+      ema10: 160,
+      diffPercent: 8.1
+    },
+    rsi: 78.4,
+    rsiStatus: 'Bullish Momentum',
+    chartBreakout: {
+      isBreakout: true,
+      resistanceLevel: 'IDR 160',
+      breakoutType: '20-Day High Breakout'
+    },
+    volumeBreakout: {
+      isVolumeBreakout: true,
+      volMultiplier: '9.8x 10MA'
+    },
+    entryZone: '168 - 173',
+    targetPrice: '205 (+18.5%)',
+    stopLoss: '158 (-8.6%)',
+    riskReward: '1 : 2.15',
+    aiRationale: 'Screener TradingView VAM Scanner: Price IDR 173 > EMA20 (155), Lonjakan Vol 9.8x, Wall Buy Bid 6.4:1 & Google AI News Sentiment Very Bullish (+94%).',
+    matchScore: 99,
+    sparkline: [140, 142, 145, 150, 160, 168, 173]
+  },
+  {
+    symbol: 'IKAN',
+    name: 'PT Era Mandiri Cemerlang Tbk.',
+    market: 'IDX',
+    price: 'IDR 83',
+    priceNum: 83,
+    change: '+15.28%',
+    changePercent: 15.28,
+    volume: '42.1M',
+    volRatio: 8.40,
+    orderBook: {
+      bidOfferRatio: 7.2,
+      bidVolumeRatioStr: '1.2M Lot Bid vs 166K Lot Offer (7.2 : 1)',
+      isWallBuy: true,
+      volumeVsMa20: '8.4x MA20',
+      volumeVsMa50: '11.8x MA50'
+    },
+    momentum: {
+      macdStatus: 'Golden Cross Positif',
+      macdIsPositiveGoldenCross: true,
+      bbBreakout: true,
+      bbUpperBandLevel: 'IDR 78',
+      rsiVal: 72.8,
+      rsiHotMomentum: true
+    },
+    bandarAndFundamentals: {
+      topBrokersAccumulation: 'YP, EP, XC',
+      brokerNetBuyVal: 'Net Buy Rp 12.5 Miliar',
+      isBandarAccumulation: true,
+      catalystType: 'EARNINGS_RECORD',
+      catalystDetail: 'Lonjakan Permintaan Ekspor Produk Olahan Perikanan Asia Pasifik',
+      isIpoLowFloat: true,
+      ipoOversubscription: 'Penny Stock High Volatility'
+    },
+    tradingViewScreener: {
+      priceAboveEma20: true,
+      ema20Value: 'IDR 76',
+      epsGrowthYoY: '+7.8%',
+      sector: 'Consumer Non-Cyclicals / Seafood',
+      screenerMatch: 'Price > EMA20 | EPS Growth < 10% | Penny Volatile'
+    },
+    googleNewsSentiment: {
+      score: 91,
+      sentimentStatus: 'VERY_BULLISH',
+      headline: 'Google AI Intel: Katalis Ekspor Perikanan Menopang Marjin Bersih IKAN',
+      source: 'Google Search AI Grounding'
+    },
+    maEmaCross: {
+      status: 'Golden Cross',
+      ma10: 75,
+      ema10: 78,
+      diffPercent: 6.4
+    },
+    rsi: 72.8,
+    rsiStatus: 'Bullish Momentum',
+    chartBreakout: {
+      isBreakout: true,
+      resistanceLevel: 'IDR 78',
+      breakoutType: '20-Day High Breakout'
+    },
+    volumeBreakout: {
+      isVolumeBreakout: true,
+      volMultiplier: '8.4x 10MA'
+    },
+    entryZone: '80 - 83',
+    targetPrice: '102 (+22.8%)',
+    stopLoss: '75 (-9.6%)',
+    riskReward: '1 : 2.37',
+    aiRationale: 'Terdeteksi di VAM Screener: Harga IDR 83 memotong EMA20 (76), EPS Growth YoY +7.8%, Dinding Wall Buy 7.2:1 & Sentimen Google News Positif (+91%).',
+    matchScore: 98,
+    sparkline: [70, 72, 74, 76, 78, 80, 83]
+  },
+  {
+    symbol: 'LUCK',
+    name: 'PT Sentral Mitra Informatika Tbk.',
+    market: 'IDX',
+    price: 'IDR 115',
+    priceNum: 115,
+    change: '+18.56%',
+    changePercent: 18.56,
+    volume: '38.2M',
+    volRatio: 7.90,
+    orderBook: {
+      bidOfferRatio: 5.8,
+      bidVolumeRatioStr: '980K Lot Bid vs 168K Lot Offer (5.8 : 1)',
+      isWallBuy: true,
+      volumeVsMa20: '7.9x MA20',
+      volumeVsMa50: '10.5x MA50'
+    },
+    momentum: {
+      macdStatus: 'Golden Cross Positif',
+      macdIsPositiveGoldenCross: true,
+      bbBreakout: true,
+      bbUpperBandLevel: 'IDR 106',
+      rsiVal: 76.2,
+      rsiHotMomentum: true
+    },
+    bandarAndFundamentals: {
+      topBrokersAccumulation: 'MG, YP, CC',
+      brokerNetBuyVal: 'Net Buy Rp 15.8 Miliar',
+      isBandarAccumulation: true,
+      catalystType: 'STRATEGIC_ACQUISITION',
+      catalystDetail: 'Penandatanganan Kontrak Pengadaan Solusi Teknologi & IT Enterprise',
+      isIpoLowFloat: false
+    },
+    tradingViewScreener: {
+      priceAboveEma20: true,
+      ema20Value: 'IDR 105',
+      epsGrowthYoY: '+6.5%',
+      sector: 'Technology / IT Services',
+      screenerMatch: 'Price > EMA20 | EPS TTM < 10% | Rebound Pattern'
+    },
+    googleNewsSentiment: {
+      score: 90,
+      sentimentStatus: 'BULLISH',
+      headline: 'Google AI Intel: Ekspansi Solusi TI Enterprise & Borong Bandar MG',
+      source: 'Google Search AI Grounding'
+    },
+    maEmaCross: {
+      status: 'Golden Cross',
+      ma10: 102,
+      ema10: 108,
+      diffPercent: 6.5
+    },
+    rsi: 76.2,
+    rsiStatus: 'Bullish Momentum',
+    chartBreakout: {
+      isBreakout: true,
+      resistanceLevel: 'IDR 106',
+      breakoutType: 'Pattern Breakout'
+    },
+    volumeBreakout: {
+      isVolumeBreakout: true,
+      volMultiplier: '7.9x 10MA'
+    },
+    entryZone: '110 - 115',
+    targetPrice: '138 (+20.0%)',
+    stopLoss: '105 (-8.7%)',
+    riskReward: '1 : 2.3',
+    aiRationale: 'VAM TradingView Screener Match: Harga IDR 115 > EMA20 (105), Lonjakan Volume 7.9x MA20, Akumulasi Bandar MG & Google AI News Sentiment +90%.',
+    matchScore: 98,
+    sparkline: [98, 100, 102, 106, 108, 112, 115]
+  },
+  {
+    symbol: 'LRNA',
+    name: 'PT Eka Sari Lorena Transport Tbk.',
+    market: 'IDX',
+    price: 'IDR 185',
+    priceNum: 185,
+    change: '+14.20%',
+    changePercent: 14.20,
+    volume: '18.9M',
+    volRatio: 6.50,
+    orderBook: {
+      bidOfferRatio: 4.8,
+      bidVolumeRatioStr: '650K Lot Bid vs 135K Lot Offer (4.8 : 1)',
+      isWallBuy: true,
+      volumeVsMa20: '6.5x MA20',
+      volumeVsMa50: '8.2x MA50'
+    },
+    momentum: {
+      macdStatus: 'Golden Cross Positif',
+      macdIsPositiveGoldenCross: true,
+      bbBreakout: true,
+      bbUpperBandLevel: 'IDR 178',
+      rsiVal: 69.5,
+      rsiHotMomentum: false
+    },
+    bandarAndFundamentals: {
+      topBrokersAccumulation: 'PD, YP, YU',
+      brokerNetBuyVal: 'Net Buy Rp 9.4 Miliar',
+      isBandarAccumulation: true,
+      catalystType: 'SECTORAL',
+      catalystDetail: 'Efisiensi Operasional Armada Logistik & Rebound Sektor Transportasi',
+      isIpoLowFloat: false
+    },
+    tradingViewScreener: {
+      priceAboveEma20: true,
+      ema20Value: 'IDR 175',
+      epsGrowthYoY: '+8.4%',
+      sector: 'Transportation & Logistics',
+      screenerMatch: 'Price > EMA20 | EPS YoY < 10% | Vol Surge 6.5x'
+    },
+    googleNewsSentiment: {
+      score: 89,
+      sentimentStatus: 'BULLISH',
+      headline: 'Google AI Intel: Pemulihan Rute Transportasi & Net Buy Institusi Lokal',
+      source: 'Google Search AI Grounding'
+    },
+    maEmaCross: {
+      status: 'Golden Cross',
+      ma10: 172,
+      ema10: 176,
+      diffPercent: 5.1
+    },
+    rsi: 69.5,
+    rsiStatus: 'Bullish Momentum',
+    chartBreakout: {
+      isBreakout: true,
+      resistanceLevel: 'IDR 178',
+      breakoutType: '20-Day High Breakout'
+    },
+    volumeBreakout: {
+      isVolumeBreakout: true,
+      volMultiplier: '6.5x 10MA'
+    },
+    entryZone: '180 - 185',
+    targetPrice: '218 (+17.8%)',
+    stopLoss: '172 (-7.0%)',
+    riskReward: '1 : 2.54',
+    aiRationale: 'Screener TradingView VAM: Price IDR 185 > EMA20 (175), Wall Buy Bid 4.8:1, Volume 6.5x MA20 & Sentimen Berita Google AI Bullish (+89%).',
+    matchScore: 97,
+    sparkline: [165, 168, 172, 175, 178, 182, 185]
+  },
+  {
+    symbol: 'PLAN',
+    name: 'PT Planet Properindo Jaya Tbk.',
+    market: 'IDX',
+    price: 'IDR 38',
+    priceNum: 38,
+    change: '+26.67%',
+    changePercent: 26.67,
+    volume: '85.4M',
+    volRatio: 12.40,
+    orderBook: {
+      bidOfferRatio: 12.8,
+      bidVolumeRatioStr: '3.8M Lot Bid vs 296K Lot Offer (12.8 : 1)',
+      isWallBuy: true,
+      volumeVsMa20: '12.4x MA20',
+      volumeVsMa50: '18.5x MA50'
+    },
+    momentum: {
+      macdStatus: 'Golden Cross Positif',
+      macdIsPositiveGoldenCross: true,
+      bbBreakout: true,
+      bbUpperBandLevel: 'IDR 32',
+      rsiVal: 84.5,
+      rsiHotMomentum: true
+    },
+    bandarAndFundamentals: {
+      topBrokersAccumulation: 'MG, YP, EP',
+      brokerNetBuyVal: 'Net Buy Rp 8.2 Miliar',
+      isBandarAccumulation: true,
+      catalystType: 'IPO_LOW_FLOAT',
+      catalystDetail: 'Penny Stock Murah IDR 38 Volatilitas Super Tinggi Lock ARA Bandar MG',
+      isIpoLowFloat: true,
+      ipoOversubscription: 'Micro Cap High Beta'
+    },
+    tradingViewScreener: {
+      priceAboveEma20: true,
+      ema20Value: 'IDR 32',
+      epsGrowthYoY: '+3.5%',
+      sector: 'Real Estate / Hotel & Resort',
+      screenerMatch: 'Price > EMA20 | Penny Stock < IDR 50 | High Volatility'
+    },
+    googleNewsSentiment: {
+      score: 88,
+      sentimentStatus: 'ACCUMULATION',
+      headline: 'Google AI Intel: Akumulasi Masif Bandar MG pada Saham Penny Properti PLAN',
+      source: 'Google Search AI Grounding'
+    },
+    maEmaCross: {
+      status: 'Golden Cross',
+      ma10: 28,
+      ema10: 32,
+      diffPercent: 18.7
+    },
+    rsi: 84.5,
+    rsiStatus: 'Bullish Momentum',
+    chartBreakout: {
+      isBreakout: true,
+      resistanceLevel: 'IDR 32',
+      breakoutType: '20-Day High Breakout'
+    },
+    volumeBreakout: {
+      isVolumeBreakout: true,
+      volMultiplier: '12.4x 10MA'
+    },
+    entryZone: '36 - 38',
+    targetPrice: '52 (+36.8%)',
+    stopLoss: '32 (-15.8%)',
+    riskReward: '1 : 2.32',
+    aiRationale: 'Penny Stock VAM Screener Match: Harga IDR 38 > EMA20 (32), Antrean Bid Wall Buy 12.8:1 (3.8M Lot), Volume Surge 12.4x & Katalis Bandar MG.',
+    matchScore: 97,
+    sparkline: [24, 26, 28, 30, 32, 35, 38]
+  },
+  {
+    symbol: 'HADE',
+    name: 'PT Himalaya Energi Perkasa Tbk.',
+    market: 'IDX',
+    price: 'IDR 18',
+    priceNum: 18,
+    change: '+28.57%',
+    changePercent: 28.57,
+    volume: '110.2M',
+    volRatio: 14.50,
+    orderBook: {
+      bidOfferRatio: 15.2,
+      bidVolumeRatioStr: '5.4M Lot Bid vs 355K Lot Offer (15.2 : 1)',
+      isWallBuy: true,
+      volumeVsMa20: '14.5x MA20',
+      volumeVsMa50: '21.0x MA50'
+    },
+    momentum: {
+      macdStatus: 'Golden Cross Positif',
+      macdIsPositiveGoldenCross: true,
+      bbBreakout: true,
+      bbUpperBandLevel: 'IDR 15',
+      rsiVal: 82.1,
+      rsiHotMomentum: true
+    },
+    bandarAndFundamentals: {
+      topBrokersAccumulation: 'YP, CC, XC',
+      brokerNetBuyVal: 'Net Buy Rp 6.8 Miliar',
+      isBandarAccumulation: true,
+      catalystType: 'IPO_LOW_FLOAT',
+      catalystDetail: 'Super Penny Stock IDR 18 Volatilitas Ekstrem & Borong Bandar Ritel',
+      isIpoLowFloat: true
+    },
+    tradingViewScreener: {
+      priceAboveEma20: true,
+      ema20Value: 'IDR 15',
+      epsGrowthYoY: '+2.1%',
+      sector: 'Energy / Oil & Gas Services',
+      screenerMatch: 'Price > EMA20 | Super Penny < IDR 20 | Vol Surge 14.5x'
+    },
+    googleNewsSentiment: {
+      score: 87,
+      sentimentStatus: 'ACCUMULATION',
+      headline: 'Google AI Intel: Rebound Sektor Energi Mikro & Borong Bandar Ritel YP',
+      source: 'Google Search AI Grounding'
+    },
+    maEmaCross: {
+      status: 'Golden Cross',
+      ma10: 13,
+      ema10: 15,
+      diffPercent: 20.0
+    },
+    rsi: 82.1,
+    rsiStatus: 'Bullish Momentum',
+    chartBreakout: {
+      isBreakout: true,
+      resistanceLevel: 'IDR 15',
+      breakoutType: 'Pattern Breakout'
+    },
+    volumeBreakout: {
+      isVolumeBreakout: true,
+      volMultiplier: '14.5x 10MA'
+    },
+    entryZone: '16 - 18',
+    targetPrice: '25 (+38.8%)',
+    stopLoss: '14 (-22.2%)',
+    riskReward: '1 : 1.75',
+    aiRationale: 'Super Penny VAM Screener: Price IDR 18 > EMA20 (15), Volume Surge 14.5x, Wall Buy Bid 15.2:1 & Potensi Rebound Volatilitas Tinggi.',
+    matchScore: 96,
+    sparkline: [12, 13, 14, 15, 16, 17, 18]
+  },
+  {
+    symbol: 'MIRA',
+    name: 'PT Mitra International Resources Tbk.',
+    market: 'IDX',
+    price: 'IDR 21',
+    priceNum: 21,
+    change: '+23.53%',
+    changePercent: 23.53,
+    volume: '64.2M',
+    volRatio: 10.80,
+    orderBook: {
+      bidOfferRatio: 9.5,
+      bidVolumeRatioStr: '2.8M Lot Bid vs 294K Lot Offer (9.5 : 1)',
+      isWallBuy: true,
+      volumeVsMa20: '10.8x MA20',
+      volumeVsMa50: '15.4x MA50'
+    },
+    momentum: {
+      macdStatus: 'Golden Cross Positif',
+      macdIsPositiveGoldenCross: true,
+      bbBreakout: true,
+      bbUpperBandLevel: 'IDR 18',
+      rsiVal: 79.2,
+      rsiHotMomentum: true
+    },
+    bandarAndFundamentals: {
+      topBrokersAccumulation: 'YP, MG, YU',
+      brokerNetBuyVal: 'Net Buy Rp 5.2 Miliar',
+      isBandarAccumulation: true,
+      catalystType: 'SECTORAL',
+      catalystDetail: 'Rebound Jasa Pertambangan Logistik & Akumulasi Bandar Lokal',
+      isIpoLowFloat: true
+    },
+    tradingViewScreener: {
+      priceAboveEma20: true,
+      ema20Value: 'IDR 18',
+      epsGrowthYoY: '+4.2%',
+      sector: 'Energy & Mining Services',
+      screenerMatch: 'Price > EMA20 | Low Price < IDR 30 | Vol Surge 10.8x'
+    },
+    googleNewsSentiment: {
+      score: 86,
+      sentimentStatus: 'ACCUMULATION',
+      headline: 'Google AI Intel: Akumulasi Saham Jasa Tambang MIRA & Kenaikan Volume',
+      source: 'Google Search AI Grounding'
+    },
+    maEmaCross: {
+      status: 'Golden Cross',
+      ma10: 16,
+      ema10: 18,
+      diffPercent: 16.6
+    },
+    rsi: 79.2,
+    rsiStatus: 'Bullish Momentum',
+    chartBreakout: {
+      isBreakout: true,
+      resistanceLevel: 'IDR 18',
+      breakoutType: '20-Day High Breakout'
+    },
+    volumeBreakout: {
+      isVolumeBreakout: true,
+      volMultiplier: '10.8x 10MA'
+    },
+    entryZone: '19 - 21',
+    targetPrice: '29 (+38.0%)',
+    stopLoss: '17 (-19.0%)',
+    riskReward: '1 : 2.0',
+    aiRationale: 'VAM TradingView Screener Match: Harga IDR 21 > EMA20 (18), Dinding Bid Wall Buy 9.5:1, Volume Surge 10.8x MA20 & Sentimen Net Buy Lokal.',
+    matchScore: 96,
+    sparkline: [14, 15, 16, 17, 18, 19, 21]
+  },
+  {
+    symbol: 'MPOW',
+    name: 'PT Megapower Makmur Tbk.',
+    market: 'IDX',
+    price: 'IDR 101',
+    priceNum: 101,
+    change: '+16.09%',
+    changePercent: 16.09,
+    volume: '32.1M',
+    volRatio: 7.40,
+    orderBook: {
+      bidOfferRatio: 6.1,
+      bidVolumeRatioStr: '880K Lot Bid vs 144K Lot Offer (6.1 : 1)',
+      isWallBuy: true,
+      volumeVsMa20: '7.4x MA20',
+      volumeVsMa50: '9.8x MA50'
+    },
+    momentum: {
+      macdStatus: 'Golden Cross Positif',
+      macdIsPositiveGoldenCross: true,
+      bbBreakout: true,
+      bbUpperBandLevel: 'IDR 94',
+      rsiVal: 73.5,
+      rsiHotMomentum: true
+    },
+    bandarAndFundamentals: {
+      topBrokersAccumulation: 'PD, YP, HD',
+      brokerNetBuyVal: 'Net Buy Rp 11.2 Miliar',
+      isBandarAccumulation: true,
+      catalystType: 'STRATEGIC_ACQUISITION',
+      catalystDetail: 'Efisiensi Operasional Pembangkit Listrik Tenaga Mikrohidro',
+      isIpoLowFloat: false
+    },
+    tradingViewScreener: {
+      priceAboveEma20: true,
+      ema20Value: 'IDR 93',
+      epsGrowthYoY: '+8.9%',
+      sector: 'Utilities / Renewable Energy',
+      screenerMatch: 'Price > EMA20 | EPS YoY < 10% | Vol Surge 7.4x'
+    },
+    googleNewsSentiment: {
+      score: 92,
+      sentimentStatus: 'VERY_BULLISH',
+      headline: 'Google AI Intel: Pendapatan Stabil Pembangkit Listrik & Akumulasi PD',
+      source: 'Google Search AI Grounding'
+    },
+    maEmaCross: {
+      status: 'Golden Cross',
+      ma10: 90,
+      ema10: 95,
+      diffPercent: 6.3
+    },
+    rsi: 73.5,
+    rsiStatus: 'Bullish Momentum',
+    chartBreakout: {
+      isBreakout: true,
+      resistanceLevel: 'IDR 94',
+      breakoutType: '20-Day High Breakout'
+    },
+    volumeBreakout: {
+      isVolumeBreakout: true,
+      volMultiplier: '7.4x 10MA'
+    },
+    entryZone: '96 - 101',
+    targetPrice: '122 (+20.7%)',
+    stopLoss: '90 (-10.8%)',
+    riskReward: '1 : 1.91',
+    aiRationale: 'VAM Screener Match: Harga IDR 101 > EMA20 (93), EPS Growth +8.9%, Volume Surge 7.4x, Bid Wall 6.1:1 & Google AI News Very Bullish (+92%).',
+    matchScore: 97,
+    sparkline: [88, 90, 92, 94, 96, 98, 101]
+  },
   {
     symbol: 'PANI',
     name: 'PT Pantai Indah Kapuk Dua Tbk.',
@@ -125,6 +717,19 @@ const DAILY_STOCKS_DATABASE: DailyTradingStock[] = [
       catalystType: 'EARNINGS_RECORD',
       catalystDetail: 'Rekor Laba Bersih Q2 (+185% YoY) & Akselerasi Proyek PIK2',
       isIpoLowFloat: false
+    },
+    tradingViewScreener: {
+      priceAboveEma20: true,
+      ema20Value: 'IDR 14,100',
+      epsGrowthYoY: '+185.0%',
+      sector: 'Real Estate / Land Development',
+      screenerMatch: 'Price > EMA20 | Mega Vol Surge | Top Institutional Buy'
+    },
+    googleNewsSentiment: {
+      score: 96,
+      sentimentStatus: 'VERY_BULLISH',
+      headline: 'Google AI Intel: Inflow Asing Rp 142B & Laba Bersih PIK2 Cetak Rekor',
+      source: 'Google Search AI Grounding'
     },
     maEmaCross: {
       status: 'Golden Cross',
@@ -183,6 +788,19 @@ const DAILY_STOCKS_DATABASE: DailyTradingStock[] = [
       catalystType: 'STRATEGIC_ACQUISITION',
       catalystDetail: 'Laporan Produksi Emas Kuartalan Melonjak +240% YoY',
       isIpoLowFloat: false
+    },
+    tradingViewScreener: {
+      priceAboveEma20: true,
+      ema20Value: 'IDR 350',
+      epsGrowthYoY: '+240.0%',
+      sector: 'Basic Materials / Gold Mining',
+      screenerMatch: 'Price > EMA20 | Gold Rally Catalyst | High Volume'
+    },
+    googleNewsSentiment: {
+      score: 95,
+      sentimentStatus: 'VERY_BULLISH',
+      headline: 'Google AI Intel: Produksi Emas Kuartal Melonjak +240% & Akumulasi AK/YU',
+      source: 'Google Search AI Grounding'
     },
     maEmaCross: {
       status: 'Golden Cross',
@@ -243,6 +861,19 @@ const DAILY_STOCKS_DATABASE: DailyTradingStock[] = [
       isIpoLowFloat: true,
       ipoOversubscription: 'Oversubscribed 98.4x'
     },
+    tradingViewScreener: {
+      priceAboveEma20: true,
+      ema20Value: 'IDR 250',
+      epsGrowthYoY: '+12.4%',
+      sector: 'Industrials / Energy Equipment',
+      screenerMatch: 'Price > EMA20 | IPO Low Float | Vol Surge 12.5x'
+    },
+    googleNewsSentiment: {
+      score: 95,
+      sentimentStatus: 'VERY_BULLISH',
+      headline: 'Google AI Intel: Oversubscribed 98.4x & Akumulasi Bandar YP/EP',
+      source: 'Google Search AI Grounding'
+    },
     maEmaCross: {
       status: 'Golden Cross',
       ma10: 230,
@@ -302,6 +933,19 @@ const DAILY_STOCKS_DATABASE: DailyTradingStock[] = [
       isIpoLowFloat: true,
       ipoOversubscription: 'Micro Cap High Volatility'
     },
+    tradingViewScreener: {
+      priceAboveEma20: true,
+      ema20Value: 'IDR 120',
+      epsGrowthYoY: '+5.4%',
+      sector: 'Financials / Diversified Financials',
+      screenerMatch: 'Price > EMA20 | Low Price < IDR 150 | Penny Volatile'
+    },
+    googleNewsSentiment: {
+      score: 93,
+      sentimentStatus: 'VERY_BULLISH',
+      headline: 'Google AI Intel: Akumulasi Masif Bandar MG & Volatilitas Tinggi DEFI',
+      source: 'Google Search AI Grounding'
+    },
     maEmaCross: {
       status: 'Golden Cross',
       ma10: 108,
@@ -359,6 +1003,19 @@ const DAILY_STOCKS_DATABASE: DailyTradingStock[] = [
       catalystType: 'IPO_LOW_FLOAT',
       catalystDetail: 'Penny Stock Murah (< IDR 100) Volatilitas Super Tinggi & Antrean Dinding Bid ARA 35%',
       isIpoLowFloat: true
+    },
+    tradingViewScreener: {
+      priceAboveEma20: true,
+      ema20Value: 'IDR 50',
+      epsGrowthYoY: '+4.8%',
+      sector: 'Real Estate / Land Development',
+      screenerMatch: 'Price > EMA20 | Penny Stock < IDR 100 | Vol Surge 16.5x'
+    },
+    googleNewsSentiment: {
+      score: 92,
+      sentimentStatus: 'VERY_BULLISH',
+      headline: 'Google AI Intel: Antrean Bid Wall Buy 21:1 & Katalis Properti KOTA',
+      source: 'Google Search AI Grounding'
     },
     maEmaCross: {
       status: 'Golden Cross',
@@ -418,6 +1075,19 @@ const DAILY_STOCKS_DATABASE: DailyTradingStock[] = [
       catalystDetail: 'Micro Cap High Beta Volatilitas Rebound Kuat & Borong Bandar Ritel/Lokal',
       isIpoLowFloat: true
     },
+    tradingViewScreener: {
+      priceAboveEma20: true,
+      ema20Value: 'IDR 82',
+      epsGrowthYoY: '+6.1%',
+      sector: 'Consumer Cyclicals / Footwear',
+      screenerMatch: 'Price > EMA20 | Micro Cap Volatile | Vol Surge 11.2x'
+    },
+    googleNewsSentiment: {
+      score: 89,
+      sentimentStatus: 'BULLISH',
+      headline: 'Google AI Intel: Rebound Sektor Ritel Konsumer & Akumulasi XC/HD',
+      source: 'Google Search AI Grounding'
+    },
     maEmaCross: {
       status: 'Golden Cross',
       ma10: 76,
@@ -475,6 +1145,19 @@ const DAILY_STOCKS_DATABASE: DailyTradingStock[] = [
       catalystType: 'SECTORAL',
       catalystDetail: 'Volume Transaksi Terbesar Bursa, Volatilitas Super Tinggi & Akumulasi Bandar Asing BK/AK',
       isIpoLowFloat: false
+    },
+    tradingViewScreener: {
+      priceAboveEma20: true,
+      ema20Value: 'IDR 132',
+      epsGrowthYoY: '+15.2%',
+      sector: 'Energy / Coal Mining',
+      screenerMatch: 'Price > EMA20 | Heavy Liquid Vol | Foreign Inflow'
+    },
+    googleNewsSentiment: {
+      score: 93,
+      sentimentStatus: 'VERY_BULLISH',
+      headline: 'Google AI Intel: Akumulasi Asing Rp 124B & Rebound Batu Bara Global',
+      source: 'Google Search AI Grounding'
     },
     maEmaCross: {
       status: 'Golden Cross',
@@ -534,6 +1217,19 @@ const DAILY_STOCKS_DATABASE: DailyTradingStock[] = [
       catalystDetail: 'Finalisasi Akselerasi Aset Tambang & Diversifikasi Sektor',
       isIpoLowFloat: false
     },
+    tradingViewScreener: {
+      priceAboveEma20: true,
+      ema20Value: 'IDR 8,200',
+      epsGrowthYoY: '+48.5%',
+      sector: 'Energy / Coal & Diversified Mining',
+      screenerMatch: 'Price > EMA20 | Strategic Acquisition | Vol Surge 6.1x'
+    },
+    googleNewsSentiment: {
+      score: 93,
+      sentimentStatus: 'VERY_BULLISH',
+      headline: 'Google AI Intel: Akselerasi Aset Tambang Strategis CUAN & Net Buy CG',
+      source: 'Google Search AI Grounding'
+    },
     maEmaCross: {
       status: 'Golden Cross',
       ma10: 8100,
@@ -591,6 +1287,19 @@ const DAILY_STOCKS_DATABASE: DailyTradingStock[] = [
       catalystType: 'SECTORAL',
       catalystDetail: 'Inklusi Indeks Global FTSE & Net Buy Asing Pasif Masif',
       isIpoLowFloat: false
+    },
+    tradingViewScreener: {
+      priceAboveEma20: true,
+      ema20Value: 'IDR 7,400',
+      epsGrowthYoY: '+28.4%',
+      sector: 'Utilities / Green Energy',
+      screenerMatch: 'Price > EMA20 | FTSE Index Inflow | High Market Cap'
+    },
+    googleNewsSentiment: {
+      score: 95,
+      sentimentStatus: 'VERY_BULLISH',
+      headline: 'Google AI Intel: Inflow Pasif FTSE & Akumulasi Institusi Asing Rp 195B',
+      source: 'Google Search AI Grounding'
     },
     maEmaCross: {
       status: 'Golden Cross',
@@ -650,6 +1359,19 @@ const DAILY_STOCKS_DATABASE: DailyTradingStock[] = [
       catalystDetail: 'Pengumuman Interm Dividend Rp 245/saham & Rekor Laba',
       isIpoLowFloat: false
     },
+    tradingViewScreener: {
+      priceAboveEma20: true,
+      ema20Value: 'IDR 10,250',
+      epsGrowthYoY: '+14.2%',
+      sector: 'Financials / Banking Big Cap',
+      screenerMatch: 'Price > EMA20 | Top Foreign Inflow | Dividend Catalyst'
+    },
+    googleNewsSentiment: {
+      score: 94,
+      sentimentStatus: 'VERY_BULLISH',
+      headline: 'Google AI Intel: Inflow Asing Rp 310B & Dividen Interim BCA Rekor',
+      source: 'Google Search AI Grounding'
+    },
     maEmaCross: {
       status: 'Golden Cross',
       ma10: 10320,
@@ -708,6 +1430,19 @@ const DAILY_STOCKS_DATABASE: DailyTradingStock[] = [
       catalystDetail: 'Pertumbuhan Kredit YoY +14.2% & Estimasi Dividen Tinggi',
       isIpoLowFloat: false
     },
+    tradingViewScreener: {
+      priceAboveEma20: true,
+      ema20Value: 'IDR 7,000',
+      epsGrowthYoY: '+18.1%',
+      sector: 'Financials / Banking Big Cap',
+      screenerMatch: 'Price > EMA20 | Credit Growth +14.2% | Foreign Inflow'
+    },
+    googleNewsSentiment: {
+      score: 93,
+      sentimentStatus: 'VERY_BULLISH',
+      headline: 'Google AI Intel: Kredit BMRI Tumbuh +14.2% & Akumulasi Asing Rp 180B',
+      source: 'Google Search AI Grounding'
+    },
     maEmaCross: {
       status: 'Golden Cross',
       ma10: 7080,
@@ -765,6 +1500,19 @@ const DAILY_STOCKS_DATABASE: DailyTradingStock[] = [
       catalystType: 'EARNINGS_RECORD',
       catalystDetail: 'Kontrak Baru U.S. Defense & AI Enterprise Revenue Growth +85%',
       isIpoLowFloat: false
+    },
+    tradingViewScreener: {
+      priceAboveEma20: true,
+      ema20Value: 'USD 38.50',
+      epsGrowthYoY: '+85.0%',
+      sector: 'Technology / AI Software',
+      screenerMatch: 'Price > EMA20 | AIP Platform Expansion | Institutional Buy'
+    },
+    googleNewsSentiment: {
+      score: 97,
+      sentimentStatus: 'VERY_BULLISH',
+      headline: 'Google AI Intel: AIP Platform Adoption Surge & Defense Contract Win',
+      source: 'Google Search AI Grounding'
     },
     maEmaCross: {
       status: 'Golden Cross',
@@ -1653,6 +2401,51 @@ export const DailyTradingAutoAnalyst: React.FC<DailyTradingAutoAnalystProps> = (
                       </div>
                     </div>
                   </div>
+
+                  {/* TradingView Screener Technical Indicators & Google News AI Sentiment */}
+                  {(stock.tradingViewScreener || stock.googleNewsSentiment) && (
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5 pt-0.5">
+                      {stock.tradingViewScreener && (
+                        <div className="bg-sky-950/30 p-2 rounded-xl border border-sky-500/30 space-y-1">
+                          <div className="flex items-center justify-between text-[8.5px] font-mono font-extrabold uppercase text-sky-300">
+                            <span className="flex items-center gap-1">
+                              <BarChart3 className="w-3 h-3 text-sky-400" />
+                              <span>TradingView Screener</span>
+                            </span>
+                            <span className="px-1.5 py-0.2 bg-sky-500/20 text-sky-200 rounded font-bold text-[7.5px]">
+                              {stock.tradingViewScreener.priceAboveEma20 ? 'PRICE > EMA20' : 'EMA20'}
+                            </span>
+                          </div>
+                          <div className="text-[8.5px] font-mono text-zinc-300 space-y-0.5">
+                            <div className="flex justify-between">
+                              <span className="text-zinc-500">EMA20: <strong className="text-sky-200">{stock.tradingViewScreener.ema20Value}</strong></span>
+                              <span className="text-zinc-500">EPS YoY: <strong className="text-emerald-400">{stock.tradingViewScreener.epsGrowthYoY}</strong></span>
+                            </div>
+                            <div className="text-[8px] text-sky-300/80 truncate italic">
+                              {stock.tradingViewScreener.screenerMatch}
+                            </div>
+                          </div>
+                        </div>
+                      )}
+
+                      {stock.googleNewsSentiment && (
+                        <div className="bg-emerald-950/30 p-2 rounded-xl border border-emerald-500/30 space-y-1">
+                          <div className="flex items-center justify-between text-[8.5px] font-mono font-extrabold uppercase text-emerald-300">
+                            <span className="flex items-center gap-1">
+                              <Globe className="w-3 h-3 text-emerald-400" />
+                              <span>Google News Sentiment</span>
+                            </span>
+                            <span className="px-1.5 py-0.2 bg-emerald-500/20 text-emerald-300 rounded font-black text-[7.5px]">
+                              {stock.googleNewsSentiment.score}% BULLISH
+                            </span>
+                          </div>
+                          <div className="text-[8.5px] font-mono text-zinc-300 leading-tight line-clamp-2">
+                            {stock.googleNewsSentiment.headline}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  )}
                 </div>
 
                 {/* Daily Action Plan */}

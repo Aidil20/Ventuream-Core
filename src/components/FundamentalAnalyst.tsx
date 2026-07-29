@@ -172,10 +172,16 @@ export const FundamentalAnalyst: React.FC<FundamentalAnalystProps> = ({ onSelect
     }
   }, [initialSymbol]);
 
+  const auditDataRef = React.useRef(auditData);
+  useEffect(() => {
+    auditDataRef.current = auditData;
+  }, [auditData]);
+
   useEffect(() => {
     const handleMarketUpdate = (event: CustomEvent) => {
       const data = event.detail;
-      if (auditData && data.symbol === auditData.ticker) {
+      const currentAuditData = auditDataRef.current;
+      if (currentAuditData && data && data.symbol === currentAuditData.ticker) {
         setAuditData(prev => prev ? {
           ...prev,
           lastPrice: data.price,
@@ -199,7 +205,7 @@ export const FundamentalAnalyst: React.FC<FundamentalAnalystProps> = ({ onSelect
 
     window.addEventListener('vam-market-update' as any, handleMarketUpdate);
     return () => window.removeEventListener('vam-market-update' as any, handleMarketUpdate);
-  }, [auditData]);
+  }, []);
 
   const handleAudit = async (symbol: string) => {
     setSearchQuery(symbol);

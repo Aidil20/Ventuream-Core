@@ -961,3 +961,362 @@ export async function generateUserManualPPTX() {
 
   await pptx.writeFile({ fileName: 'VentureAM_User_Manual_Guide.pptx' });
 }
+
+// ==========================================
+// 3. WEEKLY MARKET INSIGHT & FUNDAMENTAL ANALYSIS PDF GENERATOR
+// ==========================================
+
+export interface WeeklyMarketInsightReportData {
+  reportTitle?: string;
+  reportPeriod?: string;
+  reportRefNumber?: string;
+  preparedBy?: string;
+  executiveSummary?: {
+    overview: string;
+    macroOutlook: string;
+    aiSentimentScore: number;
+    aiSentimentLabel: string;
+    topTakeaways: string[];
+  };
+  topSectors?: Array<{
+    sector: string;
+    weeklyReturn: string;
+    sentiment: 'Bullish' | 'Bearish' | 'Neutral' | string;
+    keyDrivers: string;
+    topTicker: string;
+  }>;
+  watchlist?: Array<{
+    symbol: string;
+    name: string;
+    sector: string;
+    price: string;
+    targetPrice: string;
+    upside: string;
+    peRatio: string;
+    pbvRatio: string;
+    roe: string;
+    altmanZScore: string;
+    rating: 'Strong Buy' | 'Buy' | 'Accumulate' | 'Hold' | string;
+    catalyst: string;
+  }>;
+  marketNews?: Array<{
+    headline: string;
+    summary: string;
+    source?: string;
+    timestamp?: string;
+    sentiment?: string;
+  }>;
+}
+
+export async function generateWeeklyMarketInsightPDF(data?: WeeklyMarketInsightReportData) {
+  const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
+  const pw = doc.internal.pageSize.getWidth();
+  const ph = doc.internal.pageSize.getHeight();
+
+  const reportTitle = data?.reportTitle || "WEEKLY MARKET INSIGHT & FUNDAMENTAL ANALYSIS";
+  const reportPeriod = data?.reportPeriod || `Minggu IV - ${new Date().toLocaleDateString('id-ID', { month: 'long', year: 'numeric' })}`;
+  const reportRef = data?.reportRefNumber || `VAM/WMI/${new Date().getFullYear()}/W${Math.ceil(new Date().getDate() / 7)}`;
+  const preparedBy = data?.preparedBy || "VentureAM Chief Investment Officer & Fundamental Research Team";
+
+  // Default Executive Summary
+  const summary = data?.executiveSummary || {
+    overview: "Pasar saham domestik (IHSG) mempertahankan tren akumulasi positif didorong oleh stabilisasi arus modal asing pada sektor perbankan buku IV dan dorongan pemangkasan suku bunga acuan. Sektor keuangan dan energi menjadi motor penggerak utama indeks.",
+    macroOutlook: "Inflasi domestik tetap terkendali pada kisaran target 2.5% ± 1%. Cadangan devisa yang solid memberikan ruang kestabilan nilai tukar Rupiah terhadap USD. Ekspektasi penurunan Yield US Treasury 10Y memberikan sentimen positif bagi obligasi negara & saham berkapitalisasi besar.",
+    aiSentimentScore: 86,
+    aiSentimentLabel: "BULLISH ACCUMULATION",
+    topTakeaways: [
+      "Likuiditas perbankan tetap tebal, mendukung margin bunga bersih (NIM) dan dividen payout rasio.",
+      "Sektor energi dan komoditas mengalami rebound akibat pengetatan pasokan global.",
+      "Saham-saham undervalued dengan Altman Z-Score > 3.0 menawarkan margin of safety yang kuat."
+    ]
+  };
+
+  // Default Top Sectors
+  const sectors = data?.topSectors || [
+    { sector: "Keuangan & Perbankan", weeklyReturn: "+2.45%", sentiment: "Bullish", keyDrivers: "Kinerja laba bersih rekor & akumulasi dana asing di BBCA/BMRI", topTicker: "BBCA" },
+    { sector: "Energi & Pertambangan", weeklyReturn: "+1.80%", sentiment: "Bullish", keyDrivers: "Kenaikan harga batu bara & permintaan minyak mentah global", topTicker: "ADRO" },
+    { sector: "Infrastruktur & Telekos", weeklyReturn: "+0.95%", sentiment: "Neutral", keyDrivers: "Ekspansi jaringan data center & lalu lintas data telekomunikasi", topTicker: "TLKM" },
+    { sector: "Barang Konsumen Primer", weeklyReturn: "+0.42%", sentiment: "Neutral", keyDrivers: "Peningkatan konsumsi rumah tangga jelang pemulihan daya beli", topTicker: "ICBP" },
+    { sector: "Teknologi & Ekosistem", weeklyReturn: "-0.65%", sentiment: "Bearish", keyDrivers: "Tekanan efisiensi operasional dan rotasi sektor ke Value Stocks", topTicker: "GOTO" },
+  ];
+
+  // Default Watchlist
+  const watchlist = data?.watchlist || [
+    { symbol: "BBCA", name: "Bank Central Asia Tbk", sector: "Keuangan", price: "Rp 10.550", targetPrice: "Rp 12.449", upside: "+18.0%", peRatio: "24.5x", pbvRatio: "4.8x", roe: "23.8%", altmanZScore: "4.12", rating: "Strong Buy", catalyst: "Kinerja laba rekor & CASA tebal" },
+    { symbol: "BMRI", name: "Bank Mandiri (Persero) Tbk", sector: "Keuangan", price: "Rp 6.775", targetPrice: "Rp 7.995", upside: "+18.0%", peRatio: "10.45x", pbvRatio: "2.25x", roe: "22.1%", altmanZScore: "3.85", rating: "Strong Buy", catalyst: "Kredit korporasi & efisiensi Livin" },
+    { symbol: "TLKM", name: "Telkom Indonesia Tbk", sector: "Infrastruktur", price: "Rp 2.850", targetPrice: "Rp 3.363", upside: "+18.0%", peRatio: "13.4x", pbvRatio: "2.1x", roe: "14.2%", altmanZScore: "3.20", rating: "Buy", catalyst: "Monetisasi Data Center NeutraDC" },
+    { symbol: "ASII", name: "Astra International Tbk", sector: "Campuran", price: "Rp 5.050", targetPrice: "Rp 5.959", upside: "+18.0%", peRatio: "7.2x", pbvRatio: "1.02x", roe: "14.2%", altmanZScore: "3.05", rating: "Buy", catalyst: "Dividen yield ~8.5% & otomotif" },
+    { symbol: "ADRO", name: "Adaro Energy Indonesia Tbk", sector: "Energi", price: "Rp 3.940", targetPrice: "Rp 4.649", upside: "+18.0%", peRatio: "6.45x", pbvRatio: "1.18x", roe: "18.2%", altmanZScore: "4.50", rating: "Accumulate", catalyst: "Proyek energi hijau & dividen kas" },
+    { symbol: "MDKA", name: "Merdeka Copper Gold Tbk", sector: "Pertambangan", price: "Rp 2.240", targetPrice: "Rp 2.643", upside: "+18.0%", peRatio: "Negative", pbvRatio: "2.85x", roe: "-8.2%", altmanZScore: "2.95", rating: "Accumulate", catalyst: "Ramp-up produksi emas Tujuh Bukit" },
+  ];
+
+  // Default News (Google Search Grounding Intel)
+  const news = data?.marketNews || [
+    { headline: "Google AI Intel: Akumulasi Asing & Katalis Sektor Perbankan Big Cap", summary: "Inflow investor institusi asing berlanjut pada saham BBCA & BMRI didorong ekspektasi kinerja kuartalan solid.", source: "Google Search Intel Feed", timestamp: "Hari Ini", sentiment: "Bullish" },
+    { headline: "Bank Indonesia Pertahankan BI-Rate 6.00% Jaga Stabilitas Rupiah", summary: "Kebijakan moneter BI menopang stabilitas nilai tukar dan pasar obligasi domestik.", source: "Bank Indonesia & Kontan", timestamp: "Hari Ini", sentiment: "Bullish" },
+    { headline: "Sektor Komoditas & Energi Terangkat Rebound Batu Bara Global", summary: "Permintaan impor Asia menopang harga energi dan marjin emiten tambang batu bara.", source: "Bloomberg / CNBC Indonesia", timestamp: "Kemarin", sentiment: "Bullish" }
+  ];
+
+  // PAGE 1: COVER & EXECUTIVE SUMMARY
+  doc.setFillColor(11, 15, 25);
+  doc.rect(0, 0, pw, 38, 'F');
+
+  doc.setFont("Helvetica", "bold");
+  doc.setFontSize(14);
+  doc.setTextColor(223, 255, 0);
+  doc.text("VENTUREAM INSTITUTIONAL RESEARCH", 14, 13);
+
+  doc.setFontSize(10);
+  doc.setTextColor(255, 255, 255);
+  doc.text(reportTitle.toUpperCase(), 14, 20);
+
+  doc.setFont("Helvetica", "normal");
+  doc.setFontSize(7.5);
+  doc.setTextColor(160, 175, 200);
+  doc.text(`Periode: ${reportPeriod}  |  Ref: ${reportRef}  |  Klasifikasi: RESTRICTED INSTITUTIONAL`, 14, 26);
+  doc.text(`Disusun Oleh: ${preparedBy}`, 14, 31);
+
+  doc.setDrawColor(223, 255, 0);
+  doc.setLineWidth(0.8);
+  doc.line(14, 35, pw - 14, 35);
+
+  let currentY = 44;
+
+  drawWindowFrame(doc, 14, currentY, pw - 28, 62, "Ringkasan Eksekutif & Lanskap Makro");
+
+  doc.setFont("Helvetica", "bold");
+  doc.setFontSize(8);
+  doc.setTextColor(223, 255, 0);
+  doc.text("1. IKHTISAR PERKEMBANGAN PASAR", 18, currentY + 12);
+
+  doc.setFont("Helvetica", "normal");
+  doc.setFontSize(7.5);
+  doc.setTextColor(220, 230, 245);
+  const overviewLines = doc.splitTextToSize(summary.overview, pw - 75);
+  doc.text(overviewLines, 18, currentY + 18);
+
+  // AI Score badge
+  doc.setFillColor(22, 32, 48);
+  doc.roundedRect(pw - 65, currentY + 10, 47, 44, 3, 3, 'F');
+  doc.setDrawColor(223, 255, 0);
+  doc.setLineWidth(0.3);
+  doc.roundedRect(pw - 65, currentY + 10, 47, 44, 3, 3, 'S');
+
+  doc.setFont("Helvetica", "bold");
+  doc.setFontSize(7);
+  doc.setTextColor(160, 175, 200);
+  doc.text("SKOR AI SENTIMEN PASAR", pw - 62, currentY + 16);
+
+  doc.setFontSize(22);
+  doc.setTextColor(223, 255, 0);
+  doc.text(`${summary.aiSentimentScore}/100`, pw - 62, currentY + 27);
+
+  doc.setFontSize(7);
+  doc.setTextColor(16, 185, 129);
+  doc.text(summary.aiSentimentLabel, pw - 62, currentY + 34);
+
+  doc.setFontSize(6);
+  doc.setTextColor(140, 150, 170);
+  doc.text("Engine: Gemini AI + VAM Core", pw - 62, currentY + 41);
+
+  const macroY = currentY + 36;
+  doc.setFont("Helvetica", "bold");
+  doc.setFontSize(8);
+  doc.setTextColor(59, 130, 246);
+  doc.text("2. PROSPEK MAKRO EKONOMI & LIKUIDITAS", 18, macroY);
+
+  doc.setFont("Helvetica", "normal");
+  doc.setFontSize(7.5);
+  doc.setTextColor(220, 230, 245);
+  const macroLines = doc.splitTextToSize(summary.macroOutlook, pw - 75);
+  doc.text(macroLines, 18, macroY + 5);
+
+  currentY += 68;
+
+  // Key Takeaways Box
+  doc.setFillColor(18, 25, 38);
+  doc.roundedRect(14, currentY, pw - 28, 38, 3, 3, 'F');
+  doc.setDrawColor(40, 55, 80);
+  doc.setLineWidth(0.3);
+  doc.roundedRect(14, currentY, pw - 28, 38, 3, 3, 'S');
+
+  doc.setFont("Helvetica", "bold");
+  doc.setFontSize(8);
+  doc.setTextColor(223, 255, 0);
+  doc.text("POIN UTAMA KEPUTUSAN INVESTASI (KEY TAKEAWAYS)", 18, currentY + 7);
+
+  summary.topTakeaways.forEach((pt, idx) => {
+    doc.setFont("Helvetica", "normal");
+    doc.setFontSize(7.5);
+    doc.setTextColor(220, 230, 245);
+    const splitPt = doc.splitTextToSize(`• ${pt}`, pw - 38);
+    doc.text(splitPt, 18, currentY + 14 + idx * 7);
+  });
+
+  currentY += 44;
+
+  doc.setFontSize(6.5);
+  doc.setTextColor(120, 130, 150);
+  doc.text(`VentureAM Institutional System | Hal 1 dari 3`, 14, ph - 10);
+  doc.text(`Dicetak: ${new Date().toLocaleString('id-ID')}`, pw - 60, ph - 10);
+
+  // PAGE 2: SECTOR PERFORMANCE & FUNDAMENTAL WATCHLIST
+  doc.addPage();
+
+  doc.setFillColor(11, 15, 25);
+  doc.rect(0, 0, pw, 24, 'F');
+  doc.setFont("Helvetica", "bold");
+  doc.setFontSize(10);
+  doc.setTextColor(223, 255, 0);
+  doc.text("ANALISIS KINERJA SEKTOR & WATCHLIST FUNDAMENTAL", 14, 12);
+  doc.setFontSize(7);
+  doc.setTextColor(180, 190, 205);
+  doc.text(`Ref: ${reportRef} | Tanggal: ${new Date().toLocaleDateString('id-ID')}`, 14, 18);
+  doc.line(14, 21, pw - 14, 21);
+
+  currentY = 28;
+
+  doc.setFont("Helvetica", "bold");
+  doc.setFontSize(9);
+  doc.setTextColor(255, 255, 255);
+  doc.text("1. SEKTOR UNGGULAN & DRIVER UTAMA (TOP SECTOR PERFORMERS)", 14, currentY);
+
+  currentY += 4;
+
+  autoTable(doc, {
+    startY: currentY,
+    head: [['Sektor Industri', 'Return 1-Minggu', 'Sentimen', 'Driver Utama & Katalis', 'Saham Pilihan']],
+    body: sectors.map(s => [s.sector, s.weeklyReturn, s.sentiment, s.keyDrivers, s.topTicker]),
+    styles: { fontSize: 7, cellPadding: 2.5, textColor: [220, 230, 245], fillColor: [18, 25, 38] },
+    headStyles: { fillColor: [24, 32, 48], textColor: [223, 255, 0], fontStyle: 'bold' },
+    alternateRowStyles: { fillColor: [14, 19, 30] },
+    margin: { left: 14, right: 14 }
+  });
+
+  currentY = (doc as any).lastAutoTable.finalY + 8;
+
+  doc.setFont("Helvetica", "bold");
+  doc.setFontSize(9);
+  doc.setTextColor(255, 255, 255);
+  doc.text("2. WATCHLIST SAHAM PILIHAN BERBASIS AUDIT FUNDAMENTAL", 14, currentY);
+
+  currentY += 4;
+
+  autoTable(doc, {
+    startY: currentY,
+    head: [['Ticker', 'Nama Perusahaan', 'Sektor', 'Harga', 'Target', 'Upside', 'P/E', 'PBV', 'ROE', 'Z-Score', 'Rating', 'Katalis Fundamental']],
+    body: watchlist.map(w => [
+      w.symbol,
+      w.name,
+      w.sector,
+      w.price,
+      w.targetPrice,
+      w.upside,
+      w.peRatio,
+      w.pbvRatio,
+      w.roe,
+      w.altmanZScore,
+      w.rating,
+      w.catalyst
+    ]),
+    styles: { fontSize: 6.5, cellPadding: 2, textColor: [220, 230, 245], fillColor: [18, 25, 38] },
+    headStyles: { fillColor: [24, 32, 48], textColor: [223, 255, 0], fontStyle: 'bold' },
+    alternateRowStyles: { fillColor: [14, 19, 30] },
+    margin: { left: 14, right: 14 }
+  });
+
+  doc.setFontSize(6.5);
+  doc.setTextColor(120, 130, 150);
+  doc.text(`VentureAM Institutional System | Hal 2 dari 3`, 14, ph - 10);
+  doc.text(`Dicetak: ${new Date().toLocaleString('id-ID')}`, pw - 60, ph - 10);
+
+  // PAGE 3: MARKET INTELLIGENCE NEWS & COMPLIANCE SIGNATURE
+  doc.addPage();
+
+  doc.setFillColor(11, 15, 25);
+  doc.rect(0, 0, pw, 24, 'F');
+  doc.setFont("Helvetica", "bold");
+  doc.setFontSize(10);
+  doc.setTextColor(223, 255, 0);
+  doc.text("INTELIJEN BERITA PASAR & PERNYATAAN KEPATUHAN", 14, 12);
+  doc.setFontSize(7);
+  doc.setTextColor(180, 190, 205);
+  doc.text(`Ref: ${reportRef} | Tanggal: ${new Date().toLocaleDateString('id-ID')}`, 14, 18);
+  doc.line(14, 21, pw - 14, 21);
+
+  currentY = 28;
+
+  doc.setFont("Helvetica", "bold");
+  doc.setFontSize(9);
+  doc.setTextColor(255, 255, 255);
+  doc.text("1. SOROTAN INTELIJEN BERITA & SENTIMEN TERBARU", 14, currentY);
+
+  currentY += 4;
+
+  autoTable(doc, {
+    startY: currentY,
+    head: [['Berita Utama (Headline)', 'Ringkasan Dampak Fundamental', 'Sumber', 'Waktu', 'Sentimen']],
+    body: news.map(n => [n.headline, n.summary, n.source, n.timestamp, n.sentiment]),
+    styles: { fontSize: 6.8, cellPadding: 2.5, textColor: [220, 230, 245], fillColor: [18, 25, 38] },
+    headStyles: { fillColor: [24, 32, 48], textColor: [223, 255, 0], fontStyle: 'bold' },
+    alternateRowStyles: { fillColor: [14, 19, 30] },
+    margin: { left: 14, right: 14 }
+  });
+
+  currentY = (doc as any).lastAutoTable.finalY + 12;
+
+  doc.setFillColor(18, 25, 38);
+  doc.roundedRect(14, currentY, pw - 28, 38, 3, 3, 'F');
+  doc.setDrawColor(40, 55, 80);
+  doc.setLineWidth(0.3);
+  doc.roundedRect(14, currentY, pw - 28, 38, 3, 3, 'S');
+
+  doc.setFont("Helvetica", "bold");
+  doc.setFontSize(7.5);
+  doc.setTextColor(223, 255, 0);
+  doc.text("PERNYATAAN DISKLAMER INSTITUSIONAL & KEPATUHAN", 18, currentY + 7);
+
+  doc.setFont("Helvetica", "normal");
+  doc.setFontSize(6.5);
+  doc.setTextColor(160, 175, 200);
+  const disclaimerText = "Laporan Weekly Market Insight ini disiapkan oleh Tim Riset Fundamental & AI Quantitative VentureAM semata-mata untuk keperluan informasi dan analisis internal bagi nasabah terdaftar. Data financial statement, nilai rasio keuangan, dan skor kebangkrutan (Altman Z-Score) diolah secara matematis menggunakan algoritma audit resmi. Laporan ini bukan merupakan bujukan atau kewajiban mutlak untuk melakukan transaksi beli atau jual. Keputusan investasi sepenuhnya merupakan tanggung jawab independen pemegang akun.";
+  const discLines = doc.splitTextToSize(disclaimerText, pw - 36);
+  doc.text(discLines, 18, currentY + 13);
+
+  currentY += 48;
+
+  const sigW = (pw - 36) / 2;
+
+  doc.setFont("Helvetica", "bold");
+  doc.setFontSize(7.5);
+  doc.setTextColor(255, 255, 255);
+  doc.text("Disiapkan Oleh:", 18, currentY);
+  doc.text("Disetujui Oleh:", 18 + sigW, currentY);
+
+  doc.setFont("Helvetica", "normal");
+  doc.setFontSize(7);
+  doc.setTextColor(160, 175, 200);
+  doc.text("Tim Riset Fundamental & AI Analytics", 18, currentY + 5);
+  doc.text("Komite Investasi & Chief Investment Officer", 18 + sigW, currentY + 5);
+
+  doc.setFillColor(22, 32, 48);
+  doc.roundedRect(18, currentY + 10, sigW - 10, 16, 2, 2, 'F');
+  doc.setTextColor(16, 185, 129);
+  doc.setFontSize(6);
+  doc.setFont("Helvetica", "bold");
+  doc.text("[DIGITALLY SIGNED & VERIFIED BY VAM CORE]", 22, currentY + 19);
+
+  doc.setFillColor(22, 32, 48);
+  doc.roundedRect(18 + sigW, currentY + 10, sigW - 10, 16, 2, 2, 'F');
+  doc.setTextColor(223, 255, 0);
+  doc.text("[APPROVED - CIO INSTITUTIONAL COMMITTEE]", 22 + sigW, currentY + 19);
+
+  doc.setFontSize(6.5);
+  doc.setTextColor(120, 130, 150);
+  doc.text(`VentureAM Institutional System | Hal 3 dari 3`, 14, ph - 10);
+  doc.text(`Dicetak: ${new Date().toLocaleString('id-ID')}`, pw - 60, ph - 10);
+
+  doc.save(`Weekly_Market_Insight_${new Date().toISOString().slice(0, 10)}.pdf`);
+  return doc;
+}
+

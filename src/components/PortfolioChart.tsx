@@ -1,7 +1,10 @@
 import React, { useState, useMemo } from 'react';
 import { 
-  AreaChart, 
+  ComposedChart,
+  AreaChart,
   Area, 
+  Bar,
+  Cell,
   XAxis, 
   YAxis, 
   CartesianGrid, 
@@ -11,36 +14,43 @@ import {
 import { motion } from 'motion/react';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
-import { Download, TrendingUp, BarChart3 } from 'lucide-react';
+import { Download, TrendingUp, BarChart3, Layers } from 'lucide-react';
 
 const MOCK_DATA = {
   '1D': Array.from({ length: 24 }, (_, i) => ({
     time: `${i}:00`,
-    value: 9000000 + Math.random() * 500000
+    value: 9000000 + Math.sin(i / 3) * 350000 + Math.random() * 200000,
+    volume: Math.floor(12000 + Math.abs(Math.sin(i * 1.2)) * 45000 + Math.random() * 15000)
   })),
   '5D': Array.from({ length: 5 }, (_, i) => ({
     time: `May ${i + 1}`,
-    value: 8800000 + Math.random() * 800000
+    value: 8800000 + Math.sin(i) * 500000 + Math.random() * 300000,
+    volume: Math.floor(180000 + Math.random() * 280000)
   })),
   '1M': Array.from({ length: 30 }, (_, i) => ({
     time: `${i + 1}`,
-    value: 8500000 + Math.random() * 1200000
+    value: 8500000 + Math.sin(i / 4) * 800000 + Math.random() * 400000,
+    volume: Math.floor(90000 + Math.random() * 210000)
   })),
   '3M': Array.from({ length: 12 }, (_, i) => ({
     time: `W${i + 1}`,
-    value: 8000000 + Math.random() * 2000000
+    value: 8000000 + (i * 220000) + Math.random() * 500000,
+    volume: Math.floor(420000 + Math.random() * 580000)
   })),
   '6M': Array.from({ length: 6 }, (_, i) => ({
     time: `M${i + 1}`,
-    value: 7500000 + Math.random() * 2500000
+    value: 7500000 + (i * 420000) + Math.random() * 700000,
+    volume: Math.floor(1100000 + Math.random() * 1400000)
   })),
-  '1Y': ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'].map(month => ({
+  '1Y': ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'].map((month, i) => ({
     time: month,
-    value: 7000000 + Math.random() * 3000000
+    value: 7000000 + (i * 320000) + Math.random() * 800000,
+    volume: Math.floor(2200000 + Math.random() * 2800000)
   })),
   'YTD': Array.from({ length: 5 }, (_, i) => ({
     time: `May ${i + 1}`,
-    value: 4000000 + (i * 1500000) + Math.random() * 500000
+    value: 4000000 + (i * 1500000) + Math.random() * 500000,
+    volume: Math.floor(2800000 + Math.random() * 1900000)
   }))
 };
 
@@ -55,6 +65,7 @@ export default function PortfolioChart({ currentValue = 0, symbol = 'IDX:COMPOSI
   const [range, setRange] = useState('YTD');
   const [viewMode, setViewMode] = useState<'portfolio' | 'market'>('portfolio');
   const [showBenchmark, setShowBenchmark] = useState(true);
+  const [showVolume, setShowVolume] = useState(true);
   const [topPeriod, setTopPeriod] = useState('YTD');
   const [subTab, setSubTab] = useState<'valuation' | 'comparison'>('comparison');
 
@@ -130,6 +141,11 @@ export default function PortfolioChart({ currentValue = 0, symbol = 'IDX:COMPOSI
     return processedData;
   }, [range, viewMode, currentValue, showBenchmark]);
 
+  const maxVolume = useMemo(() => {
+    if (!data || data.length === 0) return 100000;
+    return Math.max(...data.map(d => d.volume || 0), 100);
+  }, [data]);
+
   const percentageData = useMemo(() => {
     if (!data || data.length === 0) return [];
     
@@ -147,10 +163,25 @@ export default function PortfolioChart({ currentValue = 0, symbol = 'IDX:COMPOSI
       }
       const benchmarkPct = ((bVal - startBenchmark) / startBenchmark) * 100;
       
+      const prevVal = i > 0 ? data[i - 1].value : d.value;
+      const isUp = d.value >= prevVal;
+
       return {
         ...d,
         valuePct,
-        benchmarkPct
+        benchmarkPct,
+        isUp
+      };
+    });
+  }, [data]);
+
+  const dataWithDirection = useMemo(() => {
+    if (!data || data.length === 0) return [];
+    return data.map((d, i) => {
+      const prevVal = i > 0 ? data[i - 1].value : d.value;
+      return {
+        ...d,
+        isUp: d.value >= prevVal
       };
     });
   }, [data]);
@@ -270,11 +301,12 @@ export default function PortfolioChart({ currentValue = 0, symbol = 'IDX:COMPOSI
     doc.text(`Net Sequence Change: ${formatIDRLocal(netChange)} (${netChange >= 0 ? '+' : ''}${pctChange.toFixed(2)}%)`, 15, 82);
     
     // Draw table headers with correct column definitions
-    const headers = [['Sequence Step / Time', 'Portfolio Value (IDR)', ...(showBenchmark ? ['IHSG Benchmark (IDR)'] : [])]];
+    const headers = [['Sequence Step / Time', 'Portfolio Value (IDR)', ...(showBenchmark ? ['IHSG Benchmark (IDR)'] : []), 'Trading Volume (Lots)']];
     const rows = data.map(item => [
       item.time,
       item.value.toLocaleString('id-ID', { maximumFractionDigits: 0 }),
-      ...(showBenchmark && item.benchmark !== undefined ? [item.benchmark.toLocaleString('id-ID', { maximumFractionDigits: 0 })] : [])
+      ...(showBenchmark && item.benchmark !== undefined ? [item.benchmark.toLocaleString('id-ID', { maximumFractionDigits: 0 })] : []),
+      item.volume ? item.volume.toLocaleString('id-ID') : 'N/A'
     ]);
 
     autoTable(doc, {
@@ -366,22 +398,48 @@ export default function PortfolioChart({ currentValue = 0, symbol = 'IDX:COMPOSI
 
         {/* Dynamic central panel header based on sub-tab */}
         {subTab === 'comparison' ? (
-          <button
-            onClick={() => setShowBenchmark(!showBenchmark)}
-            className={`w-full py-4 rounded-2xl font-black text-xs uppercase tracking-widest transition-all duration-300 shadow-md ${
-              showBenchmark 
-                ? 'bg-gradient-to-r from-slate-800/90 to-slate-800 text-[#DFFF00] border border-slate-700/80 shadow-[0_0_20px_rgba(223,255,0,0.1)]' 
-                : 'bg-slate-950/40 text-slate-500 border border-slate-800/60 hover:text-slate-300 hover:bg-slate-900/50'
-            }`}
-          >
-            {showBenchmark ? 'Hide IHSG Benchmark' : 'Show IHSG Benchmark'}
-          </button>
+          <div className="flex flex-col sm:flex-row items-center gap-2 w-full">
+            <button
+              onClick={() => setShowBenchmark(!showBenchmark)}
+              className={`flex-1 py-3 px-4 rounded-2xl font-black text-xs uppercase tracking-widest transition-all duration-300 shadow-md ${
+                showBenchmark 
+                  ? 'bg-gradient-to-r from-slate-800/90 to-slate-800 text-[#DFFF00] border border-slate-700/80 shadow-[0_0_20px_rgba(223,255,0,0.1)]' 
+                  : 'bg-slate-950/40 text-slate-500 border border-slate-800/60 hover:text-slate-300 hover:bg-slate-900/50'
+              }`}
+            >
+              {showBenchmark ? 'Hide IHSG Benchmark' : 'Show IHSG Benchmark'}
+            </button>
+            <button
+              onClick={() => setShowVolume(!showVolume)}
+              className={`flex-1 py-3 px-4 rounded-2xl font-black text-xs uppercase tracking-widest transition-all duration-300 shadow-md flex items-center justify-center gap-2 ${
+                showVolume 
+                  ? 'bg-gradient-to-r from-slate-800/90 to-slate-800 text-emerald-400 border border-slate-700/80 shadow-[0_0_20px_rgba(16,185,129,0.1)]' 
+                  : 'bg-slate-950/40 text-slate-500 border border-slate-800/60 hover:text-slate-300 hover:bg-slate-900/50'
+              }`}
+            >
+              <BarChart3 className="w-4 h-4" />
+              {showVolume ? 'Hide Volume Overlay' : 'Show Volume Overlay'}
+            </button>
+          </div>
         ) : (
-          <div className="w-full py-4 rounded-2xl bg-slate-950/40 border border-slate-800/60 text-center flex flex-col items-center justify-center">
-            <span className="text-[8px] font-black text-slate-500 uppercase tracking-widest">Current Portfolio Asset Valuation</span>
-            <span className="text-sm font-black text-[#deff9a] font-mono mt-0.5">
-              Rp {typeof currentValue === 'number' ? currentValue.toLocaleString('id-ID') : (currentValue || 'N/A')}
-            </span>
+          <div className="flex flex-col sm:flex-row items-center gap-2 w-full">
+            <div className="flex-1 py-3 px-4 rounded-2xl bg-slate-950/40 border border-slate-800/60 text-center flex flex-col items-center justify-center">
+              <span className="text-[8px] font-black text-slate-500 uppercase tracking-widest">Current Portfolio Asset Valuation</span>
+              <span className="text-sm font-black text-[#deff9a] font-mono mt-0.5">
+                Rp {typeof currentValue === 'number' ? currentValue.toLocaleString('id-ID') : (currentValue || 'N/A')}
+              </span>
+            </div>
+            <button
+              onClick={() => setShowVolume(!showVolume)}
+              className={`py-3 px-4 rounded-2xl font-black text-xs uppercase tracking-widest transition-all duration-300 shadow-md flex items-center justify-center gap-2 ${
+                showVolume 
+                  ? 'bg-gradient-to-r from-slate-800/90 to-slate-800 text-emerald-400 border border-slate-700/80' 
+                  : 'bg-slate-950/40 text-slate-500 border border-slate-800/60 hover:text-slate-300'
+              }`}
+            >
+              <BarChart3 className="w-4 h-4" />
+              {showVolume ? 'Volume On' : 'Volume Off'}
+            </button>
           </div>
         )}
 
@@ -410,20 +468,24 @@ export default function PortfolioChart({ currentValue = 0, symbol = 'IDX:COMPOSI
         </div>
 
         {/* High-Contrast Bullet Legend Row */}
-        {subTab === 'comparison' && (
-          <div className="flex items-center gap-6 justify-center mt-2 text-[10px] font-black uppercase tracking-wider">
-            <div className="flex items-center gap-2">
-              <span className="w-3.5 h-1 rounded-full bg-[#DFFF00] inline-block shadow-[0_0_8px_rgba(223,255,0,0.4)]" />
-              <span className="text-slate-400">VentureAM Portfolio</span>
-            </div>
-            {showBenchmark && (
-              <div className="flex items-center gap-2">
-                <span className="w-3.5 h-1 rounded-full bg-[#3b82f6] inline-block shadow-[0_0_8px_rgba(59,130,246,0.4)]" />
-                <span className="text-slate-400">Market (IHSG / JCI)</span>
-              </div>
-            )}
+        <div className="flex items-center gap-6 justify-center mt-2 text-[10px] font-black uppercase tracking-wider flex-wrap">
+          <div className="flex items-center gap-2">
+            <span className="w-3.5 h-1 rounded-full bg-[#DFFF00] inline-block shadow-[0_0_8px_rgba(223,255,0,0.4)]" />
+            <span className="text-slate-400">VentureAM Portfolio</span>
           </div>
-        )}
+          {subTab === 'comparison' && showBenchmark && (
+            <div className="flex items-center gap-2">
+              <span className="w-3.5 h-1 rounded-full bg-[#3b82f6] inline-block shadow-[0_0_8px_rgba(59,130,246,0.4)]" />
+              <span className="text-slate-400">Market (IHSG / JCI)</span>
+            </div>
+          )}
+          {showVolume && (
+            <div className="flex items-center gap-2">
+              <span className="w-3 h-3 rounded bg-emerald-500/40 border border-emerald-500 inline-block" />
+              <span className="text-slate-400">Trading Activity (Volume)</span>
+            </div>
+          )}
+        </div>
       </div>
 
       <div className="w-full relative aspect-[14/9] min-h-[350px] pl-10">
@@ -446,7 +508,7 @@ export default function PortfolioChart({ currentValue = 0, symbol = 'IDX:COMPOSI
         </div>
       ) : (
         <motion.div 
-          key={`chart-container-${range}-${showBenchmark}-${subTab}`}
+          key={`chart-container-${range}-${showBenchmark}-${showVolume}-${subTab}`}
           initial={{ opacity: 0, y: 6, scale: 0.99 }}
           animate={{ opacity: 1, y: 0, scale: 1 }}
           transition={{ duration: 0.35, ease: "easeOut" }}
@@ -454,7 +516,7 @@ export default function PortfolioChart({ currentValue = 0, symbol = 'IDX:COMPOSI
         >
           {subTab === 'comparison' ? (
             <ResponsiveContainer width="100%" height="100%">
-              <AreaChart data={percentageData} margin={{ top: 10, right: 10, left: -25, bottom: 0 }}>
+              <ComposedChart data={percentageData} margin={{ top: 10, right: 10, left: -25, bottom: 0 }}>
                 <defs>
                   <linearGradient id="colorValue" x1="0" y1="0" x2="0" y2="1">
                     <stop offset="5%" stopColor="#DFFF00" stopOpacity={0.2}/>
@@ -477,11 +539,18 @@ export default function PortfolioChart({ currentValue = 0, symbol = 'IDX:COMPOSI
                   interval="preserveStartEnd"
                 />
                 <YAxis 
+                  yAxisId="left"
                   axisLine={false}
                   tickLine={false}
                   tick={{ fill: '#475569', fontSize: 10, fontWeight: 800 }}
                   tickFormatter={(val) => `${val >= 0 ? '+' : ''}${val.toFixed(0)}%`}
                   dx={-5}
+                />
+                <YAxis 
+                  yAxisId="volume"
+                  orientation="right"
+                  hide={true}
+                  domain={[0, maxVolume * 3.8]}
                 />
                 <Tooltip 
                   cursor={{ stroke: '#DFFF00', strokeWidth: 1, strokeDasharray: '4 4' }}
@@ -501,11 +570,16 @@ export default function PortfolioChart({ currentValue = 0, symbol = 'IDX:COMPOSI
                       };
 
                       return (
-                        <div className="bg-slate-950/95 border border-slate-800 p-4 rounded-2xl shadow-2xl backdrop-blur-xl w-[290px] border-l-4 border-l-[#DFFF00] z-50">
-                          <div className="p-1 px-2.5 bg-slate-900 border border-slate-800 rounded-lg mb-3">
-                            <p className="text-[9px] font-black text-slate-400 tracking-widest uppercase text-center">
-                              KOMPARASI KINERJA DETAIL - {timeLabel}
+                        <div className="bg-slate-950/95 border border-slate-800 p-4 rounded-2xl shadow-2xl backdrop-blur-xl w-[300px] border-l-4 border-l-[#DFFF00] z-50">
+                          <div className="p-1 px-2.5 bg-slate-900 border border-slate-800 rounded-lg mb-2 flex justify-between items-center">
+                            <p className="text-[9px] font-black text-slate-400 tracking-widest uppercase">
+                              KINERJA DETAIL - {timeLabel}
                             </p>
+                            {item.volume && (
+                              <span className="text-[9px] font-mono font-bold text-emerald-400 bg-emerald-950/60 px-1.5 py-0.5 rounded border border-emerald-500/30">
+                                Vol: {item.volume.toLocaleString('id-ID')} Lots
+                              </span>
+                            )}
                           </div>
                           
                           <div className="grid grid-cols-2 gap-2 text-[10px]">
@@ -593,7 +667,15 @@ export default function PortfolioChart({ currentValue = 0, symbol = 'IDX:COMPOSI
                     return null;
                   }}
                 />
+                {showVolume && (
+                  <Bar yAxisId="volume" dataKey="volume" barSize={8} radius={[2, 2, 0, 0]} animationDuration={800}>
+                    {percentageData.map((entry, index) => (
+                      <Cell key={`vol-${index}`} fill={entry.isUp ? '#10b981' : '#f43f5e'} opacity={0.35} />
+                    ))}
+                  </Bar>
+                )}
                 <Area 
+                  yAxisId="left"
                   type="monotone" 
                   dataKey="valuePct" 
                   stroke="#DFFF00" 
@@ -606,6 +688,7 @@ export default function PortfolioChart({ currentValue = 0, symbol = 'IDX:COMPOSI
                 />
                 {showBenchmark && (
                   <Area 
+                    yAxisId="left"
                     type="monotone" 
                     dataKey="benchmarkPct" 
                     stroke="#3b82f6" 
@@ -615,11 +698,11 @@ export default function PortfolioChart({ currentValue = 0, symbol = 'IDX:COMPOSI
                     dot={false}
                   />
                 )}
-              </AreaChart>
+              </ComposedChart>
             </ResponsiveContainer>
           ) : (
             <ResponsiveContainer width="100%" height="100%">
-              <AreaChart data={data} margin={{ top: 10, right: 10, left: -10, bottom: 0 }}>
+              <ComposedChart data={dataWithDirection} margin={{ top: 10, right: 10, left: -10, bottom: 0 }}>
                 <defs>
                   <linearGradient id="colorValuation" x1="0" y1="0" x2="0" y2="1">
                     <stop offset="5%" stopColor="#deff9a" stopOpacity={0.25}/>
@@ -642,11 +725,18 @@ export default function PortfolioChart({ currentValue = 0, symbol = 'IDX:COMPOSI
                   interval="preserveStartEnd"
                 />
                 <YAxis 
+                  yAxisId="left"
                   axisLine={false}
                   tickLine={false}
                   tick={{ fill: '#475569', fontSize: 10, fontWeight: 800 }}
                   tickFormatter={(val) => formatValue(val)}
                   dx={-5}
+                />
+                <YAxis 
+                  yAxisId="volume"
+                  orientation="right"
+                  hide={true}
+                  domain={[0, maxVolume * 3.8]}
                 />
                 <Tooltip 
                   cursor={{ stroke: '#deff9a', strokeWidth: 1, strokeDasharray: '4 4' }}
@@ -656,11 +746,21 @@ export default function PortfolioChart({ currentValue = 0, symbol = 'IDX:COMPOSI
                       return (
                         <div className="bg-slate-950/95 border border-slate-800 p-4 rounded-2xl shadow-2xl backdrop-blur-xl border-l-4 border-l-[#deff9a] z-50">
                           <p className="text-[10px] font-black text-slate-400 tracking-wider uppercase mb-1">{item.time.toUpperCase()}</p>
-                          <div className="flex items-center gap-3">
-                            <span className="text-xs font-black text-slate-100">Nilai Aset Portofolio:</span>
-                            <span className="text-xs font-black text-[#deff9a]">
-                              {new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 }).format(item.value)}
-                            </span>
+                          <div className="flex flex-col gap-1.5">
+                            <div className="flex items-center justify-between gap-3">
+                              <span className="text-xs font-black text-slate-100">Nilai Aset Portofolio:</span>
+                              <span className="text-xs font-black text-[#deff9a]">
+                                {new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 }).format(item.value)}
+                              </span>
+                            </div>
+                            {item.volume && (
+                              <div className="flex items-center justify-between gap-3 pt-1 border-t border-slate-800/80">
+                                <span className="text-[10px] font-bold text-slate-400">Volume Transaksi:</span>
+                                <span className="text-[10px] font-mono font-bold text-emerald-400">
+                                  {item.volume.toLocaleString('id-ID')} Lots
+                                </span>
+                              </div>
+                            )}
                           </div>
                         </div>
                       );
@@ -668,7 +768,15 @@ export default function PortfolioChart({ currentValue = 0, symbol = 'IDX:COMPOSI
                     return null;
                   }}
                 />
+                {showVolume && (
+                  <Bar yAxisId="volume" dataKey="volume" barSize={8} radius={[2, 2, 0, 0]} animationDuration={800}>
+                    {dataWithDirection.map((entry, index) => (
+                      <Cell key={`vol-val-${index}`} fill={entry.isUp ? '#10b981' : '#f43f5e'} opacity={0.35} />
+                    ))}
+                  </Bar>
+                )}
                 <Area 
+                  yAxisId="left"
                   type="monotone" 
                   dataKey="value" 
                   stroke="#deff9a" 
@@ -679,7 +787,7 @@ export default function PortfolioChart({ currentValue = 0, symbol = 'IDX:COMPOSI
                   dot={{ fill: '#deff9a', stroke: '#020617', strokeWidth: 2, r: 4 }}
                   activeDot={{ r: 6, fill: '#deff9a', stroke: '#fff', strokeWidth: 2 }}
                 />
-              </AreaChart>
+              </ComposedChart>
             </ResponsiveContainer>
           )}
         </motion.div>

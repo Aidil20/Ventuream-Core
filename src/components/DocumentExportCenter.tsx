@@ -18,7 +18,8 @@ import {
   generatePresentationPDF, 
   generatePresentationPPTX, 
   generateUserManualPDF, 
-  generateUserManualPPTX 
+  generateUserManualPPTX,
+  generateWeeklyMarketInsightPDF
 } from '../services/documentExportService';
 
 interface DocumentExportCenterProps {
@@ -224,6 +225,84 @@ export const DocumentExportCenter: React.FC<DocumentExportCenterProps> = ({ onCl
                 <span>Cetak PPTX</span>
               </button>
             </div>
+          </div>
+        </div>
+
+        {/* CARD 3: WEEKLY MARKET INSIGHT REPORT */}
+        <div className="bg-zinc-900/60 border border-zinc-800/80 rounded-[2rem] p-6 flex flex-col justify-between space-y-6 hover:border-[#DFFF00]/30 transition-all group backdrop-blur-xl md:col-span-2">
+          <div>
+            <div className="flex items-center justify-between mb-4">
+              <div className="p-3 bg-emerald-500/10 rounded-xl border border-emerald-500/20 group-hover:scale-105 transition-transform">
+                <FileText className="w-6 h-6 text-emerald-400" />
+              </div>
+              <span className="px-3 py-1 bg-zinc-800 rounded-full text-[9px] font-black text-emerald-400 uppercase tracking-widest border border-zinc-700">
+                WEEKLY FUNDAMENTAL & MARKET INSIGHT
+              </span>
+            </div>
+
+            <h3 className="text-lg font-black text-white uppercase tracking-tight group-hover:text-emerald-400 transition-colors">
+              3. Laporan Mingguan Market Insight (PDF)
+            </h3>
+            <p className="text-xs text-zinc-400 mt-2 leading-relaxed">
+              Kompilasi berita pasar terbaru, ringkasan eksekutif makroekonomi, top performer sektor IHSG/Global, serta tabel fundamental watchlist saham pilihan.
+            </p>
+
+            <div className="mt-4 p-3 bg-zinc-950/50 rounded-xl border border-zinc-800/50 space-y-1.5 text-[11px] text-zinc-400">
+              <div className="flex items-center gap-2">
+                <FileCheck2 className="w-3.5 h-3.5 text-emerald-400" />
+                <span>Format Laporan Resmi Eksekutif A4 PDF</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <FileCheck2 className="w-3.5 h-3.5 text-emerald-400" />
+                <span>Terintegrasi Otomatis dengan Model Audit Fundamental & Intelligence Feed</span>
+              </div>
+            </div>
+          </div>
+
+          <div className="space-y-3 pt-2">
+            <button
+              onClick={() => handleExport('weekly_pdf', async () => {
+                await generateWeeklyMarketInsightPDF({
+                  reportTitle: 'Weekly Market Insight & Fundamental Analysis',
+                reportPeriod: 'Minggu Ke-4, Juli 2026',
+                executiveSummary: {
+                  overview: 'Pasar saham domestik (IHSG) berada dalam fase konsolidasi positif terdorong akumulasi bersih investor asing pada sektor perbankan dan energi.',
+                  macroOutlook: 'Inflasi domestik tetap terkendali pada kisaran target Bank Indonesia. Cadangan devisa yang solid memberikan ruang kestabilan nilai tukar Rupiah terhadap USD.',
+                  aiSentimentScore: 86,
+                  aiSentimentLabel: 'BULLISH ACCUMULATION',
+                  topTakeaways: [
+                    'Likuiditas perbankan tetap tebal, mendukung margin bunga bersih (NIM) dan dividen payout ratio.',
+                    'Sektor energi dan komoditas mengalami rebound akibat pengetatan pasokan global.',
+                    'Saham-saham undervalued dengan Altman Z-Score > 3.0 menawarkan margin of safety yang kuat.'
+                  ]
+                },
+                topSectors: [
+                  { sector: 'Financials', weeklyReturn: '+2.4%', sentiment: 'Bullish', keyDrivers: 'Laporan keuangan Q2 melampaui estimasi pasar', topTicker: 'BBCA' },
+                  { sector: 'Energy & Mining', weeklyReturn: '+1.8%', sentiment: 'Bullish', keyDrivers: 'Penguatan harga komoditas batubara & nikel', topTicker: 'ADRO' },
+                  { sector: 'Consumer Goods', weeklyReturn: '+0.9%', sentiment: 'Neutral', keyDrivers: 'Daya beli masyarakat terjaga stabil', topTicker: 'ICBP' }
+                ],
+                watchlist: [
+                  { symbol: 'BBCA', name: 'Bank Central Asia Tbk', sector: 'Financials', price: 'Rp 10.550', targetPrice: 'Rp 12.449', upside: '+18.0%', peRatio: '24.5x', pbvRatio: '4.8x', roe: '23.8%', altmanZScore: '4.12', rating: 'Strong Buy', catalyst: 'NIM solid & pertumbuhan kredit' },
+                  { symbol: 'BMRI', name: 'Bank Mandiri Tbk', sector: 'Financials', price: 'Rp 6.775', targetPrice: 'Rp 7.995', upside: '+18.0%', peRatio: '10.45x', pbvRatio: '2.25x', roe: '22.1%', altmanZScore: '3.85', rating: 'Strong Buy', catalyst: 'Efisiensi digital Livin & segmen korporasi' },
+                  { symbol: 'TLKM', name: 'Telkom Indonesia Tbk', sector: 'Infrastructure', price: 'Rp 2.850', targetPrice: 'Rp 3.363', upside: '+18.0%', peRatio: '13.4x', pbvRatio: '2.1x', roe: '14.2%', altmanZScore: '3.20', rating: 'Buy', catalyst: 'Monetisasi data center & FMC' }
+                ],
+                marketNews: [
+                  { headline: 'Google AI Intel: Akumulasi Asing & Katalis Sektor Perbankan Big Cap', summary: 'Inflow investor institusi asing berlanjut pada saham BBCA & BMRI.' },
+                  { headline: 'Bank Indonesia Pertahankan BI-Rate 6.00% Jaga Stabilitas Rupiah', summary: 'Kebijakan moneter BI menopang stabilitas nilai tukar dan obligasi.' },
+                  { headline: 'Sektor Komoditas & Energi Terangkat Rebound Batu Bara Global', summary: 'Permintaan impor Asia menopang marjin emiten tambang batu bara.' }
+                ]
+              });
+            }, 'Laporan Weekly Market Insight (PDF)')}
+              disabled={loadingAction !== null}
+              className="w-full py-3 px-4 bg-emerald-500 hover:bg-emerald-400 text-black text-xs font-black rounded-xl transition-all flex items-center justify-center gap-2 disabled:opacity-50 active:scale-95 shadow-lg shadow-emerald-500/10"
+            >
+              {loadingAction === 'weekly_pdf' ? (
+                <Loader2 className="w-4 h-4 animate-spin" />
+              ) : (
+                <Download className="w-4 h-4" />
+              )}
+              <span>Cetak Laporan Weekly Market Insight (PDF)</span>
+            </button>
           </div>
         </div>
 

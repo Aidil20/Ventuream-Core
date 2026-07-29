@@ -42,6 +42,11 @@ interface PortfolioAsset {
   change: number;
   marketValue: number;
   unrealized: number;
+  dailyChange?: number;
+  isCustomInvestment?: boolean;
+  customCategory?: string;
+  customName?: string;
+  yieldRate?: number;
 }
 
 interface FinancialReportingCenterProps {
@@ -129,6 +134,7 @@ export default function FinancialReportingCenter({
     { id: 'BS', titleInd: 'Neraca Konsolidasi', titleEng: 'Consolidated Balance Sheet', standard: 'PSAK 71 / IFRS 9', lastUpdate: '10 Mins Ago', status: 'STABLE' },
     { id: 'PL', titleInd: 'Laba Rugi Komprehensif', titleEng: 'Statement of Comprehensive Income', standard: 'PSAK 1 / IAS 1', lastUpdate: 'Live', status: 'STABLE' },
     { id: 'CF', titleInd: 'Arus Kas Automatis', titleEng: 'Automated Cash Flow Statement', standard: 'PSAK 2 / IAS 7', lastUpdate: 'Daily', status: 'STABLE' },
+    { id: 'CALK', titleInd: 'Catatan & Rincian Portofolio Investasi/Aset', titleEng: 'Notes & Investment Asset Portfolio Schedule', standard: 'PSAK 71 / PSAK 16', lastUpdate: 'Real-Time Sync', status: 'STABLE' },
   ]);
 
   // Financial values that can be dynamically updated by vault finalize
@@ -517,6 +523,40 @@ export default function FinancialReportingCenter({
             { labelInd: 'SALDO KAS AKHIR', labelEng: 'ENDING CASH BALANCE', val26: formatIdr(endingCash26), val25: formatIdr(financialValues.cash25) }
           ]
         };
+      case 'CALK':
+        {
+          const totalVal = (portfolioData || []).reduce((acc, p) => acc + (p.marketValue || 0), 0);
+          const totalCost = (portfolioData || []).reduce((acc, p) => acc + ((p.averagePrice || 0) * (p.lots || 0) * 100), 0);
+          const totalUnrealized = totalVal - totalCost;
+
+          const rows = [
+            { labelInd: 'RINGKASAN PORTOFOLIO EFEK & INVESTASI (PSAK 71 / IFRS 9)', labelEng: 'SECURITIES & INVESTMENT PORTFOLIO SUMMARY', val26: formatIdr(totalVal), val25: formatIdr(totalCost), isBold: true },
+            ...(portfolioData || []).map(p => {
+              const code = p.ticker.replace('.JK', '');
+              const cat = p.customCategory || (p.isCustomInvestment ? 'Aset Investasi Khusus' : 'Portofolio Saham / Equity');
+              const name = p.customName ? `${p.customName} (${code})` : code;
+              const val = p.marketValue || 0;
+              const cost = (p.averagePrice || 0) * (p.lots || 0) * 100;
+              const weight = totalVal > 0 ? (val / totalVal) * 100 : 0;
+
+              return {
+                labelInd: `${name} - ${cat}`,
+                labelEng: `Valuation: Rp ${formatIdr(val)} | Weight: ${weight.toFixed(1)}%`,
+                val26: formatIdr(val),
+                val25: formatIdr(cost),
+                isBold: false
+              };
+            }),
+            { labelInd: 'TOTAL NILAI PASAR PORTOFOLIO INVESTASI TERKONEKSI', labelEng: 'TOTAL MARKET VALUATION OF SYNCED INVESTMENTS', val26: formatIdr(totalVal), val25: formatIdr(totalCost), isBold: true },
+            { labelInd: 'KEUNTUNGAN (KERUGIAN) BELUM DIREALISASI YTD', labelEng: 'UNREALIZED GAIN (LOSS) YTD', val26: formatIdr(totalUnrealized, true), val25: '0', isBold: true }
+          ];
+
+          return {
+            titleInd: 'CATATAN ATAS LAPORAN KEUANGAN - RINCIAN PORTOFOLIO INVESTASI & ASET',
+            titleEng: 'NOTES TO FINANCIAL STATEMENTS - INVESTMENT ASSET PORTFOLIO SCHEDULE',
+            rows
+          };
+        }
       default:
         return null;
     }

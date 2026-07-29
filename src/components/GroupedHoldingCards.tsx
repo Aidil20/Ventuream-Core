@@ -1,5 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
+import jsPDF from 'jspdf';
+import autoTable from 'jspdf-autotable';
 import { 
   ChevronDown, 
   ChevronRight, 
@@ -18,8 +20,12 @@ import {
   ChevronsUpDown, 
   Search, 
   SlidersHorizontal,
-  FolderOpen
+  FolderOpen,
+  FileText,
+  FileSpreadsheet,
+  Loader2
 } from 'lucide-react';
+import * as XLSX from 'xlsx';
 import HoldingCard from './HoldingCard';
 
 export interface PortfolioAsset {
@@ -46,6 +52,7 @@ interface GroupedHoldingCardsProps {
   selectedTickers?: string[];
   onSelectToggle?: (ticker: string) => void;
   layoutMode?: 'single' | 'grid';
+  onExportExcel?: () => void;
 }
 
 // Category Mapping helper
@@ -103,6 +110,326 @@ const getCategoryIcon = (categoryName: string) => {
   return <PieChart className="w-4 h-4 text-slate-400" />;
 };
 
+// Export to PDF generator helper
+export const generateHoldingsPDF = (
+  portfolioData: PortfolioAsset[],
+  groupByMode: string = 'category'
+) => {
+  const doc = new jsPDF();
+  const currentDate = new Date();
+  const dateStr = currentDate.toLocaleDateString('id-ID', {
+    day: '2-digit',
+    month: 'short',
+    year: 'numeric'
+  });
+  const timeStr = currentDate.toLocaleTimeString('id-ID', {
+    hour: '2-digit',
+    minute: '2-digit'
+  });
+
+  // Calculate totals
+  const totalMarketValue = portfolioData.reduce((acc, curr) => acc + (curr.marketValue || 0), 0);
+  const totalCost = portfolioData.reduce((acc, curr) => {
+    const cost = (curr.averagePrice || 0) * (curr.lots || 0) * 100;
+    return acc + cost;
+  }, 0);
+  const totalUnrealized = portfolioData.reduce((acc, curr) => acc + (curr.unrealized || 0), 0);
+  const totalUnrealizedPct = totalCost > 0 ? (totalUnrealized / totalCost) * 100 : 0;
+  const totalLots = portfolioData.reduce((acc, curr) => acc + (curr.lots || 0), 0);
+
+  // Grouping computation for category breakdown table
+  const categoryGroups: Record<string, {
+    assets: PortfolioAsset[];
+    marketValue: number;
+    cost: number;
+    unrealized: number;
+    lots: number;
+  }> = {};
+
+  portfolioData.forEach(asset => {
+    const cat = getAssetCategory(asset);
+    if (!categoryGroups[cat]) {
+      categoryGroups[cat] = { assets: [], marketValue: 0, cost: 0, unrealized: 0, lots: 0 };
+    }
+    const assetCost = (asset.averagePrice || 0) * (asset.lots || 0) * 100;
+    categoryGroups[cat].assets.push(asset);
+    categoryGroups[cat].marketValue += asset.marketValue || 0;
+    categoryGroups[cat].cost += assetCost;
+    categoryGroups[cat].unrealized += asset.unrealized || 0;
+    categoryGroups[cat].lots += asset.lots || 0;
+  });
+
+  // 1. Header Banner
+  doc.setFillColor(15, 23, 42); // slate-900
+  doc.rect(0, 0, 210, 28, 'F');
+  
+  doc.setFillColor(223, 255, 0); // #DFFF00 accent
+  doc.rect(0, 28, 210, 2, 'F');
+
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(13);
+  doc.setTextColor(255, 255, 255);
+  doc.text('PT VENTURE ASSET MANAGEMENT', 14, 13);
+
+  doc.setFontSize(8);
+  doc.setFont('helvetica', 'bold');
+  doc.setTextColor(223, 255, 0);
+  doc.text('INSTITUTIONAL SYSTEM — HOLDINGS DETAILS BREAKDOWN REPORT', 14, 19);
+
+  doc.setFontSize(7);
+  doc.setFont('helvetica', 'normal');
+  doc.setTextColor(148, 163, 184);
+  doc.text(`Generated: ${dateStr} | ${timeStr} WIB`, 196, 13, { align: 'right' });
+  doc.text('CLASSIFICATION: RESTRICTED / CONFIDENTIAL', 196, 19, { align: 'right' });
+
+  // 2. Executive Portfolio Summary Box
+  doc.setFillColor(248, 250, 252);
+  doc.rect(14, 34, 182, 26, 'F');
+  doc.setDrawColor(226, 232, 240);
+  doc.rect(14, 34, 182, 26, 'S');
+
+  doc.setFontSize(6.5);
+  doc.setFont('helvetica', 'bold');
+  doc.setTextColor(100, 116, 139);
+  
+  doc.text('TOTAL PORTFOLIO VALUE', 18, 40);
+  doc.text('TOTAL COST BASIS', 70, 40);
+  doc.text('UNREALIZED P&L', 120, 40);
+  doc.text('TOTAL POSITIONS', 165, 40);
+
+  doc.setFontSize(9.5);
+  doc.setFont('helvetica', 'bold');
+  doc.setTextColor(15, 23, 42);
+  
+  doc.text(`Rp ${totalMarketValue.toLocaleString('id-ID')}`, 18, 47);
+  doc.text(`Rp ${totalCost.toLocaleString('id-ID')}`, 70, 47);
+  
+  const pnlColor = totalUnrealized >= 0 ? [16, 185, 129] : [239, 68, 68];
+  doc.setTextColor(pnlColor[0], pnlColor[1], pnlColor[2]);
+  doc.text(`${totalUnrealized >= 0 ? '+' : ''}Rp ${totalUnrealized.toLocaleString('id-ID')} (${totalUnrealizedPct >= 0 ? '+' : ''}${totalUnrealizedPct.toFixed(2)}%)`, 120, 47);
+
+  doc.setTextColor(15, 23, 42);
+  doc.text(`${portfolioData.length} Positions (${totalLots.toLocaleString('id-ID')} Lots)`, 165, 47);
+
+  doc.setFontSize(6.5);
+  doc.setFont('helvetica', 'italic');
+  doc.setTextColor(100, 116, 139);
+  doc.text(`Grouping Mode: ${groupByMode.toUpperCase()} | Engine: Real-Time Market Quote Feed`, 18, 54);
+
+  // 3. Category / Sector Breakdown Table
+  doc.setFontSize(8.5);
+  doc.setFont('helvetica', 'bold');
+  doc.setTextColor(15, 23, 42);
+  doc.text('1. Category / Sector Allocation Breakdown', 14, 67);
+
+  const categoryTableRows = Object.entries(categoryGroups).map(([catName, grp]) => {
+    const catWeight = totalMarketValue > 0 ? (grp.marketValue / totalMarketValue) * 100 : 0;
+    const catPnlPct = grp.cost > 0 ? (grp.unrealized / grp.cost) * 100 : 0;
+    return [
+      catName,
+      `${grp.assets.length} items`,
+      `${grp.lots.toLocaleString('id-ID')} Lots`,
+      `Rp ${grp.marketValue.toLocaleString('id-ID')}`,
+      `${catWeight.toFixed(1)}%`,
+      `${grp.unrealized >= 0 ? '+' : ''}Rp ${grp.unrealized.toLocaleString('id-ID')} (${catPnlPct >= 0 ? '+' : ''}${catPnlPct.toFixed(1)}%)`
+    ];
+  });
+
+  autoTable(doc, {
+    startY: 70,
+    head: [['Sector / Category', 'Holdings', 'Volume (Lots)', 'Market Value (IDR)', 'Weight (%)', 'Unrealized P&L']],
+    body: categoryTableRows,
+    theme: 'grid',
+    headStyles: {
+      fillColor: [15, 23, 42],
+      textColor: [255, 255, 255],
+      fontSize: 7.5,
+      fontStyle: 'bold',
+      halign: 'left'
+    },
+    bodyStyles: {
+      fontSize: 7,
+      textColor: [51, 65, 85]
+    },
+    alternateRowStyles: {
+      fillColor: [248, 250, 252]
+    },
+    columnStyles: {
+      0: { fontStyle: 'bold' },
+      2: { halign: 'right' },
+      3: { halign: 'right', fontStyle: 'bold' },
+      4: { halign: 'right' },
+      5: { halign: 'right', fontStyle: 'bold' }
+    },
+    margin: { left: 14, right: 14 }
+  });
+
+  // 4. Detailed Positions Breakdown Table
+  const nextY = (doc as any).lastAutoTable ? (doc as any).lastAutoTable.finalY + 10 : 120;
+
+  doc.setFontSize(8.5);
+  doc.setFont('helvetica', 'bold');
+  doc.setTextColor(15, 23, 42);
+  doc.text('2. Individual Position Breakdown & Performance Details', 14, nextY);
+
+  const positionTableRows = portfolioData.map((asset) => {
+    const cleanTicker = asset.ticker.replace('.JK', '');
+    const category = getAssetCategory(asset);
+    const weight = totalMarketValue > 0 ? ((asset.marketValue || 0) / totalMarketValue) * 100 : 0;
+    const cost = (asset.averagePrice || 0) * (asset.lots || 0) * 100;
+    const pnl = asset.unrealized || 0;
+    const pnlPct = cost > 0 ? (pnl / cost) * 100 : 0;
+    const avgPrice = asset.averagePrice || 0;
+    const currPrice = asset.currentPrice || asset.marketPrice || 0;
+
+    return [
+      cleanTicker,
+      category,
+      asset.lots ? asset.lots.toLocaleString('id-ID') : '0',
+      `Rp ${avgPrice.toLocaleString('id-ID')}`,
+      `Rp ${currPrice.toLocaleString('id-ID')}`,
+      `Rp ${(asset.marketValue || 0).toLocaleString('id-ID')}`,
+      `${weight.toFixed(1)}%`,
+      `${pnl >= 0 ? '+' : ''}Rp ${pnl.toLocaleString('id-ID')} (${pnlPct >= 0 ? '+' : ''}${pnlPct.toFixed(1)}%)`
+    ];
+  });
+
+  autoTable(doc, {
+    startY: nextY + 3,
+    head: [['Ticker', 'Category', 'Lots', 'Avg Price', 'Market Price', 'Market Value (IDR)', 'Weight', 'Unrealized P&L']],
+    body: positionTableRows,
+    theme: 'grid',
+    headStyles: {
+      fillColor: [30, 41, 59], // slate-800
+      textColor: [255, 255, 255],
+      fontSize: 7.5,
+      fontStyle: 'bold'
+    },
+    bodyStyles: {
+      fontSize: 7,
+      textColor: [51, 65, 85]
+    },
+    alternateRowStyles: {
+      fillColor: [248, 250, 252]
+    },
+    columnStyles: {
+      0: { fontStyle: 'bold', textColor: [15, 23, 42] },
+      2: { halign: 'right' },
+      3: { halign: 'right' },
+      4: { halign: 'right' },
+      5: { halign: 'right', fontStyle: 'bold' },
+      6: { halign: 'right' },
+      7: { halign: 'right', fontStyle: 'bold' }
+    },
+    margin: { left: 14, right: 14 }
+  });
+
+  // 5. Footer and Page Numbers
+  const pageHeight = doc.internal.pageSize.height;
+  const totalPages = (doc as any).internal.getNumberOfPages();
+
+  for (let i = 1; i <= totalPages; i++) {
+    doc.setPage(i);
+    doc.setFontSize(6.5);
+    doc.setFont('helvetica', 'italic');
+    doc.setTextColor(148, 163, 184);
+    doc.text('* Automated system generated report from PT Venture Asset Management Institutional System. Confidential.', 14, pageHeight - 12);
+    doc.setFont('helvetica', 'normal');
+    doc.text(`Page ${i} of ${totalPages}`, 196, pageHeight - 8, { align: 'right' });
+    doc.text('VentureAM Institutional System © 2026', 14, pageHeight - 8);
+  }
+
+  doc.save(`VAM_Holdings_Details_Report_${currentDate.toISOString().slice(0, 10)}.pdf`);
+};
+
+// Export to Excel spreadsheet helper using standard CSV data structure
+export const generateHoldingsExcel = (
+  portfolioData: PortfolioAsset[],
+  cgsCashBalance: number = 0,
+  cgsGiroBalance: number = 0
+) => {
+  const rdnCash = cgsCashBalance;
+  const giroAccountBalance = cgsGiroBalance;
+  const totalAssetVal = portfolioData.reduce((acc, curr) => acc + (curr.marketValue || 0), 0);
+  const totalCombinedValue = totalAssetVal + rdnCash + giroAccountBalance;
+  const totalCost = portfolioData.reduce((acc, curr) => {
+    const cost = (curr.averagePrice || 0) * (curr.lots || 0) * 100;
+    return acc + cost;
+  }, 0);
+  const totalPL = totalAssetVal - totalCost;
+  const performancePct = totalCost === 0 ? 0 : (totalPL / totalCost) * 100;
+
+  const currentDate = new Date();
+  const formatTime = currentDate.toISOString().replace('T', ' ').slice(0, 19);
+
+  const wsData: (string | number)[][] = [];
+  wsData.push(['VENTUREAM INSTITUTIONAL SYSTEM - PORTFOLIO PERFORMANCE & RISK ANALYSIS']);
+  wsData.push(['Printed Time', formatTime]);
+  wsData.push(['Account ID', 'YU001HC5400154']);
+  wsData.push(['Gateway System Status', 'CONNECTED & SECURED']);
+  wsData.push([]);
+
+  wsData.push(['PORTFOLIO FINANCIAL SUMMARY']);
+  wsData.push(['Equity Value (IDR)', totalAssetVal]);
+  wsData.push(['Cash RDN Balance (IDR)', rdnCash]);
+  wsData.push(['Giro Account Balance (IDR)', giroAccountBalance]);
+  wsData.push(['Total Combined Value (IDR)', totalCombinedValue]);
+  wsData.push(['Total Deposited Capital (IDR)', totalCost]);
+  wsData.push(['Accumulated Unrealized PnL (IDR)', totalPL]);
+  wsData.push(['Performance Yield (%)', Number(performancePct.toFixed(2))]);
+  wsData.push([]);
+
+  wsData.push(['DETAILED PORTFOLIO BREAKDOWN']);
+  wsData.push([
+    'Ticker',
+    'Lots',
+    'Average Price (IDR)',
+    'Current Price (IDR)',
+    'Total Cost (IDR)',
+    'Market Value (IDR)',
+    'Unrealized PnL (IDR)',
+    'Unrealized PnL (%)',
+    'Weight (%)'
+  ]);
+
+  portfolioData.forEach(asset => {
+    const assetCost = (asset.averagePrice || 0) * (asset.lots || 0) * 100;
+    const assetMktVal = asset.marketValue || 0;
+    const assetPL = assetMktVal - assetCost;
+    const assetPLPct = assetCost === 0 ? 0 : (assetPL / assetCost) * 100;
+    const weight = totalAssetVal === 0 ? 0 : (assetMktVal / totalAssetVal) * 100;
+
+    wsData.push([
+      asset.ticker || 'N/A',
+      asset.lots || 0,
+      asset.averagePrice || 0,
+      asset.currentPrice || asset.marketPrice || 0,
+      assetCost,
+      assetMktVal,
+      assetPL,
+      Number(assetPLPct.toFixed(2)),
+      Number(weight.toFixed(2))
+    ]);
+  });
+
+  const worksheet = XLSX.utils.aoa_to_sheet(wsData);
+
+  const colWidths: number[] = [];
+  wsData.forEach(row => {
+    row.forEach((val, colIdx) => {
+      const len = String(val ?? '').length;
+      colWidths[colIdx] = Math.max(colWidths[colIdx] || 10, len + 3);
+    });
+  });
+  worksheet['!cols'] = colWidths.map(w => ({ wch: w }));
+
+  const workbook = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(workbook, worksheet, 'Portfolio Analysis');
+
+  const fileName = `VAM_Portfolio_Analysis_Report_${currentDate.toISOString().slice(0, 10)}.xlsx`;
+  XLSX.writeFile(workbook, fileName);
+};
+
 export default function GroupedHoldingCards({
   portfolioData,
   onAssetClick,
@@ -110,11 +437,40 @@ export default function GroupedHoldingCards({
   onSaveAlert,
   selectedTickers = [],
   onSelectToggle,
-  layoutMode = 'single'
+  layoutMode = 'single',
+  onExportExcel
 }: GroupedHoldingCardsProps) {
   const [groupBy, setGroupBy] = useState<'category' | 'type' | 'performance' | 'flat'>('category');
   const [collapsedCategories, setCollapsedCategories] = useState<Record<string, boolean>>({});
   const [searchQuery, setSearchQuery] = useState('');
+  const [isExportingPdf, setIsExportingPdf] = useState(false);
+
+  const handleExportPDF = () => {
+    setIsExportingPdf(true);
+    setTimeout(() => {
+      try {
+        const itemsToExport: PortfolioAsset[] = searchQuery.trim()
+          ? (Object.values(groupedData).flat() as PortfolioAsset[])
+          : portfolioData;
+        generateHoldingsPDF(itemsToExport, groupBy);
+      } catch (err) {
+        console.error('Error generating Holdings PDF:', err);
+      } finally {
+        setIsExportingPdf(false);
+      }
+    }, 100);
+  };
+
+  const handleExportExcel = () => {
+    try {
+      const itemsToExport: PortfolioAsset[] = searchQuery.trim()
+        ? (Object.values(groupedData).flat() as PortfolioAsset[])
+        : portfolioData;
+      generateHoldingsExcel(itemsToExport);
+    } catch (err) {
+      console.error('Error generating Holdings Excel:', err);
+    }
+  };
 
   // Total Portfolio Market Value
   const totalPortfolioValue = useMemo(() => {
@@ -250,6 +606,37 @@ export default function GroupedHoldingCards({
               {isAllCollapsed ? 'Expand All' : 'Collapse All'}
             </button>
           )}
+
+          {/* Export to PDF Button */}
+          <button
+            onClick={handleExportPDF}
+            disabled={isExportingPdf || portfolioData.length === 0}
+            className="px-3 py-1.5 bg-emerald-500/10 hover:bg-emerald-500/20 active:bg-emerald-500/30 text-emerald-400 hover:text-emerald-300 disabled:opacity-50 disabled:cursor-not-allowed rounded-xl border border-emerald-500/30 text-[9px] font-bold uppercase tracking-wider transition-all duration-200 flex items-center gap-1.5 whitespace-nowrap shadow-sm cursor-pointer"
+            title="Download Holdings Details Breakdown as PDF Report"
+          >
+            {isExportingPdf ? (
+              <>
+                <Loader2 className="w-3 h-3 text-emerald-400 animate-spin" />
+                <span>Exporting...</span>
+              </>
+            ) : (
+              <>
+                <FileText className="w-3 h-3 text-emerald-400" />
+                <span>Export PDF</span>
+              </>
+            )}
+          </button>
+
+          {/* Export to Excel Button */}
+          <button
+            onClick={onExportExcel || handleExportExcel}
+            disabled={portfolioData.length === 0}
+            className="px-3 py-1.5 bg-emerald-500/10 hover:bg-emerald-500/20 active:bg-emerald-500/30 text-emerald-400 hover:text-emerald-300 disabled:opacity-50 disabled:cursor-not-allowed rounded-xl border border-emerald-500/30 text-[9px] font-bold uppercase tracking-wider transition-all duration-200 flex items-center gap-1.5 whitespace-nowrap shadow-sm cursor-pointer"
+            title="Download Holdings Details Breakdown as Excel Spreadsheet (.xlsx)"
+          >
+            <FileSpreadsheet className="w-3 h-3 text-emerald-400" />
+            <span>Export Excel</span>
+          </button>
         </div>
       </div>
 

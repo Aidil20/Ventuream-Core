@@ -798,4 +798,4 @@ export default function HoldingCard({
   );
 }
 
-export { default as GroupedHoldingCards } from './GroupedHoldingCards';
+export { default as GroupedHoldingCards, generateHoldingsPDF } from './GroupedHoldingCards';

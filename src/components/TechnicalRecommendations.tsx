@@ -477,6 +477,8 @@ export const TechnicalRecommendations: React.FC = () => {
   
   // Filter state including ARA (Auto Rejection Atas) screening mode
   const [signalFilter, setSignalFilter] = useState<'ALL' | 'ARA' | 'BUY' | 'HIGH_CONF'>('ALL');
+  const [rsiFilter, setRsiFilter] = useState<[number, number]>([0, 100]);
+  const [showRsiFilterPanel, setShowRsiFilterPanel] = useState(false);
 
   // Dynamically derive the active selectedItem from recommendations to always show live updated prices
   const selectedItem = selectedItemState
@@ -704,6 +706,10 @@ export const TechnicalRecommendations: React.FC = () => {
                           item.name.toLowerCase().includes(searchQuery.toLowerCase());
     if (!matchesSearch) return false;
 
+    if (item.rsi < rsiFilter[0] || item.rsi > rsiFilter[1]) {
+      return false;
+    }
+
     if (signalFilter === 'ARA') {
       return item.araPotential?.isAraCandidate || item.changePercent >= 10;
     }
@@ -847,6 +853,18 @@ export const TechnicalRecommendations: React.FC = () => {
             >
               Kepercayaan &gt;85%
             </button>
+
+            <button
+              onClick={() => setShowRsiFilterPanel(prev => !prev)}
+              className={`flex items-center gap-1.5 px-3 py-1 rounded-xl text-[9.5px] font-bold font-mono uppercase transition-all cursor-pointer border ${
+                rsiFilter[0] > 0 || rsiFilter[1] < 100 || showRsiFilterPanel
+                  ? 'bg-[#DFFF00]/15 text-[#DFFF00] border-[#DFFF00]/40 shadow-[0_0_10px_rgba(223,255,0,0.15)]'
+                  : 'text-zinc-500 hover:text-zinc-300 border-transparent'
+              }`}
+            >
+              <TrendingUp className="w-3 h-3 text-[#DFFF00]" />
+              <span>RSI Threshold {rsiFilter[0] > 0 || rsiFilter[1] < 100 ? `(${rsiFilter[0]}-${rsiFilter[1]})` : ''}</span>
+            </button>
           </div>
 
           {signalFilter === 'ARA' && (
@@ -855,6 +873,103 @@ export const TechnicalRecommendations: React.FC = () => {
               <span>Menampilkan saham berpotensi menembus Auto Rejection Atas (ARA)</span>
             </div>
           )}
+
+          {/* RSI Slider Adjustment Drawer/Panel */}
+          <AnimatePresence>
+            {showRsiFilterPanel && (
+              <motion.div
+                initial={{ opacity: 0, height: 0 }}
+                animate={{ opacity: 1, height: 'auto' }}
+                exit={{ opacity: 0, height: 0 }}
+                className="w-full mt-3 pt-3 border-t border-zinc-900 overflow-hidden"
+              >
+                <div className="bg-zinc-900/80 p-3.5 rounded-xl border border-zinc-800 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[10px] font-black text-white uppercase tracking-wider flex items-center gap-1.5">
+                      <TrendingUp className="w-3.5 h-3.5 text-[#DFFF00]" />
+                      RSI Boundary Slider Filter
+                    </span>
+                    <span className="text-[9px] font-mono font-bold text-[#DFFF00] bg-[#DFFF00]/10 px-2 py-0.5 rounded border border-[#DFFF00]/20">
+                      Current Range: {rsiFilter[0]} - {rsiFilter[1]} RSI
+                    </span>
+                  </div>
+
+                  <div className="flex items-center gap-1.5 flex-wrap">
+                    <span className="text-[8px] font-black text-zinc-500 uppercase mr-1">Boundaries:</span>
+                    <button
+                      onClick={() => setRsiFilter([0, 30])}
+                      className={`px-2 py-0.5 rounded text-[8px] font-mono font-bold uppercase transition-all ${
+                        rsiFilter[0] === 0 && rsiFilter[1] === 30 ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30' : 'bg-zinc-950 text-zinc-400 border border-zinc-800'
+                      }`}
+                    >
+                      Oversold (&lt;30)
+                    </button>
+                    <button
+                      onClick={() => setRsiFilter([30, 70])}
+                      className={`px-2 py-0.5 rounded text-[8px] font-mono font-bold uppercase transition-all ${
+                        rsiFilter[0] === 30 && rsiFilter[1] === 70 ? 'bg-amber-500/20 text-amber-400 border border-amber-500/30' : 'bg-zinc-950 text-zinc-400 border border-zinc-800'
+                      }`}
+                    >
+                      Neutral (30-70)
+                    </button>
+                    <button
+                      onClick={() => setRsiFilter([70, 100])}
+                      className={`px-2 py-0.5 rounded text-[8px] font-mono font-bold uppercase transition-all ${
+                        rsiFilter[0] === 70 && rsiFilter[1] === 100 ? 'bg-rose-500/20 text-rose-400 border border-rose-500/30' : 'bg-zinc-950 text-zinc-400 border border-zinc-800'
+                      }`}
+                    >
+                      Overbought (&gt;70)
+                    </button>
+                    <button
+                      onClick={() => setRsiFilter([0, 100])}
+                      className={`px-2 py-0.5 rounded text-[8px] font-mono font-bold uppercase transition-all ${
+                        rsiFilter[0] === 0 && rsiFilter[1] === 100 ? 'bg-[#DFFF00]/20 text-[#DFFF00] border border-[#DFFF00]/30' : 'bg-zinc-950 text-zinc-400 border border-zinc-800'
+                      }`}
+                    >
+                      Reset (0-100)
+                    </button>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
+                    <div className="space-y-1">
+                      <div className="flex justify-between text-[8px] font-mono text-zinc-400 uppercase">
+                        <span>Min RSI (Oversold Limit)</span>
+                        <span className="font-bold text-[#DFFF00]">{rsiFilter[0]}</span>
+                      </div>
+                      <input
+                        type="range"
+                        min="0"
+                        max="100"
+                        value={rsiFilter[0]}
+                        onChange={(e) => {
+                          const val = parseInt(e.target.value);
+                          setRsiFilter(prev => [Math.min(val, prev[1]), prev[1]]);
+                        }}
+                        className="w-full h-1.5 bg-zinc-950 rounded-lg appearance-none cursor-pointer accent-[#DFFF00]"
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <div className="flex justify-between text-[8px] font-mono text-zinc-400 uppercase">
+                        <span>Max RSI (Overbought Limit)</span>
+                        <span className="font-bold text-[#DFFF00]">{rsiFilter[1]}</span>
+                      </div>
+                      <input
+                        type="range"
+                        min="0"
+                        max="100"
+                        value={rsiFilter[1]}
+                        onChange={(e) => {
+                          const val = parseInt(e.target.value);
+                          setRsiFilter(prev => [prev[0], Math.max(val, prev[0])]);
+                        }}
+                        className="w-full h-1.5 bg-zinc-950 rounded-lg appearance-none cursor-pointer accent-[#DFFF00]"
+                      />
+                    </div>
+                  </div>
+                </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
         </div>
 
         {/* Live Mapped TradingView Connection Bridge Monitor Banner */}

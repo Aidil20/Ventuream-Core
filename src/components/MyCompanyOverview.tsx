@@ -24,13 +24,19 @@ import {
   Server,
   Network,
   ChevronRight,
-  HelpCircle
+  HelpCircle,
+  Box
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
+import WapAssetManagement from './WapAssetManagement';
 
-type SubTab = 'profile' | 'model' | 'scope' | 'management';
+type SubTab = 'profile' | 'model' | 'scope' | 'management' | 'wap-inventory';
 
-export const MyCompanyOverview: React.FC = () => {
+interface MyCompanyOverviewProps {
+  portfolioData?: any[];
+}
+
+export const MyCompanyOverview: React.FC<MyCompanyOverviewProps> = ({ portfolioData }) => {
   const [activeSubTab, setActiveSubTab] = useState<SubTab>('profile');
   const [activeDivision, setActiveDivision] = useState<number | null>(null);
 
@@ -341,6 +347,16 @@ export const MyCompanyOverview: React.FC = () => {
             }`}
           >
             <Users className="w-3.5 h-3.5" /> Management & Divisi
+          </button>
+          <button
+            onClick={() => setActiveSubTab('wap-inventory')}
+            className={`px-4 py-2.5 rounded-xl text-xs font-black uppercase tracking-wider transition-all flex items-center gap-2 flex-shrink-0 ${
+              activeSubTab === 'wap-inventory'
+                ? 'bg-[#DFFF00] text-black shadow-lg font-black'
+                : 'bg-zinc-900/40 text-zinc-400 hover:text-white border border-zinc-850'
+            }`}
+          >
+            <Box className="w-3.5 h-3.5 text-[#DFFF00]" /> Inventaris Aset WAP
           </button>
         </div>
       </div>
@@ -786,6 +802,19 @@ export const MyCompanyOverview: React.FC = () => {
               </p>
             </div>
 
+          </motion.div>
+        )}
+
+        {/* WAP ASSET INVENTORY TAB */}
+        {activeSubTab === 'wap-inventory' && (
+          <motion.div
+            key="wap-inventory"
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -10 }}
+            transition={{ duration: 0.2 }}
+          >
+            <WapAssetManagement portfolioData={portfolioData} />
           </motion.div>
         )}
       </AnimatePresence>

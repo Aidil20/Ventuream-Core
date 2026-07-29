@@ -155,7 +155,9 @@ const generateCsv = (data: any[]) => {
   return [headers.join(','), ...rows.map(r => r.join(','))].join('\n');
 };
 
-function TradingViewWidget({ symbol = "IDX:BBCA", studies = ["MASimple@tv-basicstudies", "MAExp@tv-basicstudies"] }: TradingViewWidgetProps) {
+const DEFAULT_STUDIES = ["MASimple@tv-basicstudies", "MAExp@tv-basicstudies"];
+
+function TradingViewWidget({ symbol = "IDX:BBCA", studies = DEFAULT_STUDIES }: TradingViewWidgetProps) {
   const chartContainerRef = useRef<HTMLDivElement>(null);
   const widgetId = useRef(`tv-widget-${Math.random().toString(36).substr(2, 9)}`).current;
   const [downloadSuccess, setDownloadSuccess] = useState(false);

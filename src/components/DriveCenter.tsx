@@ -13,6 +13,7 @@ import {
   AlertCircle
 } from 'lucide-react';
 import { listDriveFiles, DriveFile } from '../services/driveService';
+import { getVamDriveCachedReports, VamDriveCachedFile } from '../services/weeklyInsightSchedulerService';
 import DocumentExportCenter from './DocumentExportCenter';
 
 interface DriveCenterProps {
@@ -29,8 +30,22 @@ export const DriveCenter: React.FC<DriveCenterProps> = ({ onAuthRequired }) => {
     setIsLoading(true);
     setError(null);
     try {
-      const data = await listDriveFiles();
-      setFiles(data);
+      const vamCached = getVamDriveCachedReports().map(c => ({
+        id: c.id,
+        name: `${c.name} [VAM CACHE]`,
+        mimeType: c.mimeType,
+        modifiedTime: c.createdAt,
+        pdfDataUrl: c.pdfDataUrl
+      }));
+
+      let driveData: DriveFile[] = [];
+      try {
+        driveData = await listDriveFiles();
+      } catch (err: any) {
+        console.warn('Google Drive list error, showing local VAM Cloud Drive files:', err);
+      }
+
+      setFiles([...vamCached, ...driveData]);
     } catch (err: any) {
       console.error(err);
       if (err.message?.includes('No access token')) {
@@ -156,7 +171,16 @@ export const DriveCenter: React.FC<DriveCenterProps> = ({ onAuthRequired }) => {
                           <ExternalLink className="w-4 h-4" />
                         </a>
                         <button 
-                          onClick={() => {/* Download logic */}}
+                          onClick={() => {
+                            if ((file as any).pdfDataUrl) {
+                              const link = document.createElement('a');
+                              link.href = (file as any).pdfDataUrl;
+                              link.download = file.name.replace(' [VAM CACHE]', '');
+                              link.click();
+                            } else {
+                              window.open(`https://drive.google.com/open?id=${file.id}`, '_blank');
+                            }
+                          }}
                           className="p-2 bg-zinc-900 hover:bg-emerald-500/20 text-zinc-500 hover:text-emerald-400 rounded-lg border border-zinc-800 transition-all"
                         >
                           <Download className="w-4 h-4" />
