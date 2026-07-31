@@ -11,13 +11,18 @@ interface AdvanceChartModalProps {
 }
 
 const POPULAR_TICKERS = [
+  { label: 'PGAS', symbol: 'IDX:PGAS', name: 'Perusahaan Gas Negara' },
+  { label: 'PGEO', symbol: 'IDX:PGEO', name: 'Pertamina Geothermal' },
+  { label: 'CGAS', symbol: 'IDX:CGAS', name: 'Citra Nusantara Energi' },
+  { label: 'SMGA', symbol: 'IDX:SMGA', name: 'Sumber Mineral Global Abadi' },
+  { label: 'DATA', symbol: 'IDX:DATA', name: 'Remala Abadi' },
+  { label: 'GOLF', symbol: 'IDX:GOLF', name: 'Intra GolfLink' },
+  { label: 'BREN', symbol: 'IDX:BREN', name: 'Barito Renewables' },
   { label: 'BBCA', symbol: 'IDX:BBCA', name: 'Bank Central Asia' },
   { label: 'BBRI', symbol: 'IDX:BBRI', name: 'Bank Rakyat Indonesia' },
   { label: 'BMRI', symbol: 'IDX:BMRI', name: 'Bank Mandiri' },
   { label: 'TLKM', symbol: 'IDX:TLKM', name: 'Telkom Indonesia' },
-  { label: 'ASII', symbol: 'IDX:ASII', name: 'Astra International' },
   { label: 'GOTO', symbol: 'IDX:GOTO', name: 'GoTo Gojek Tokopedia' },
-  { label: 'BREN', symbol: 'IDX:BREN', name: 'Barito Renewables' },
   { label: 'AAPL', symbol: 'NASDAQ:AAPL', name: 'Apple Inc.' },
   { label: 'NVDA', symbol: 'NASDAQ:NVDA', name: 'NVIDIA Corp' },
   { label: 'BTCUSD', symbol: 'BITSTAMP:BTCUSD', name: 'Bitcoin / USD' }
@@ -32,6 +37,7 @@ export const AdvanceChartModal: React.FC<AdvanceChartModalProps> = ({
   const [currentSymbol, setCurrentSymbol] = useState<string>(symbol || 'IDX:BBCA');
   const [searchInput, setSearchInput] = useState<string>('');
   const [isFullScreen, setIsFullScreen] = useState<boolean>(false);
+  const [selectedInterval, setSelectedInterval] = useState<string>('D');
   const [selectedStudies, setSelectedStudies] = useState<string[]>([
     "MASimple@tv-basicstudies",
     "MAExp@tv-basicstudies",
@@ -51,7 +57,7 @@ export const AdvanceChartModal: React.FC<AdvanceChartModalProps> = ({
           formatted = `IDX:${symbol.replace('.JK', '')}`;
         }
       }
-      setCurrentSymbol(formatted);
+      setCurrentSymbol(prev => prev !== formatted ? formatted : prev);
     }
   }, [symbol, market]);
 
@@ -68,6 +74,14 @@ export const AdvanceChartModal: React.FC<AdvanceChartModalProps> = ({
 
   const cleanTicker = currentSymbol.includes(':') ? currentSymbol.split(':')[1] : currentSymbol;
   const exchange = currentSymbol.includes(':') ? currentSymbol.split(':')[0] : market;
+
+  const timeframeList = [
+    { label: '15m', value: '15' },
+    { label: '1H', value: '60' },
+    { label: '4H', value: '240' },
+    { label: '1D', value: 'D' },
+    { label: '1W', value: 'W' }
+  ];
 
   const studiesList = [
     { id: "MASimple@tv-basicstudies", name: "SMA 20" },
@@ -157,14 +171,31 @@ export const AdvanceChartModal: React.FC<AdvanceChartModalProps> = ({
             </div>
           </div>
 
-          {/* Indicator Toolbar */}
-          <div className="px-4 py-2 bg-zinc-950 border-b border-zinc-900 flex items-center justify-between gap-2 overflow-x-auto shrink-0">
-            <div className="flex items-center gap-1.5 text-[9px] font-mono text-zinc-400 shrink-0">
-              <Sparkles className="w-3.5 h-3.5 text-[#deff9a]" />
-              <span className="font-bold text-white uppercase tracking-wider">Technical Indicators:</span>
+          {/* Indicator & Timeframe Toolbar */}
+          <div className="px-4 py-2 bg-zinc-950 border-b border-zinc-900 flex flex-wrap items-center justify-between gap-2 shrink-0">
+            {/* Timeframe Selector */}
+            <div className="flex items-center gap-1.5 shrink-0">
+              <span className="text-[8.5px] font-mono text-zinc-500 font-bold uppercase">TF:</span>
+              <div className="flex items-center gap-1 bg-zinc-900 p-0.5 rounded-lg border border-zinc-800">
+                {timeframeList.map((tf) => (
+                  <button
+                    key={tf.value}
+                    onClick={() => setSelectedInterval(tf.value)}
+                    className={`px-2 py-0.5 rounded text-[8.5px] font-mono font-bold transition-all ${
+                      selectedInterval === tf.value
+                        ? 'bg-[#deff9a] text-black shadow-sm'
+                        : 'text-zinc-400 hover:text-white'
+                    }`}
+                  >
+                    {tf.label}
+                  </button>
+                ))}
+              </div>
             </div>
 
-            <div className="flex items-center gap-1.5 overflow-x-auto py-0.5">
+            {/* Indicator Selector */}
+            <div className="flex items-center gap-1.5 overflow-x-auto py-0.5 max-w-full">
+              <span className="text-[8.5px] font-mono text-zinc-500 font-bold uppercase shrink-0">Indikator:</span>
               {studiesList.map((st) => {
                 const isActive = selectedStudies.includes(st.id);
                 return (
@@ -193,14 +224,14 @@ export const AdvanceChartModal: React.FC<AdvanceChartModalProps> = ({
               rel="noreferrer"
               className="hidden md:flex items-center gap-1 text-[8.5px] font-mono font-bold text-sky-400 hover:text-sky-300 shrink-0 ml-2"
             >
-              <span>TradingView Web</span>
+              <span>TradingView.com</span>
               <ExternalLink className="w-3 h-3" />
             </a>
           </div>
 
           {/* Main Chart Area */}
-          <div className="flex-1 min-h-0 w-full relative bg-black">
-            <TradingViewWidget symbol={currentSymbol} studies={selectedStudies} />
+          <div className="flex-1 min-h-[450px] md:min-h-[500px] w-full relative bg-black">
+            <TradingViewWidget symbol={currentSymbol} studies={selectedStudies} interval={selectedInterval} />
           </div>
         </motion.div>
       </div>

@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
@@ -27,6 +27,7 @@ import {
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import HoldingCard from './HoldingCard';
+import { getHoldingNote } from '../lib/notes';
 
 export interface PortfolioAsset {
   ticker: string;
@@ -69,20 +70,20 @@ export const getAssetCategory = (asset: PortfolioAsset): string => {
 
   const staticCategoryMap: Record<string, string> = {
     'DSSA': 'Energy & Mining',
-    'PRDL': 'Energy & Mining',
+    'BSDE': 'Property & Real Estate',
     'DEFI': 'Financial Services',
-    'BACH': 'Financial Services',
+    'UNTR': 'Industrials & Heavy Equipment',
     'LPKR': 'Property & Real Estate',
     'OTAS': 'Property & Real Estate',
     'ANDI': 'Property & Real Estate',
     'IPAC': 'Property & Real Estate',
     'KOTA': 'Property & Real Estate',
     'LAND': 'Property & Real Estate',
-    'JECX': 'Technology & Electronics',
-    'CTTH': 'Technology & Electronics',
+    'EMTK': 'Technology & Electronics',
+    'CTTH': 'Basic Materials',
     'PIPA': 'Industrials & Infrastructure',
-    'EMMI': 'Consumer Goods',
-    'RANS': 'Media & Entertainment',
+    'ACES': 'Consumer Goods',
+    'MNCN': 'Media & Entertainment',
   };
 
   if (staticCategoryMap[cleanTicker]) {
@@ -444,6 +445,15 @@ export default function GroupedHoldingCards({
   const [collapsedCategories, setCollapsedCategories] = useState<Record<string, boolean>>({});
   const [searchQuery, setSearchQuery] = useState('');
   const [isExportingPdf, setIsExportingPdf] = useState(false);
+  const [notesVersion, setNotesVersion] = useState(0);
+
+  useEffect(() => {
+    const handleNotesUpdate = () => {
+      setNotesVersion(v => v + 1);
+    };
+    window.addEventListener('vam_notes_updated', handleNotesUpdate);
+    return () => window.removeEventListener('vam_notes_updated', handleNotesUpdate);
+  }, []);
 
   const handleExportPDF = () => {
     setIsExportingPdf(true);
@@ -483,8 +493,9 @@ export default function GroupedHoldingCards({
       if (!searchQuery) return true;
       const clean = asset.ticker.replace('.JK', '').toLowerCase();
       const cat = getAssetCategory(asset).toLowerCase();
+      const note = getHoldingNote(asset.ticker).toLowerCase();
       const q = searchQuery.toLowerCase();
-      return clean.includes(q) || cat.includes(q);
+      return clean.includes(q) || cat.includes(q) || note.includes(q);
     });
 
     const groups: Record<string, PortfolioAsset[]> = {};
@@ -513,7 +524,7 @@ export default function GroupedHoldingCards({
     });
 
     return groups;
-  }, [portfolioData, groupBy, searchQuery]);
+  }, [portfolioData, groupBy, searchQuery, notesVersion]);
 
   const categoryKeys = Object.keys(groupedData);
 
@@ -550,7 +561,7 @@ export default function GroupedHoldingCards({
           <Search className="w-3.5 h-3.5 text-slate-500 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
           <input
             type="text"
-            placeholder="Search holdings or category..."
+            placeholder="Search holdings, category, or rationale notes..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             className="w-full bg-slate-950/80 text-slate-200 text-xs pl-8 pr-3 py-1.5 rounded-xl border border-slate-800 focus:outline-none focus:border-[#DFFF00]/50 transition-colors placeholder:text-slate-600 font-mono"

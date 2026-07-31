@@ -1,9 +1,10 @@
-import React, { useEffect, useState, useRef } from 'react';
+import React, { useEffect, useState, useRef, useMemo } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { Decimal } from 'decimal.js';
-import { TrendingUp, TrendingDown, ArrowUpRight, ArrowDownRight, Bell, ChartCandlestick, Scale, Sliders, ShieldAlert, Target, Info, Check, RotateCcw } from 'lucide-react';
+import { TrendingUp, TrendingDown, ArrowUpRight, ArrowDownRight, Bell, ChartCandlestick, Scale, Sliders, ShieldAlert, Target, Info, Check, RotateCcw, FileText, StickyNote, PenLine, Trash2, Save, Sparkles } from 'lucide-react';
 import Sparkline from './Sparkline';
 import AdvanceChartModal from './AdvanceChartModal';
+import { getHoldingNote, saveHoldingNote } from '../lib/notes';
 
 interface PortfolioAsset {
   ticker: string;
@@ -44,12 +45,12 @@ const getPerformanceArray = (ticker: string): number[] => {
     'CTTH': [120, 122, 125, 130, 128, 132, 134],
     'LAND': [22, 25, 20, 28, 24, 31, 29],
     'PIPA': [18, 22, 19, 25, 23, 27, 26],
-    'BACH': [38, 42, 40, 45, 48, 52, 55],
-    'EMMI': [45, 46, 48, 47, 49, 50, 50],
-    'JECX': [110, 115, 125, 130, 140, 150, 166],
-    'PRDL': [112, 115, 110, 122, 130, 145, 162],
-    'RANS': [170, 160, 140, 120, 90, 40, 0],
-    'PJHB-W': [10, 15, 18, 22, 28, 32, 36]
+    'UNTR': [38, 42, 40, 45, 48, 52, 55],
+    'ACES': [45, 46, 48, 47, 49, 50, 50],
+    'EMTK': [110, 115, 125, 130, 140, 150, 166],
+    'BSDE': [112, 115, 110, 122, 130, 145, 162],
+    'MNCN': [170, 160, 140, 120, 90, 85, 80],
+    'GOTO-W': [10, 15, 18, 22, 28, 32, 36]
   };
   
   if (staticPerformanceMap[clean]) {
@@ -116,7 +117,37 @@ const getDeterministic24hRange = (ticker: string, currentPrice: number) => {
   return { low, high, percentPos, trendLabel };
 };
 
-export default function HoldingCard({ 
+const areHoldingCardPropsEqual = (prevProps: HoldingCardProps, nextProps: HoldingCardProps) => {
+  if (prevProps.idx !== nextProps.idx) return false;
+  if (prevProps.showCompactLayout !== nextProps.showCompactLayout) return false;
+  if (prevProps.selected !== nextProps.selected) return false;
+  
+  if (prevProps.alertConfig?.targetPrice !== nextProps.alertConfig?.targetPrice) return false;
+  if (prevProps.alertConfig?.type !== nextProps.alertConfig?.type) return false;
+  if (prevProps.alertConfig?.active !== nextProps.alertConfig?.active) return false;
+
+  const a = prevProps.asset;
+  const b = nextProps.asset;
+  if (a === b) return true;
+  if (!a || !b) return false;
+
+  return (
+    a.ticker === b.ticker &&
+    a.lots === b.lots &&
+    a.averagePrice === b.averagePrice &&
+    a.marketPrice === b.marketPrice &&
+    a.currentPrice === b.currentPrice &&
+    a.change === b.change &&
+    a.dailyChange === b.dailyChange &&
+    a.marketValue === b.marketValue &&
+    a.unrealized === b.unrealized &&
+    a.stopLoss === b.stopLoss &&
+    a.takeProfit === b.takeProfit &&
+    a.targetPrice === b.targetPrice
+  );
+};
+
+const HoldingCard = React.memo(function HoldingCard({ 
   asset, 
   idx, 
   onClick, 
@@ -138,6 +169,52 @@ export default function HoldingCard({
   );
   const [alertType, setAlertType] = useState<'above' | 'below'>(alertConfig?.type || 'above');
   const [alertActive, setAlertActive] = useState(alertConfig?.active || false);
+
+  // Investment Rationale / Notes State
+  const [noteText, setNoteText] = useState<string>(() => getHoldingNote(asset.ticker));
+  const [noteInput, setNoteInput] = useState<string>(noteText);
+  const [isNotePanelOpen, setIsNotePanelOpen] = useState(false);
+  const [noteToast, setNoteToast] = useState<string | null>(null);
+
+  // Sync noteText state on external notes update
+  useEffect(() => {
+    const handleExternalNoteUpdate = () => {
+      const updated = getHoldingNote(asset.ticker);
+      setNoteText(updated);
+    };
+    window.addEventListener('vam_notes_updated', handleExternalNoteUpdate);
+    return () => window.removeEventListener('vam_notes_updated', handleExternalNoteUpdate);
+  }, [asset.ticker]);
+
+  // Keep noteInput in sync with noteText when opening note panel
+  useEffect(() => {
+    if (isNotePanelOpen) {
+      setNoteInput(noteText);
+    }
+  }, [isNotePanelOpen, noteText]);
+
+  const handleSaveNote = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    saveHoldingNote(asset.ticker, noteInput);
+    setNoteText(noteInput.trim());
+    setNoteToast(noteInput.trim() ? 'Rationale Saved' : 'Rationale Cleared');
+    setTimeout(() => setNoteToast(null), 2000);
+    setIsNotePanelOpen(false);
+  };
+
+  const handleClearNote = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    saveHoldingNote(asset.ticker, '');
+    setNoteText('');
+    setNoteInput('');
+    setNoteToast('Rationale Cleared');
+    setTimeout(() => setNoteToast(null), 2000);
+    setIsNotePanelOpen(false);
+  };
+
+  const handleAddTemplateTag = (tagText: string) => {
+    setNoteInput(prev => prev ? `${prev} | ${tagText}` : tagText);
+  };
 
   // Sync state if alertConfig changes externally or when opening the alert panel
   useEffect(() => {
@@ -172,21 +249,23 @@ export default function HoldingCard({
     };
   }, [asset.marketValue]);
 
-  const tickerCode = asset.ticker.split('.')[0];
-  const avgPriceDecimal = new Decimal(asset.averagePrice || 0);
-  const currentPriceDecimal = new Decimal(asset.currentPrice || asset.marketPrice || 0);
-  const sinceBuyPercentage = avgPriceDecimal.isZero() 
-    ? new Decimal(0) 
-    : currentPriceDecimal.minus(avgPriceDecimal).div(avgPriceDecimal).times(100);
+  const tickerCode = useMemo(() => asset.ticker.split('.')[0], [asset.ticker]);
 
-  const sinceBuyVal = sinceBuyPercentage.toNumber();
-  const isGain = sinceBuyVal >= 0;
+  const { sinceBuyVal, isGain } = useMemo(() => {
+    const avgPriceDecimal = new Decimal(asset.averagePrice || 0);
+    const currentPriceDecimal = new Decimal(asset.currentPrice || asset.marketPrice || 0);
+    const sinceBuyPercentage = avgPriceDecimal.isZero() 
+      ? new Decimal(0) 
+      : currentPriceDecimal.minus(avgPriceDecimal).div(avgPriceDecimal).times(100);
+    const val = sinceBuyPercentage.toNumber();
+    return { sinceBuyVal: val, isGain: val >= 0 };
+  }, [asset.averagePrice, asset.currentPrice, asset.marketPrice]);
 
   const dailyChangeVal = typeof asset.dailyChange === 'number' ? asset.dailyChange : 0;
   const isDailyGain = dailyChangeVal >= 0;
 
-  const vol = getDeterministicVolume(asset.ticker, unitPrice);
-  const range = getDeterministic24hRange(asset.ticker, unitPrice);
+  const vol = useMemo(() => getDeterministicVolume(asset.ticker, unitPrice), [asset.ticker, unitPrice]);
+  const range = useMemo(() => getDeterministic24hRange(asset.ticker, unitPrice), [asset.ticker, unitPrice]);
 
   // Render sub-elements with dynamic color states based on recent flash triggers
   const getFlashBorderClass = () => {
@@ -201,21 +280,23 @@ export default function HoldingCard({
     return 'text-slate-200';
   };
 
-  const rawPerf = asset.performance || getPerformanceArray(asset.ticker);
-  const lastRawVal = rawPerf[rawPerf.length - 1] || 1;
-
-  // Scale performance array to reflect exact stock prices
-  const scaledPerformancePrices = rawPerf.map((val: number) => {
-    return (val / lastRawVal) * unitPrice;
-  });
-
-  // Calculate 5-day average price from scaledPerformancePrices
-  const lastFivePrices = scaledPerformancePrices.slice(-5);
-  const fiveDayAvg = lastFivePrices.length > 0 
-    ? lastFivePrices.reduce((sum: number, p: number) => sum + p, 0) / lastFivePrices.length
-    : unitPrice;
-  const isTrendingUp = unitPrice >= fiveDayAvg;
-  const momentumPercent = fiveDayAvg > 0 ? ((unitPrice - fiveDayAvg) / fiveDayAvg) * 100 : 0;
+  const { scaledPerformancePrices, fiveDayAvg, isTrendingUp, momentumPercent } = useMemo(() => {
+    const rawPerf = asset.performance || getPerformanceArray(asset.ticker);
+    const lastRawVal = rawPerf[rawPerf.length - 1] || 1;
+    const scaled = rawPerf.map((val: number) => (val / lastRawVal) * unitPrice);
+    const lastFivePrices = scaled.slice(-5);
+    const avg5 = lastFivePrices.length > 0 
+      ? lastFivePrices.reduce((sum: number, p: number) => sum + p, 0) / lastFivePrices.length
+      : unitPrice;
+    const trendingUp = unitPrice >= avg5;
+    const momPct = avg5 > 0 ? ((unitPrice - avg5) / avg5) * 100 : 0;
+    return {
+      scaledPerformancePrices: scaled,
+      fiveDayAvg: avg5,
+      isTrendingUp: trendingUp,
+      momentumPercent: momPct
+    };
+  }, [asset.performance, asset.ticker, unitPrice]);
 
   const handleSave = (e: React.MouseEvent) => {
     e.stopPropagation();
@@ -425,6 +506,25 @@ export default function HoldingCard({
               <span className="hidden md:inline text-[9px] font-black uppercase tracking-wider">Chart</span>
             </button>
 
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                setIsNotePanelOpen(!isNotePanelOpen);
+              }}
+              className={`p-1.5 rounded-lg border transition-all shrink-0 flex items-center gap-1 ${
+                noteText 
+                  ? 'bg-amber-500/15 border-amber-500/40 text-amber-300 shadow-[0_0_10px_rgba(245,158,11,0.15)] font-bold' 
+                  : 'bg-slate-950/60 border-slate-800 text-slate-500 hover:text-slate-300 hover:border-slate-700'
+              }`}
+              title={noteText ? `Note attached: "${noteText}"` : "Attach Investment Rationale / Note"}
+            >
+              <FileText className="w-3.5 h-3.5 text-amber-400" />
+              <span className="hidden md:inline text-[9px] font-black uppercase tracking-wider">Note</span>
+              {noteText && (
+                <span className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse" />
+              )}
+            </button>
+
             {onSaveAlert && (
               <button
                 onClick={(e) => {
@@ -483,6 +583,32 @@ export default function HoldingCard({
             </div>
           </div>
         </div>
+
+        {/* Attached Note / Investment Rationale Snippet Badge */}
+        {noteText && !isNotePanelOpen && (
+          <div 
+            className="px-3 py-1.5 bg-amber-500/10 border border-amber-500/20 rounded-xl flex items-center justify-between gap-2 text-[10px] text-amber-200/90 font-mono relative z-10 group/note hover:border-amber-500/40 transition-all cursor-pointer"
+            onClick={(e) => {
+              e.stopPropagation();
+              setIsNotePanelOpen(true);
+            }}
+            title="Click to view/edit investment rationale note"
+          >
+            <div className="flex items-center gap-2 min-w-0 flex-1">
+              <StickyNote className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+              <span className="text-[8px] font-black text-amber-400 uppercase tracking-wider shrink-0 bg-amber-950/80 px-1 py-0.2 rounded border border-amber-500/30">
+                Rationale:
+              </span>
+              <span className="truncate font-sans font-medium text-slate-200 text-[10.5px]">
+                {noteText}
+              </span>
+            </div>
+            <div className="flex items-center gap-1 shrink-0 text-[8px] font-bold text-amber-400 uppercase group-hover/note:text-white transition-colors">
+              <PenLine className="w-3 h-3" />
+              <span className="hidden sm:inline">Edit</span>
+            </div>
+          </div>
+        )}
 
         {/* Visual Risk / Reward Indicator Bar */}
         <div 
@@ -789,6 +915,104 @@ export default function HoldingCard({
         )}
       </AnimatePresence>
 
+      {/* Expandable Investment Rationale / Notes Panel */}
+      <AnimatePresence>
+        {isNotePanelOpen && (
+          <motion.div
+            initial={{ opacity: 0, height: 0, marginTop: -6 }}
+            animate={{ opacity: 1, height: 'auto', marginTop: 0 }}
+            exit={{ opacity: 0, height: 0, marginTop: -6 }}
+            className="overflow-hidden bg-slate-950/95 border border-amber-500/30 rounded-2xl p-4 flex flex-col gap-3 relative z-20 shadow-2xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between border-b border-slate-800 pb-2">
+              <div className="flex items-center gap-2">
+                <StickyNote className="w-4 h-4 text-amber-400" />
+                <h5 className="text-xs font-black text-white font-mono uppercase tracking-wide">
+                  Investment Rationale & Notes — <span className="text-amber-400">{tickerCode}</span>
+                </h5>
+              </div>
+              <span className="text-[9px] font-mono text-slate-400">
+                {noteInput.length} / 500 characters
+              </span>
+            </div>
+
+            <div className="flex flex-col gap-2">
+              <textarea
+                value={noteInput}
+                onChange={(e) => setNoteInput(e.target.value.slice(0, 500))}
+                rows={3}
+                placeholder="Attach investment rationale, target catalyst, entry thesis, or risk trigger for this position (e.g. Target profit at 1,800 on Q3 dividend growth, stop loss tight if EMA20 breaks)..."
+                className="w-full bg-slate-900 text-slate-100 text-xs p-3 rounded-xl border border-slate-800 focus:outline-none focus:border-amber-500/60 font-sans resize-none placeholder:text-slate-600 shadow-inner"
+              />
+
+              {/* Quick Rationale Template Tags */}
+              <div className="flex items-center gap-1.5 flex-wrap text-[8.5px] font-mono">
+                <span className="text-slate-500 font-bold uppercase tracking-wider flex items-center gap-1">
+                  <Sparkles className="w-2.5 h-2.5 text-amber-400" /> Templates:
+                </span>
+                {[
+                  'Dividend Play',
+                  'Technical Breakout',
+                  'Q3 Earnings Catalyst',
+                  'Value Dislocation',
+                  'Tight SL Below EMA20',
+                  'Strategic Core Hold'
+                ].map((tag) => (
+                  <button
+                    key={tag}
+                    type="button"
+                    onClick={() => handleAddTemplateTag(tag)}
+                    className="px-2 py-0.5 bg-slate-900 hover:bg-amber-950/60 text-slate-400 hover:text-amber-300 rounded-lg border border-slate-800 hover:border-amber-500/30 transition-all font-semibold"
+                  >
+                    + {tag}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Bottom Action Footer */}
+            <div className="flex items-center justify-between pt-2 border-t border-slate-800/80">
+              <div className="flex items-center gap-2">
+                {noteText && (
+                  <button
+                    type="button"
+                    onClick={handleClearNote}
+                    className="px-2.5 py-1.5 bg-rose-950/40 hover:bg-rose-900/60 text-rose-400 border border-rose-500/30 text-[9px] font-black uppercase rounded-lg transition-all flex items-center gap-1"
+                  >
+                    <Trash2 className="w-3 h-3" />
+                    Clear Note
+                  </button>
+                )}
+                {noteToast && (
+                  <span className="text-[9px] font-mono font-bold text-amber-400 flex items-center gap-1 bg-amber-500/10 px-2 py-1 rounded border border-amber-500/20">
+                    <Check className="w-3 h-3" /> {noteToast}
+                  </span>
+                )}
+              </div>
+
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setIsNotePanelOpen(false)}
+                  className="px-3 py-1.5 bg-slate-900 hover:bg-slate-800 border border-slate-800 text-slate-400 text-[9px] font-black uppercase rounded-lg hover:text-white transition-all"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={handleSaveNote}
+                  className="px-3.5 py-1.5 bg-amber-400 hover:bg-amber-300 text-slate-950 text-[9px] font-black uppercase rounded-lg transition-all flex items-center gap-1 shadow-[0_0_12px_rgba(245,158,11,0.2)]"
+                >
+                  <Save className="w-3 h-3" />
+                  Save Rationale
+                </button>
+              </div>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
       <AdvanceChartModal
         symbol={`IDX:${tickerCode.replace('.JK', '').toUpperCase()}`}
         isOpen={isAdvanceChartOpen}
@@ -796,6 +1020,8 @@ export default function HoldingCard({
       />
     </div>
   );
-}
+}, areHoldingCardPropsEqual);
+
+export default HoldingCard;
 
 export { default as GroupedHoldingCards, generateHoldingsPDF } from './GroupedHoldingCards';

@@ -57,13 +57,13 @@ const TICKER_RISK_METADATA: Record<string, { name: string; dailyVol: number; exp
   'CTTH': { name: "CTTH (PT Citatah Tbk)", dailyVol: 0.032, expectedReturn: 0.11, beta: 1.05, sector: "Basic Materials" },
   'LAND': { name: "LAND (Property & Dev)", dailyVol: 0.035, expectedReturn: 0.14, beta: 1.30, sector: "Property" },
   'LPKR': { name: "LPKR (Lippo Karawaci)", dailyVol: 0.025, expectedReturn: 0.10, beta: 1.10, sector: "Property" },
-  'PIPA': { name: "PIPA (Metal & Piping)", dailyVol: 0.039, expectedReturn: 0.16, beta: 1.40, sector: "Service" },
-  'BACH': { name: "BACH (Alumina Chemical)", dailyVol: 0.034, expectedReturn: 0.17, beta: 1.15, sector: "Basic Materials" },
-  'EMMI': { name: "EMMI (Manufacturing)", dailyVol: 0.028, expectedReturn: 0.13, beta: 0.95, sector: "Consumer" },
-  'JECX': { name: "JECX (Tech & Commerce)", dailyVol: 0.045, expectedReturn: 0.20, beta: 1.50, sector: "Technology" },
-  'PRDL': { name: "PRDL (Real Estate Dev)", dailyVol: 0.032, expectedReturn: 0.12, beta: 1.25, sector: "Property" },
-  'RANS': { name: "RANS (Media & Ent)", dailyVol: 0.050, expectedReturn: 0.19, beta: 1.60, sector: "Consumer" },
-  'PJHB-W': { name: "PJHB-W (Security Warrant)", dailyVol: 0.080, expectedReturn: 0.25, beta: 2.10, sector: "Financial" },
+  'PIPA': { name: "PIPA (Multi Makmur Lemindo)", dailyVol: 0.039, expectedReturn: 0.16, beta: 1.40, sector: "Basic Materials" },
+  'UNTR': { name: "UNTR (United Tractors)", dailyVol: 0.024, expectedReturn: 0.15, beta: 1.05, sector: "Basic Materials" },
+  'ACES': { name: "ACES (Aspirasi Hidup Indonesia)", dailyVol: 0.022, expectedReturn: 0.13, beta: 0.95, sector: "Consumer" },
+  'EMTK': { name: "EMTK (Elang Mahkota Teknologi)", dailyVol: 0.045, expectedReturn: 0.20, beta: 1.50, sector: "Technology" },
+  'BSDE': { name: "BSDE (Bumi Serpong Damai)", dailyVol: 0.032, expectedReturn: 0.12, beta: 1.25, sector: "Property" },
+  'MNCN': { name: "MNCN (Media Nusantara Citra)", dailyVol: 0.030, expectedReturn: 0.11, beta: 1.20, sector: "Consumer" },
+  'GOTO-W': { name: "GOTO-W (Gojek Tokopedia Warrant)", dailyVol: 0.080, expectedReturn: 0.25, beta: 2.10, sector: "Financial" },
   'DEFAULT': { name: "Asset Group", dailyVol: 0.032, expectedReturn: 0.13, beta: 1.20, sector: "Other" }
 };
 

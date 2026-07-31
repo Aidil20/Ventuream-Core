@@ -2,6 +2,18 @@ import React, { useEffect, useRef, memo, useState } from 'react';
 
 import { BrainCircuit, TrendingUp, TrendingDown, Minus, Zap, ArrowUpRight, ArrowDownRight, TrendingUp as TrendIcon } from 'lucide-react';
 import { motion } from 'motion/react';
+import MarketSentimentTrendChart from './MarketSentimentTrendChart';
+import BloombergReutersFeed from './BloombergReutersFeed';
+import type { MarketNews } from '../services/marketService';
+
+const EMPTY_NEWS: MarketNews[] = [];
+
+interface MarketOverviewWidgetProps {
+  news?: MarketNews[];
+  onRefreshNews?: () => void;
+  isLoadingNews?: boolean;
+  onSelectSymbol?: (symbol: string) => void;
+}
 
 interface SparklineProps {
   data: number[];
@@ -76,7 +88,7 @@ const Sparkline = ({ data, compareData, color, compareColor = '#64748b' }: Spark
   );
 };
 
-function MarketOverviewWidget() {
+function MarketOverviewWidget({ news = EMPTY_NEWS, onRefreshNews, isLoadingNews = false, onSelectSymbol }: MarketOverviewWidgetProps) {
   const container = useRef<HTMLDivElement>(null);
   const widgetId = useRef(`tv-overview-${Math.random().toString(36).substr(2, 9)}`);
   
@@ -325,10 +337,18 @@ function MarketOverviewWidget() {
         })}
       </div>
 
+      {/* Real-time Bloomberg & Reuters Curated Headlines Module */}
+      <BloombergReutersFeed onSelectSymbol={onSelectSymbol} />
+
+      {/* Integrated Market Sentiment Trend Line Chart */}
+      <MarketSentimentTrendChart 
+        news={news} 
+        onRefresh={onRefreshNews} 
+        isLoading={isLoadingNews} 
+      />
+
       {/* Main TradingView Widget */}
-      <div className="tradingview-widget-container rounded-xl overflow-hidden border border-zinc-800/50 bg-zinc-950/20 min-h-[400px]" ref={container}>
-         <div className="tradingview-widget-container__widget"></div>
-      </div>
+      <div className="tradingview-widget-container rounded-xl overflow-hidden border border-zinc-800/50 bg-zinc-950/20 min-h-[400px]" ref={container} />
     </div>
   );
 }

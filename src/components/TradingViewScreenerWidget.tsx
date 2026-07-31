@@ -34,9 +34,7 @@ const TradingViewScreenerWidget: React.FC = () => {
   }, []);
 
   return (
-    <div className="tradingview-widget-container h-[550px]" ref={container}>
-      <div className="tradingview-widget-container__widget h-full"></div>
-    </div>
+    <div className="tradingview-widget-container h-[550px]" ref={container} />
   );
 };
 

@@ -231,9 +231,7 @@ const EconomicCalendarWidget: React.FC = () => {
 
             {/* TradingView Widget Container */}
             <div className="relative border border-slate-800 rounded-2xl overflow-hidden bg-black/40 min-h-[550px]">
-              <div className="tradingview-widget-container" ref={containerRef}>
-                <div className="tradingview-widget-container__widget h-[550px]"></div>
-              </div>
+              <div className="tradingview-widget-container" ref={containerRef} />
             </div>
 
             <div className="flex items-start gap-2 p-3.5 bg-slate-900/60 rounded-xl border border-slate-800/60">

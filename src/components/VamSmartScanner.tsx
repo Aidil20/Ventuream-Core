@@ -1658,9 +1658,7 @@ function VamSmartScanner() {
               Data live di bawah tersinkronisasi langsung dengan filter relatif volume harian di atas rata-rata rata-rata 20 hari, dikonfigurasi khusus untuk menyaring anomali volume pra-pengumuman akuisisi.
             </div>
 
-            <div className="tradingview-widget-container" ref={container}>
-              <div className="tradingview-widget-container__widget h-[460px]" />
-            </div>
+            <div className="tradingview-widget-container min-h-[460px]" ref={container} />
           </motion.div>
         ) : (
           <motion.div

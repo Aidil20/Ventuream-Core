@@ -25,9 +25,63 @@ import {
   Globe,
   Newspaper,
   Eye,
-  Search
+  Search,
+  Code,
+  Copy,
+  Check
 } from 'lucide-react';
 import AdvanceChartModal from './AdvanceChartModal';
+
+const PINE_SCRIPT_CODE = `//@version=5
+indicator("VAM Institutional - Day Trading & Potensi ARA Screener", overlay=true)
+
+// ==========================================
+// PARAMETER SCANNER DAY TRADING & POTENSI ARA (BEI RULES)
+// ==========================================
+emaLength      = input.int(20, "EMA Length")
+volMaLength    = input.int(20, "Volume MA Length")
+volMultiplier  = input.float(3.0, "Min Volume Surge Multiplier")
+rsiLength      = input.int(14, "RSI Length")
+rsiMin         = input.int(65, "RSI Min Threshold (Hot Momentum)")
+
+// Indikator Teknikal TradingView
+ema20          = ta.ema(close, emaLength)
+volMa          = ta.sma(volume, volMaLength)
+rsiVal         = ta.rsi(close, rsiLength)
+
+// MACD Golden Cross & Positif
+[macdLine, signalLine, _] = ta.macd(close, 12, 26, 9)
+macdGoldenCross = ta.crossover(macdLine, signalLine) and macdLine > 0
+
+// Kriteria 3 Pilar
+volumeSurge    = volume >= (volMa * volMultiplier)
+priceAboveEma  = close > ema20
+highMomentum   = rsiVal >= rsiMin
+upperBand      = ta.sma(close, 20) + 2 * ta.stdev(close, 20)
+bbBreakout     = close > upperBand
+
+// Kalkulasi Batas ARA (Auto Rejection Atas) BEI Rules
+var float araPct = 0.25
+if (close <= 200)
+    araPct := 0.35
+else if (close <= 5000)
+    araPct := 0.25
+else
+    araPct := 0.20
+
+araPriceLimit = math.floor(close * (1 + araPct))
+
+// Kondisi Sinyal Screener Matched
+isAraCandidate = volumeSurge and priceAboveEma and (highMomentum or bbBreakout) and macdGoldenCross
+
+// Visualisasi Plot Pada Chart TradingView
+plot(ema20, "EMA 20", color=color.rgb(56, 189, 248), linewidth=2)
+plot(upperBand, "Bollinger Upper", color=color.rgb(168, 85, 247, 50))
+plotshape(isAraCandidate, title="POTENSI ARA SIGNAL", location=location.belowbar, color=color.rgb(222, 255, 154), style=shape.triangleup, size=size.normal, text="POTENSI ARA")
+
+// Alert TradingView Screener
+alertcondition(isAraCandidate, title="Sinyal Potensi ARA VAM", message="[VAM SCANNER] {{ticker}} Lolos Penyaringan Day Trading & Potensi ARA! Harga: {{close}}");
+`;
 
 export interface DailyTradingStock {
   symbol: string;
@@ -686,6 +740,222 @@ const DAILY_STOCKS_DATABASE: DailyTradingStock[] = [
     sparkline: [88, 90, 92, 94, 96, 98, 101]
   },
   {
+    symbol: 'CGAS',
+    name: 'PT Citra Nusantara Energi Tbk.',
+    market: 'IDX',
+    price: 'IDR 195',
+    priceNum: 195,
+    change: '+21.88%',
+    changePercent: 21.88,
+    volume: '88.4M',
+    volRatio: 11.20,
+    orderBook: {
+      bidOfferRatio: 8.5,
+      bidVolumeRatioStr: '2.8M Lot Bid vs 329K Lot Offer (8.5 : 1)',
+      isWallBuy: true,
+      volumeVsMa20: '11.2x MA20',
+      volumeVsMa50: '16.8x MA50'
+    },
+    momentum: {
+      macdStatus: 'Golden Cross Positif',
+      macdIsPositiveGoldenCross: true,
+      bbBreakout: true,
+      bbUpperBandLevel: 'IDR 172',
+      rsiVal: 81.2,
+      rsiHotMomentum: true
+    },
+    bandarAndFundamentals: {
+      topBrokersAccumulation: 'YP, MG, CC',
+      brokerNetBuyVal: 'Net Buy Rp 28.5 Miliar',
+      isBandarAccumulation: true,
+      catalystType: 'IPO_LOW_FLOAT',
+      catalystDetail: 'Saham Baru IPO BEI - Sektor Distribusi Gas Alam Compressed Natural Gas (CNG)',
+      isIpoLowFloat: true,
+      ipoOversubscription: 'Oversubscribed 96.2x (Free Float 20%)'
+    },
+    tradingViewScreener: {
+      priceAboveEma20: true,
+      ema20Value: 'IDR 168',
+      epsGrowthYoY: '+12.4%',
+      sector: 'Energy / Gas Distribution',
+      screenerMatch: 'Price > EMA20 | Listing Baru BEI | Vol Surge 11.2x'
+    },
+    googleNewsSentiment: {
+      score: 96,
+      sentimentStatus: 'VERY_BULLISH',
+      headline: 'Google AI Intel: Akumulasi Bandar MG & YP pada Saham Listing Baru CGAS',
+      source: 'Google Search AI Grounding'
+    },
+    maEmaCross: {
+      status: 'Golden Cross',
+      ma10: 165,
+      ema10: 178,
+      diffPercent: 12.1
+    },
+    rsi: 81.2,
+    rsiStatus: 'Bullish Momentum',
+    chartBreakout: {
+      isBreakout: true,
+      resistanceLevel: 'IDR 175',
+      breakoutType: 'Pattern Breakout'
+    },
+    volumeBreakout: {
+      isVolumeBreakout: true,
+      volMultiplier: '11.2x 10MA'
+    },
+    entryZone: '185 - 195',
+    targetPrice: '263 (+34.8%)',
+    stopLoss: '172 (-11.8%)',
+    riskReward: '1 : 2.95',
+    aiRationale: 'Penyaringan Listing Baru BEI: CGAS Lolos 3 Pilar VAM (Price IDR 195 > EMA20 168, Volume Surge 11.2x, Wall Buy Bid 8.5:1 & Oversubscribed 96.2x).',
+    matchScore: 99,
+    sparkline: [140, 148, 155, 162, 175, 182, 195]
+  },
+  {
+    symbol: 'SMGA',
+    name: 'PT Sumber Mineral Global Abadi Tbk.',
+    market: 'IDX',
+    price: 'IDR 92',
+    priceNum: 92,
+    change: '+19.48%',
+    changePercent: 19.48,
+    volume: '65.2M',
+    volRatio: 9.10,
+    orderBook: {
+      bidOfferRatio: 7.8,
+      bidVolumeRatioStr: '1.9M Lot Bid vs 243K Lot Offer (7.8 : 1)',
+      isWallBuy: true,
+      volumeVsMa20: '9.1x MA20',
+      volumeVsMa50: '13.4x MA50'
+    },
+    momentum: {
+      macdStatus: 'Golden Cross Positif',
+      macdIsPositiveGoldenCross: true,
+      bbBreakout: true,
+      bbUpperBandLevel: 'IDR 84',
+      rsiVal: 77.5,
+      rsiHotMomentum: true
+    },
+    bandarAndFundamentals: {
+      topBrokersAccumulation: 'PD, YP, EP',
+      brokerNetBuyVal: 'Net Buy Rp 14.2 Miliar',
+      isBandarAccumulation: true,
+      catalystType: 'IPO_LOW_FLOAT',
+      catalystDetail: 'Pencatatan Perdana Saham Baru BEI - Perdagangan Nikel & Batu Bara',
+      isIpoLowFloat: true,
+      ipoOversubscription: 'Oversubscribed 84.5x'
+    },
+    tradingViewScreener: {
+      priceAboveEma20: true,
+      ema20Value: 'IDR 80',
+      epsGrowthYoY: '+8.5%',
+      sector: 'Basic Materials / Mining Trade',
+      screenerMatch: 'Price > EMA20 | Saham Baru BEI | Vol Surge 9.1x'
+    },
+    googleNewsSentiment: {
+      score: 93,
+      sentimentStatus: 'VERY_BULLISH',
+      headline: 'Google AI Intel: Lonjakan Volume & Minat Ritel Tinggi pada Saham Baru SMGA',
+      source: 'Google Search AI Grounding'
+    },
+    maEmaCross: {
+      status: 'Golden Cross',
+      ma10: 78,
+      ema10: 84,
+      diffPercent: 10.2
+    },
+    rsi: 77.5,
+    rsiStatus: 'Bullish Momentum',
+    chartBreakout: {
+      isBreakout: true,
+      resistanceLevel: 'IDR 85',
+      breakoutType: 'Pattern Breakout'
+    },
+    volumeBreakout: {
+      isVolumeBreakout: true,
+      volMultiplier: '9.1x 10MA'
+    },
+    entryZone: '88 - 92',
+    targetPrice: '124 (+34.7%)',
+    stopLoss: '81 (-11.9%)',
+    riskReward: '1 : 2.91',
+    aiRationale: 'Screener Listing Baru BEI: SMGA Lolos VAM Day Trading (Price IDR 92 > EMA20 80, Volume Surge 9.1x, Wall Buy 7.8:1 & Katalis Sektor Nikel).',
+    matchScore: 98,
+    sparkline: [65, 68, 72, 78, 82, 86, 92]
+  },
+  {
+    symbol: 'DATA',
+    name: 'PT Remala Abadi Tbk.',
+    market: 'IDX',
+    price: 'IDR 410',
+    priceNum: 410,
+    change: '+16.48%',
+    changePercent: 16.48,
+    volume: '54.1M',
+    volRatio: 8.80,
+    orderBook: {
+      bidOfferRatio: 6.9,
+      bidVolumeRatioStr: '1.1M Lot Bid vs 159K Lot Offer (6.9 : 1)',
+      isWallBuy: true,
+      volumeVsMa20: '8.8x MA20',
+      volumeVsMa50: '12.0x MA50'
+    },
+    momentum: {
+      macdStatus: 'Golden Cross Positif',
+      macdIsPositiveGoldenCross: true,
+      bbBreakout: true,
+      bbUpperBandLevel: 'IDR 375',
+      rsiVal: 76.8,
+      rsiHotMomentum: true
+    },
+    bandarAndFundamentals: {
+      topBrokersAccumulation: 'YP, CC, AK',
+      brokerNetBuyVal: 'Net Buy Rp 22.1 Miliar',
+      isBandarAccumulation: true,
+      catalystType: 'STRATEGIC_ACQUISITION',
+      catalystDetail: 'Ekspansi Jaringan Fiber Optic & Layanan Internet Broadband Korporasi',
+      isIpoLowFloat: true,
+      ipoOversubscription: 'Oversubscribed 72.0x'
+    },
+    tradingViewScreener: {
+      priceAboveEma20: true,
+      ema20Value: 'IDR 365',
+      epsGrowthYoY: '+14.2%',
+      sector: 'Telecommunications / ISP Broadband',
+      screenerMatch: 'Price > EMA20 | Listing Activities BEI | Vol Surge 8.8x'
+    },
+    googleNewsSentiment: {
+      score: 95,
+      sentimentStatus: 'VERY_BULLISH',
+      headline: 'Google AI Intel: Akumulasi Asing & Institusi pada Saham Provider Internet DATA',
+      source: 'Google Search AI Grounding'
+    },
+    maEmaCross: {
+      status: 'Golden Cross',
+      ma10: 360,
+      ema10: 380,
+      diffPercent: 8.3
+    },
+    rsi: 76.8,
+    rsiStatus: 'Bullish Momentum',
+    chartBreakout: {
+      isBreakout: true,
+      resistanceLevel: 'IDR 380',
+      breakoutType: '52-Week High Breakout'
+    },
+    volumeBreakout: {
+      isVolumeBreakout: true,
+      volMultiplier: '8.8x 10MA'
+    },
+    entryZone: '395 - 410',
+    targetPrice: '520 (+26.8%)',
+    stopLoss: '368 (-10.2%)',
+    riskReward: '1 : 2.62',
+    aiRationale: 'Screener VAM Day Trading DATA: Harga IDR 410 > EMA20 (365), Antrean Wall Buy 6.9:1, Volume Surge 8.8x & Pertumbuhan EPS YoY +14.2%.',
+    matchScore: 98,
+    sparkline: [310, 325, 340, 360, 375, 390, 410]
+  },
+  {
     symbol: 'PANI',
     name: 'PT Pantai Indah Kapuk Dua Tbk.',
     market: 'IDX',
@@ -828,13 +1098,13 @@ const DAILY_STOCKS_DATABASE: DailyTradingStock[] = [
     sparkline: [330, 340, 350, 360, 372, 384, 392]
   },
   {
-    symbol: 'CDIO',
-    name: 'PT Cipta Daya Indonesia Tbk.',
+    symbol: 'PGAS',
+    name: 'PT Perusahaan Gas Negara Tbk.',
     market: 'IDX',
-    price: 'IDR 284',
-    priceNum: 284,
-    change: '+24.56%',
-    changePercent: 24.56,
+    price: 'IDR 1,540',
+    priceNum: 1540,
+    change: '+2.67%',
+    changePercent: 2.67,
     volume: '185.0M',
     volRatio: 12.50,
     orderBook: {
@@ -848,56 +1118,55 @@ const DAILY_STOCKS_DATABASE: DailyTradingStock[] = [
       macdStatus: 'Golden Cross Positif',
       macdIsPositiveGoldenCross: true,
       bbBreakout: true,
-      bbUpperBandLevel: 'IDR 240',
-      rsiVal: 82.0,
+      bbUpperBandLevel: 'IDR 1,510',
+      rsiVal: 68.5,
       rsiHotMomentum: true
     },
     bandarAndFundamentals: {
-      topBrokersAccumulation: 'YP, EP, MG',
+      topBrokersAccumulation: 'AK, YU, ZP',
       brokerNetBuyVal: 'Net Buy Rp 45.8 Miliar',
       isBandarAccumulation: true,
-      catalystType: 'IPO_LOW_FLOAT',
-      catalystDetail: 'Saham IPO Perdana Oversubscribed 98.4x (Free Float 15%)',
-      isIpoLowFloat: true,
-      ipoOversubscription: 'Oversubscribed 98.4x'
+      catalystType: 'SECTORAL',
+      catalystDetail: 'Ekspansi Jaringan Gas Industri & Kenaikan Margin Non-HGS',
+      isIpoLowFloat: false
     },
     tradingViewScreener: {
       priceAboveEma20: true,
-      ema20Value: 'IDR 250',
-      epsGrowthYoY: '+12.4%',
-      sector: 'Industrials / Energy Equipment',
-      screenerMatch: 'Price > EMA20 | IPO Low Float | Vol Surge 12.5x'
+      ema20Value: 'IDR 1,480',
+      epsGrowthYoY: '+18.4%',
+      sector: 'Utilities / Natural Gas Distribution',
+      screenerMatch: 'Price > EMA20 | Vol Surge 12.5x | Inst Accumulation'
     },
     googleNewsSentiment: {
       score: 95,
       sentimentStatus: 'VERY_BULLISH',
-      headline: 'Google AI Intel: Oversubscribed 98.4x & Akumulasi Bandar YP/EP',
+      headline: 'Google AI Intel: Akumulasi Asing AK/YU & Permintaan Gas Industri Kuat',
       source: 'Google Search AI Grounding'
     },
     maEmaCross: {
       status: 'Golden Cross',
-      ma10: 230,
-      ema10: 255,
+      ma10: 1490,
+      ema10: 1510,
       diffPercent: 8.5
     },
-    rsi: 82.0,
+    rsi: 68.5,
     rsiStatus: 'Bullish Momentum',
     chartBreakout: {
       isBreakout: true,
-      resistanceLevel: 'IDR 240',
+      resistanceLevel: 'IDR 1,510',
       breakoutType: '52-Week High Breakout'
     },
     volumeBreakout: {
       isVolumeBreakout: true,
       volMultiplier: '12.5x 10MA'
     },
-    entryZone: '278 - 284',
-    targetPrice: '312 (+9.8%)',
-    stopLoss: '260 (-8.4%)',
-    riskReward: '1 : 1.2',
-    aiRationale: 'Kandidat IPO Low Float ARA Hari Pertama: Oversubscribed 98.4x saat bookbuilding, antrean Wall Buy Bid 14.2:1 menahan antrean jual dengan dorongan lock ARA.',
+    entryZone: '1,500 - 1,540',
+    targetPrice: '1,720 (+11.7%)',
+    stopLoss: '1,450 (-5.8%)',
+    riskReward: '1 : 2.5',
+    aiRationale: 'Rekomendasi Day Trading PGAS: Harga IDR 1,540 > EMA20 (1,480), Breakout Resistance 1,510, Volume Surge 12.5x MA20 & Akumulasi Bandar AK/YU.',
     matchScore: 98,
-    sparkline: [200, 210, 225, 240, 255, 270, 284]
+    sparkline: [1420, 1440, 1470, 1490, 1510, 1525, 1540]
   },
   {
     symbol: 'DEFI',
@@ -1043,13 +1312,13 @@ const DAILY_STOCKS_DATABASE: DailyTradingStock[] = [
     sparkline: [42, 44, 46, 48, 52, 57, 62]
   },
   {
-    symbol: 'PJHB',
-    name: 'PT Primarindo Asia Infrastructure Tbk.',
+    symbol: 'PGEO',
+    name: 'PT Pertamina Geothermal Energy Tbk.',
     market: 'IDX',
-    price: 'IDR 98',
-    priceNum: 98,
-    change: '+28.95%',
-    changePercent: 28.95,
+    price: 'IDR 1,250',
+    priceNum: 1250,
+    change: '+4.17%',
+    changePercent: 4.17,
     volume: '152.4M',
     volRatio: 11.20,
     orderBook: {
@@ -1063,55 +1332,55 @@ const DAILY_STOCKS_DATABASE: DailyTradingStock[] = [
       macdStatus: 'Golden Cross Positif',
       macdIsPositiveGoldenCross: true,
       bbBreakout: true,
-      bbUpperBandLevel: 'IDR 80',
-      rsiVal: 81.4,
+      bbUpperBandLevel: 'IDR 1,210',
+      rsiVal: 72.4,
       rsiHotMomentum: true
     },
     bandarAndFundamentals: {
-      topBrokersAccumulation: 'XC, HD, YP',
-      brokerNetBuyVal: 'Net Buy Rp 14.2 Miliar',
+      topBrokersAccumulation: 'AK, BK, ZP',
+      brokerNetBuyVal: 'Net Buy Rp 32.4 Miliar',
       isBandarAccumulation: true,
-      catalystType: 'IPO_LOW_FLOAT',
-      catalystDetail: 'Micro Cap High Beta Volatilitas Rebound Kuat & Borong Bandar Ritel/Lokal',
-      isIpoLowFloat: true
+      catalystType: 'EARNINGS_RECORD',
+      catalystDetail: 'Ekspansi Pembangkit Panas Bumi Lumut Balai Unit 2 & Perluasan Kapasitas EBT',
+      isIpoLowFloat: false
     },
     tradingViewScreener: {
       priceAboveEma20: true,
-      ema20Value: 'IDR 82',
-      epsGrowthYoY: '+6.1%',
-      sector: 'Consumer Cyclicals / Footwear',
-      screenerMatch: 'Price > EMA20 | Micro Cap Volatile | Vol Surge 11.2x'
+      ema20Value: 'IDR 1,180',
+      epsGrowthYoY: '+22.1%',
+      sector: 'Utilities / Renewable Geothermal Energy',
+      screenerMatch: 'Price > EMA20 | Energy Transition | Vol Surge 11.2x'
     },
     googleNewsSentiment: {
-      score: 89,
-      sentimentStatus: 'BULLISH',
-      headline: 'Google AI Intel: Rebound Sektor Ritel Konsumer & Akumulasi XC/HD',
+      score: 93,
+      sentimentStatus: 'VERY_BULLISH',
+      headline: 'Google AI Intel: Proyek Geothermal Lumut Balai & Akumulasi Institusi AK/BK',
       source: 'Google Search AI Grounding'
     },
     maEmaCross: {
       status: 'Golden Cross',
-      ma10: 76,
-      ema10: 84,
+      ma10: 1190,
+      ema10: 1215,
       diffPercent: 10.8
     },
-    rsi: 81.4,
+    rsi: 72.4,
     rsiStatus: 'Bullish Momentum',
     chartBreakout: {
       isBreakout: true,
-      resistanceLevel: 'IDR 80',
+      resistanceLevel: 'IDR 1,210',
       breakoutType: '20-Day High Breakout'
     },
     volumeBreakout: {
       isVolumeBreakout: true,
       volMultiplier: '11.2x 10MA'
     },
-    entryZone: '94 - 98',
-    targetPrice: '128 (+30.6%)',
-    stopLoss: '88 (-10.2%)',
-    riskReward: '1 : 3.0',
-    aiRationale: 'Penny Stock Volatilitas Tinggi (< IDR 100): Dinding Bid Wall Buy 12.4x Offer, Volume Surge 11.2x MA20 & Akumulasi Bandar XC/HD.',
+    entryZone: '1,215 - 1,250',
+    targetPrice: '1,450 (+16.0%)',
+    stopLoss: '1,170 (-6.4%)',
+    riskReward: '1 : 2.5',
+    aiRationale: 'Breakout Sektor EBT PGEO: Harga IDR 1,250 > EMA20 (1,180), Breakout Resistance 1,210, Volume Surge 11.2x MA20 & Akumulasi Bandar Inst.',
     matchScore: 97,
-    sparkline: [70, 72, 76, 80, 86, 92, 98]
+    sparkline: [1150, 1170, 1190, 1210, 1230, 1240, 1250]
   },
   {
     symbol: 'BUMI',
@@ -1560,6 +1829,49 @@ export const DailyTradingAutoAnalyst: React.FC<DailyTradingAutoAnalystProps> = (
   const [isScanning, setIsScanning] = useState<boolean>(false);
   const [chartModalSymbol, setChartModalSymbol] = useState<string | null>(null);
 
+  const [showPineScriptModal, setShowPineScriptModal] = useState<boolean>(false);
+  const [copiedPineScript, setCopiedPineScript] = useState<boolean>(false);
+  const [copiedPlanSymbol, setCopiedPlanSymbol] = useState<string | null>(null);
+
+  const handleCopyPineScript = () => {
+    if (navigator?.clipboard) {
+      navigator.clipboard.writeText(PINE_SCRIPT_CODE);
+      setCopiedPineScript(true);
+      setTimeout(() => setCopiedPineScript(false), 2000);
+    }
+  };
+
+  const handleCopyPlan = (stock: DailyTradingStock) => {
+    const araInfo = getBeiAraInfo(stock.priceNum, stock.market);
+    const planStr = `[VAM DAY TRADING PLAN] ${stock.symbol} (${stock.name})
+• Buy/Entry Zone: ${stock.entryZone}
+• Target Profit (TP1): ${stock.targetPrice}
+${araInfo ? `• Potensi ARA Limit (BEI): Rp ${araInfo.limitPrice} (+${araInfo.pct}%)` : ''}
+• Cut Loss (SL): ${stock.stopLoss}
+• Risk/Reward: ${stock.riskReward}
+• Strategi Eksekusi: ${stock.aiRationale}`;
+
+    if (navigator?.clipboard) {
+      navigator.clipboard.writeText(planStr);
+      setCopiedPlanSymbol(stock.symbol);
+      setTimeout(() => setCopiedPlanSymbol(null), 2500);
+    }
+  };
+
+  const getBeiAraInfo = (priceNum: number, market: string) => {
+    if (market !== 'IDX') return null;
+    let araPct = 0.25;
+    if (priceNum <= 200) araPct = 0.35;
+    else if (priceNum <= 5000) araPct = 0.25;
+    else araPct = 0.20;
+
+    const limitPrice = Math.floor(priceNum * (1 + araPct));
+    return {
+      pct: (araPct * 100).toFixed(0),
+      limitPrice: limitPrice.toLocaleString('id-ID'),
+    };
+  };
+
   // Sync with real-time exchange last prices
   const fetchLiveExchangePrices = async () => {
     try {
@@ -1985,6 +2297,15 @@ export const DailyTradingAutoAnalyst: React.FC<DailyTradingAutoAnalystProps> = (
           </button>
 
           <button
+            onClick={() => setShowPineScriptModal(true)}
+            title="Tampilkan & salin script TradingView Pine Script (v5) untuk scanner ini"
+            className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-purple-500/10 hover:bg-purple-500/20 border border-purple-500/30 text-purple-300 font-black text-[10px] uppercase tracking-wider transition-all active:scale-95 cursor-pointer"
+          >
+            <Code className="w-3.5 h-3.5 text-purple-400" />
+            <span>TradingView Pine Script</span>
+          </button>
+
+          <button
             onClick={handleExportCSV}
             title="Export filtered list to CSV spreadsheet"
             className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/30 text-emerald-400 font-black text-[10px] uppercase tracking-wider transition-all active:scale-95 cursor-pointer"
@@ -2322,6 +2643,23 @@ export const DailyTradingAutoAnalyst: React.FC<DailyTradingAutoAnalystProps> = (
                   </div>
                 </div>
 
+                {/* BEI ARA Limit Target Banner */}
+                {(() => {
+                  const araInfo = getBeiAraInfo(stock.priceNum, stock.market);
+                  if (!araInfo) return null;
+                  return (
+                    <div className="flex items-center justify-between text-[8.5px] font-mono bg-purple-950/40 px-2.5 py-1 rounded-xl border border-purple-500/30">
+                      <span className="text-purple-300 font-bold flex items-center gap-1">
+                        <Zap className="w-3 h-3 text-purple-400 fill-purple-400" />
+                        <span>Batas Maksimum ARA (BEI):</span>
+                      </span>
+                      <span className="text-white font-extrabold">
+                        Rp {araInfo.limitPrice} <span className="text-[#deff9a] font-black">(+{araInfo.pct}% ARA Cap)</span>
+                      </span>
+                    </div>
+                  );
+                })()}
+
                 {/* 3 Pillars Breakdown Detailed Grid */}
                 <div className="space-y-1.5">
                   {/* Pilar 1: Order Book & Volume */}
@@ -2448,16 +2786,79 @@ export const DailyTradingAutoAnalyst: React.FC<DailyTradingAutoAnalystProps> = (
                   )}
                 </div>
 
-                {/* Daily Action Plan */}
-                <div className="flex items-center justify-between text-[9px] font-mono bg-zinc-950 p-2 rounded-xl border border-zinc-800/60">
-                  <div className="flex items-center gap-1 text-zinc-400">
-                    <Target className="w-3 h-3 text-[#deff9a]" />
-                    <span>Plan:</span>
+                {/* Action Plan & Strategi Eksekusi Day Trading */}
+                <div className="bg-zinc-950 p-3 rounded-2xl border border-zinc-800 space-y-2">
+                  <div className="flex items-center justify-between text-[9.5px] font-mono font-black uppercase tracking-wider text-zinc-300 border-b border-zinc-800/80 pb-1.5">
+                    <div className="flex items-center gap-1.5 text-[#deff9a]">
+                      <Target className="w-3.5 h-3.5 text-[#deff9a]" />
+                      <span>ACTION PLAN & EKSEKUSI TRADING</span>
+                    </div>
+                    <button
+                      onClick={() => handleCopyPlan(stock)}
+                      className="flex items-center gap-1 px-2 py-0.5 rounded-md bg-zinc-900 hover:bg-zinc-800 text-[8px] font-mono font-bold text-zinc-300 hover:text-white border border-zinc-700/80 transition-all cursor-pointer"
+                      title="Salin Rencana Eksekusi Trading"
+                    >
+                      {copiedPlanSymbol === stock.symbol ? (
+                        <>
+                          <Check className="w-3 h-3 text-emerald-400" />
+                          <span className="text-emerald-400 font-bold">COPIED PLAN</span>
+                        </>
+                      ) : (
+                        <>
+                          <Copy className="w-3 h-3 text-zinc-400" />
+                          <span>COPY PLAN</span>
+                        </>
+                      )}
+                    </button>
                   </div>
-                  <div className="flex items-center gap-2">
-                    <span className="text-zinc-300">Buy: <strong className="text-white">{stock.entryZone}</strong></span>
-                    <span className="text-emerald-400 font-bold">TP: {stock.targetPrice}</span>
-                    <span className="text-rose-400 font-bold">SL: {stock.stopLoss}</span>
+
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-1.5 font-mono text-[9px]">
+                    {/* Buy / Entry Zone */}
+                    <div className="bg-sky-950/20 p-2 rounded-xl border border-sky-500/30 flex flex-col justify-between">
+                      <span className="text-zinc-500 text-[8px] uppercase font-bold">Buy / Entry Zone</span>
+                      <span className="text-sky-300 font-extrabold text-[10px] mt-0.5">{stock.entryZone}</span>
+                      <span className="text-[7.5px] text-sky-400/80 font-medium">HAKA / Limit Order</span>
+                    </div>
+
+                    {/* Target Price (TP1) */}
+                    <div className="bg-emerald-950/20 p-2 rounded-xl border border-emerald-500/30 flex flex-col justify-between">
+                      <span className="text-zinc-500 text-[8px] uppercase font-bold">Target Profit (TP)</span>
+                      <span className="text-emerald-400 font-extrabold text-[10px] mt-0.5">{stock.targetPrice}</span>
+                      <span className="text-[7.5px] text-emerald-500/80 font-medium">Breakout Target</span>
+                    </div>
+
+                    {/* Target Potensi ARA (BEI Rules) */}
+                    <div className="bg-amber-950/20 p-2 rounded-xl border border-amber-500/30 flex flex-col justify-between">
+                      <span className="text-zinc-500 text-[8px] uppercase font-bold flex items-center gap-0.5">
+                        <Zap className="w-2.5 h-2.5 text-amber-400 fill-amber-400" />
+                        <span>Potensi ARA Cap</span>
+                      </span>
+                      {(() => {
+                        const araInfo = getBeiAraInfo(stock.priceNum, stock.market);
+                        return (
+                          <span className="text-amber-300 font-extrabold text-[10px] mt-0.5">
+                            {araInfo ? `Rp ${araInfo.limitPrice} (+${araInfo.pct}%)` : stock.targetPrice}
+                          </span>
+                        );
+                      })()}
+                      <span className="text-[7.5px] text-amber-400/80 font-medium">Batas Maksimum BEI</span>
+                    </div>
+
+                    {/* Stop Loss (Cut Loss) */}
+                    <div className="bg-rose-950/20 p-2 rounded-xl border border-rose-500/30 flex flex-col justify-between">
+                      <span className="text-zinc-500 text-[8px] uppercase font-bold">Cut Loss (SL)</span>
+                      <span className="text-rose-400 font-extrabold text-[10px] mt-0.5">{stock.stopLoss}</span>
+                      <span className="text-[7.5px] text-rose-400/80 font-medium">Disiplin Risk Limit</span>
+                    </div>
+                  </div>
+
+                  <div className="flex flex-wrap items-center justify-between gap-1.5 text-[8.5px] font-mono bg-black/40 px-2.5 py-1 rounded-xl border border-zinc-800">
+                    <span className="text-zinc-400">
+                      R/R Ratio: <strong className="text-emerald-400 font-bold">{stock.riskReward}</strong>
+                    </span>
+                    <span className="text-zinc-400">
+                      Taktik: <span className="text-zinc-200 font-semibold">Trailing Stop @ MA5 & Partial TP</span>
+                    </span>
                   </div>
                 </div>
 
@@ -2498,6 +2899,82 @@ export const DailyTradingAutoAnalyst: React.FC<DailyTradingAutoAnalystProps> = (
         isOpen={!!chartModalSymbol}
         onClose={() => setChartModalSymbol(null)}
       />
+
+      {/* TradingView Pine Script Screener Modal */}
+      <AnimatePresence>
+        {showPineScriptModal && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              className="bg-[#0f141d] border border-purple-500/40 rounded-3xl p-5 sm:p-6 max-w-3xl w-full max-h-[90vh] overflow-y-auto space-y-4 shadow-2xl relative"
+            >
+              <div className="flex items-center justify-between border-b border-zinc-800 pb-3">
+                <div className="flex items-center gap-2.5">
+                  <div className="p-2 rounded-xl bg-purple-500/20 text-purple-300 border border-purple-500/40">
+                    <Code className="w-5 h-5 text-purple-400" />
+                  </div>
+                  <div>
+                    <h3 className="text-base font-black text-white uppercase tracking-wider">
+                      TradingView Pine Script (v5) Screener Code
+                    </h3>
+                    <p className="text-[11px] text-zinc-400 font-mono">
+                      Script penyaring teknikal Day Trading & Potensi ARA (BEI Rules)
+                    </p>
+                  </div>
+                </div>
+                <button
+                  onClick={() => setShowPineScriptModal(false)}
+                  className="px-3 py-1.5 rounded-xl bg-zinc-900 text-zinc-400 hover:text-white border border-zinc-800 text-xs font-mono cursor-pointer"
+                >
+                  Tutup [ESC]
+                </button>
+              </div>
+
+              {/* Instructions Box */}
+              <div className="bg-purple-950/30 border border-purple-500/30 rounded-2xl p-3 text-[11px] text-purple-200 space-y-1.5">
+                <div className="font-bold flex items-center gap-1.5 text-purple-300">
+                  <Sparkles className="w-4 h-4 text-purple-400" />
+                  <span>Cara Menggunakan Script ini di TradingView:</span>
+                </div>
+                <ol className="list-decimal list-inside space-y-1 text-zinc-300 font-mono text-[10.5px]">
+                  <li>Buka TradingView (www.tradingview.com) & masuk ke tab <strong>Pine Editor</strong> di bagian bawah chart.</li>
+                  <li>Salin seluruh kode Pine Script (v5) di bawah ini lalu tempel (paste) ke Pine Editor.</li>
+                  <li>Klik <strong>Add to Chart</strong> untuk menampilkan indikator & sinyal visual "POTENSI ARA" secara realtime.</li>
+                  <li>Atau gunakan kriteria filter di <strong>TradingView Stock Screener</strong>: Exchange: <code>IDX</code>, Price &gt; <code>EMA 20</code>, Volume &ge; <code>3x Volume MA20</code>, RSI(14) &gt; <code>65</code>, MACD Line &gt; <code>Signal</code>.</li>
+                </ol>
+              </div>
+
+              {/* Code Box with Copy Button */}
+              <div className="relative">
+                <div className="flex items-center justify-between bg-zinc-950 px-4 py-2 rounded-t-2xl border border-zinc-800 text-xs font-mono text-zinc-400">
+                  <span>VAM_DayTrading_ARA_Screener.txt</span>
+                  <button
+                    onClick={handleCopyPineScript}
+                    className="flex items-center gap-1.5 px-3 py-1 rounded-lg bg-purple-500 text-white font-bold text-[10px] uppercase hover:bg-purple-600 transition-all cursor-pointer"
+                  >
+                    {copiedPineScript ? (
+                      <>
+                        <Check className="w-3.5 h-3.5 text-emerald-300" />
+                        <span>Tersalin!</span>
+                      </>
+                    ) : (
+                      <>
+                        <Copy className="w-3.5 h-3.5" />
+                        <span>Salin Script</span>
+                      </>
+                    )}
+                  </button>
+                </div>
+                <pre className="bg-black/90 p-4 rounded-b-2xl border border-t-0 border-zinc-800 text-[10.5px] font-mono text-[#deff9a] overflow-x-auto leading-relaxed max-h-72 select-all">
+                  {PINE_SCRIPT_CODE}
+                </pre>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
     </div>
   );
 };

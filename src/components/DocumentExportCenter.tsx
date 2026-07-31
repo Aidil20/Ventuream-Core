@@ -19,7 +19,8 @@ import {
   generatePresentationPPTX, 
   generateUserManualPDF, 
   generateUserManualPPTX,
-  generateWeeklyMarketInsightPDF
+  generateWeeklyMarketInsightPDF,
+  generateSystemBlueprintPDF
 } from '../services/documentExportService';
 
 interface DocumentExportCenterProps {
@@ -302,6 +303,53 @@ export const DocumentExportCenter: React.FC<DocumentExportCenterProps> = ({ onCl
                 <Download className="w-4 h-4" />
               )}
               <span>Cetak Laporan Weekly Market Insight (PDF)</span>
+            </button>
+          </div>
+        </div>
+
+        {/* CARD 4: SYSTEM BLUEPRINT & INTANGIBLE ASSET VALUATION DOCUMENTATION */}
+        <div className="bg-zinc-900/60 border border-zinc-800/80 rounded-[2rem] p-6 flex flex-col justify-between space-y-6 hover:border-[#DFFF00]/30 transition-all group backdrop-blur-xl md:col-span-2">
+          <div>
+            <div className="flex items-center justify-between mb-4">
+              <div className="p-3 bg-purple-500/10 rounded-xl border border-purple-500/20 group-hover:scale-105 transition-transform">
+                <Layers className="w-6 h-6 text-purple-400" />
+              </div>
+              <span className="px-3 py-1 bg-zinc-800 rounded-full text-[9px] font-black text-purple-400 uppercase tracking-widest border border-zinc-700">
+                SYSTEM BLUEPRINT & INTANGIBLE ASSET (PSAK 19 / IAS 38)
+              </span>
+            </div>
+
+            <h3 className="text-lg font-black text-white uppercase tracking-tight group-hover:text-purple-400 transition-colors">
+              4. Spesifikasi Teknis & System Blueprint (PDF)
+            </h3>
+            <p className="text-xs text-zinc-400 mt-2 leading-relaxed">
+              Dokumen resmi spesifikasi arsitektur teknis sistem VentureAM v3.2 sebagai lampiran pembuktian kelayakan kapitalisasi Aset Tak Berwujud (Intangible Asset) di Laporan Keuangan Perusahaan sesuai PSAK 19 / IAS 38.
+            </p>
+
+            <div className="mt-4 p-3 bg-zinc-950/50 rounded-xl border border-zinc-800/50 space-y-1.5 text-[11px] text-zinc-400">
+              <div className="flex items-center gap-2">
+                <FileCheck2 className="w-3.5 h-3.5 text-purple-400" />
+                <span>Rincian Arsitektur 50+ Komponen UI, Sinyal Intraday, & Engine Financial Reporting</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <FileCheck2 className="w-3.5 h-3.5 text-purple-400" />
+                <span>Analisis Metode Valuasi Biaya Penggantian (Direct Cost Approach: Rp 650M - Rp 850M) & Jurnal Akuntansi Amortisasi</span>
+              </div>
+            </div>
+          </div>
+
+          <div className="space-y-3 pt-2">
+            <button
+              onClick={() => handleExport('blueprint_pdf', async () => { await generateSystemBlueprintPDF(); }, 'Spesifikasi Teknis System Blueprint (PDF)')}
+              disabled={loadingAction !== null}
+              className="w-full py-3 px-4 bg-purple-600 hover:bg-purple-500 text-white text-xs font-black rounded-xl transition-all flex items-center justify-center gap-2 disabled:opacity-50 active:scale-95 shadow-lg shadow-purple-600/20"
+            >
+              {loadingAction === 'blueprint_pdf' ? (
+                <Loader2 className="w-4 h-4 animate-spin" />
+              ) : (
+                <Download className="w-4 h-4" />
+              )}
+              <span>Cetak Technical Specification Blueprint (PDF - PSAK 19)</span>
             </button>
           </div>
         </div>

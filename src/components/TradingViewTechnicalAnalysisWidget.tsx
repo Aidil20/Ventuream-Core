@@ -135,9 +135,7 @@ function TradingViewTechnicalAnalysisWidget({
   }, [symbol, interval]);
 
   return (
-    <div className="tradingview-widget-container h-[380px] w-full" ref={container}>
-      <div className="tradingview-widget-container__widget h-full w-full"></div>
-    </div>
+    <div className="tradingview-widget-container h-[380px] w-full" ref={container} />
   );
 }
 

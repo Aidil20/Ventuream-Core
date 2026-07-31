@@ -1,9 +1,10 @@
 import React, { useEffect, useRef, memo, useState } from 'react';
-import { Download, Check } from 'lucide-react';
+import { Download, Check, Sparkles, RefreshCw } from 'lucide-react';
 
 interface TradingViewWidgetProps {
   symbol?: string;
   studies?: string[];
+  interval?: string;
 }
 
 // Generate high-fidelity simulated historical OHLCV data for auditing
@@ -20,6 +21,14 @@ const generateHistoricalData = (symbolStr: string) => {
     basePrice = 10250;
     volatility = 0.012;
     volumeBase = 72000000;
+  } else if (uppercaseTicker.includes('PGAS')) {
+    basePrice = 1540;
+    volatility = 0.022;
+    volumeBase = 65000000;
+  } else if (uppercaseTicker.includes('PGEO')) {
+    basePrice = 1250;
+    volatility = 0.024;
+    volumeBase = 55000000;
   } else if (uppercaseTicker.includes('BBNI')) {
     basePrice = 4850;
     volatility = 0.018;
@@ -157,46 +166,155 @@ const generateCsv = (data: any[]) => {
 
 const DEFAULT_STUDIES = ["MASimple@tv-basicstudies", "MAExp@tv-basicstudies"];
 
-function TradingViewWidget({ symbol = "IDX:BBCA", studies = DEFAULT_STUDIES }: TradingViewWidgetProps) {
+const formatSymbolForTradingView = (sym: string): string => {
+  if (!sym) return 'IDX:BBCA';
+  let clean = sym.trim().replace(/\.JK$/i, '').toUpperCase();
+  if (clean.includes(':')) return clean;
+
+  if (['AAPL', 'NVDA', 'MSFT', 'TSLA', 'AMZN', 'GOOGL', 'META', 'AMD', 'PLTR', 'NFLX', 'SPY', 'QQQ'].includes(clean)) {
+    return `NASDAQ:${clean}`;
+  }
+  if (clean.startsWith('BTC') || clean.startsWith('ETH') || clean === 'SOLUSD') {
+    return `BITSTAMP:${clean.replace('/', '')}`;
+  }
+  if (clean === 'USDIDR' || clean === 'USD/IDR') {
+    return 'FX_IDC:USDIDR';
+  }
+  if (clean === 'IHSG' || clean === 'COMPOSITE') {
+    return 'IDX:COMPOSITE';
+  }
+  return `IDX:${clean}`;
+};
+
+function TradingViewWidget({ symbol = "IDX:BBCA", studies = DEFAULT_STUDIES, interval = "D" }: TradingViewWidgetProps) {
   const chartContainerRef = useRef<HTMLDivElement>(null);
-  const widgetId = useRef(`tv-widget-${Math.random().toString(36).substr(2, 9)}`).current;
+  const widgetId = useRef(`tv-widget-${Math.random().toString(36).substring(2, 9)}`).current;
   const [downloadSuccess, setDownloadSuccess] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
+
+  const studiesKey = JSON.stringify(studies || []);
 
   useEffect(() => {
-    const currentContainer = chartContainerRef.current;
+    let isMounted = true;
+    const container = chartContainerRef.current;
+    if (!container) return;
 
-    if (currentContainer) {
-      currentContainer.innerHTML = `<div id="${widgetId}" class="h-full w-full"></div>`;
-      
-      const scriptElement = document.createElement("script");
-      scriptElement.src = "https://s3.tradingview.com/external-embedding/embed-widget-advanced-chart.js";
-      scriptElement.type = "text/javascript";
-      scriptElement.async = true;
-      const cleanSymbol = symbol.replace(/\.JK$/i, '').toUpperCase();
-      scriptElement.innerHTML = JSON.stringify({
-        "autosize": true,
-        "symbol": cleanSymbol,
-        "interval": "D",
-        "timezone": "Asia/Jakarta",
-        "theme": "dark",
-        "style": "1",
-        "locale": "id",
-        "enable_publishing": false,
-        "allow_symbol_change": true,
-        "container_id": widgetId,
-        "calendar": false,
-        "studies": studies,
-        "support_host": "https://www.tradingview.com"
+    setIsLoading(true);
+
+    const formattedSymbol = formatSymbolForTradingView(symbol);
+
+    const loadTradingViewScript = (): Promise<boolean> => {
+      return new Promise((resolve) => {
+        if ((window as any).TradingView && (window as any).TradingView.widget) {
+          resolve(true);
+          return;
+        }
+
+        const existingScript = document.getElementById('tradingview-tv-js');
+        if (existingScript) {
+          let attempts = 0;
+          const intervalId = setInterval(() => {
+            attempts++;
+            if ((window as any).TradingView && (window as any).TradingView.widget) {
+              clearInterval(intervalId);
+              resolve(true);
+            } else if (attempts > 30) {
+              clearInterval(intervalId);
+              resolve(false);
+            }
+          }, 100);
+          return;
+        }
+
+        const script = document.createElement('script');
+        script.id = 'tradingview-tv-js';
+        script.src = 'https://s3.tradingview.com/tv.js';
+        script.type = 'text/javascript';
+        script.async = true;
+        script.onload = () => resolve(true);
+        script.onerror = () => resolve(false);
+        document.head.appendChild(script);
       });
-      currentContainer.appendChild(scriptElement);
-    }
-    return () => {
-      if (currentContainer) {
-        currentContainer.innerHTML = '';
+    };
+
+    const renderWidget = async () => {
+      if (!container || !isMounted) return;
+
+      container.innerHTML = `<div id="${widgetId}" style="height:100%;width:100%;min-height:450px;"></div>`;
+
+      const scriptLoaded = await loadTradingViewScript();
+
+      if (scriptLoaded && isMounted && (window as any).TradingView && (window as any).TradingView.widget) {
+        try {
+          new (window as any).TradingView.widget({
+            autosize: true,
+            symbol: formattedSymbol,
+            interval: interval || 'D',
+            timezone: 'Asia/Jakarta',
+            theme: 'dark',
+            style: '1',
+            locale: 'id',
+            toolbar_bg: '#09090b',
+            enable_publishing: false,
+            allow_symbol_change: true,
+            hide_side_toolbar: false,
+            container_id: widgetId,
+            studies: studies || [],
+            width: '100%',
+            height: '100%'
+          });
+          setIsLoading(false);
+          return;
+        } catch (err) {
+          console.warn('TradingView.widget constructor exception, falling back to iframe embed:', err);
+        }
+      }
+
+      // Robust Fallback: Direct iframe embed if script initialization or external script is blocked
+      if (isMounted) {
+        const targetDiv = document.getElementById(widgetId);
+        if (targetDiv) {
+          const config = {
+            autosize: true,
+            symbol: formattedSymbol,
+            interval: interval || 'D',
+            timezone: 'Asia/Jakarta',
+            theme: 'dark',
+            style: '1',
+            locale: 'id',
+            enable_publishing: false,
+            allow_symbol_change: true,
+            hide_side_toolbar: false,
+            studies: studies || [],
+            support_host: 'https://www.tradingview.com'
+          };
+
+          const iframe = document.createElement('iframe');
+          iframe.src = `https://www.tradingview-widget.com/embed-widget/advanced-chart/?locale=id#${encodeURIComponent(JSON.stringify(config))}`;
+          iframe.style.width = '100%';
+          iframe.style.height = '100%';
+          iframe.style.border = 'none';
+          iframe.style.minHeight = '450px';
+          iframe.setAttribute('allowtransparency', 'true');
+          iframe.setAttribute('scrolling', 'no');
+          iframe.setAttribute('allowfullscreen', 'true');
+
+          targetDiv.appendChild(iframe);
+        }
+        setIsLoading(false);
       }
     };
-  }, [symbol, studies, widgetId]);
+
+    renderWidget();
+
+    return () => {
+      isMounted = false;
+      if (container) {
+        container.innerHTML = '';
+      }
+    };
+  }, [symbol, studiesKey, interval, widgetId]);
 
   const handleDownload = () => {
     setIsExporting(true);
@@ -226,11 +344,12 @@ function TradingViewWidget({ symbol = "IDX:BBCA", studies = DEFAULT_STUDIES }: T
     }, 600); // 600ms responsive feedback loop
   };
 
-  const tickerName = symbol.includes(':') ? symbol.split(':')[1] : symbol;
-  const exchangeName = symbol.includes(':') ? symbol.split(':')[0] : 'IDX';
+  const formattedSymbol = formatSymbolForTradingView(symbol);
+  const tickerName = formattedSymbol.includes(':') ? formattedSymbol.split(':')[1] : formattedSymbol;
+  const exchangeName = formattedSymbol.includes(':') ? formattedSymbol.split(':')[0] : 'IDX';
 
   return (
-    <div className="h-full w-full flex flex-col bg-zinc-950 rounded-xl overflow-hidden border border-zinc-900 shadow-xl" id="tv-audit-wrapper">
+    <div className="h-full w-full min-h-[450px] flex flex-col bg-zinc-950 rounded-xl overflow-hidden border border-zinc-900 shadow-xl" id="tv-audit-wrapper">
       {/* Sleek Top-Bar Audit Control Widget Panel */}
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center px-4 py-2 bg-gradient-to-r from-zinc-950 to-zinc-900 border-b border-zinc-900 gap-2 shrink-0">
         <div className="flex items-center gap-2">
@@ -241,8 +360,8 @@ function TradingViewWidget({ symbol = "IDX:BBCA", studies = DEFAULT_STUDIES }: T
             {tickerName} Data Feed
           </span>
           <div className="hidden md:flex items-center gap-1.5 ml-2 border-l border-zinc-800 pl-3">
-            <span className="w-1 h-1 rounded-full bg-emerald-500 animate-pulse"></span>
-            <span className="text-[7.5px] font-mono text-zinc-500 uppercase tracking-widest">90 Row Verified Pack</span>
+            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
+            <span className="text-[7.5px] font-mono text-zinc-400 uppercase tracking-widest">TradingView Live Feed</span>
           </div>
         </div>
 
@@ -256,7 +375,7 @@ function TradingViewWidget({ symbol = "IDX:BBCA", studies = DEFAULT_STUDIES }: T
             onClick={handleDownload}
             disabled={isExporting}
             id="tv-btn-download-csv"
-            className={`flex items-center gap-1.5 px-3 py-1 rounded-md text-[9px] font-mono font-semibold transition-all shadow-sm ${
+            className={`flex items-center gap-1.5 px-3 py-1 rounded-md text-[9px] font-mono font-semibold transition-all shadow-sm cursor-pointer ${
               downloadSuccess
                 ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/30'
                 : 'bg-zinc-900 hover:bg-zinc-800 text-[#deff9a] border border-[#deff9a]/20 hover:border-[#deff9a]/45 active:scale-95 disabled:opacity-50'
@@ -283,11 +402,20 @@ function TradingViewWidget({ symbol = "IDX:BBCA", studies = DEFAULT_STUDIES }: T
       </div>
 
       {/* Main Chart Iframe Wrapper */}
-      <div className="flex-1 min-h-0 relative bg-zinc-950" ref={chartContainerRef}>
-        <div id={widgetId} className="h-full w-full"></div>
+      <div className="flex-1 min-h-[420px] w-full relative bg-zinc-950">
+        {isLoading && (
+          <div className="absolute inset-0 flex flex-col items-center justify-center bg-zinc-950/90 z-10 gap-2 pointer-events-none">
+            <RefreshCw className="w-6 h-6 text-[#deff9a] animate-spin" />
+            <span className="text-xs font-mono font-bold text-zinc-400 uppercase tracking-widest">
+              Memuat Chart TradingView ({tickerName})...
+            </span>
+          </div>
+        )}
+        <div ref={chartContainerRef} className="h-full w-full min-h-[420px]" />
       </div>
     </div>
   );
 }
 
 export default memo(TradingViewWidget);
+

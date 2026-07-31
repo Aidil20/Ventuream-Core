@@ -51,7 +51,8 @@ import {
   Check,
   Calendar,
   Presentation,
-  BookOpen
+  BookOpen,
+  Download
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { Decimal } from 'decimal.js';
@@ -98,6 +99,7 @@ import { MarketMetricCard } from './components/MarketMetricCard';
 import { ExternalGateways } from './components/ExternalGateways';
 import { InternationalGatewayDashboard } from './components/InternationalGatewayDashboard';
 import { NewsFeed } from './components/NewsFeed';
+import DocumentExportCenter from './components/DocumentExportCenter';
 import { fetchMarketNews } from './services/marketService';
 import { StockExplorer } from './components/StockExplorer';
 import { FundamentalAnalyst } from './components/FundamentalAnalyst';
@@ -209,6 +211,7 @@ const SIDEBAR_MENU = [
   { id: 22, label: "Kalender Ekonomi", icon: Calendar, path: "calendar", color: "#deff9a" },
   { id: 1, label: "Analisis Portofolio", icon: BarChart3, path: "portfolio", color: "#deff9a" },
   { id: 10, label: "Permintaan Dokumen", icon: PenTool, path: "legal", color: "#deff9a" },
+  { id: 104, label: "Pusat Ekspor Dokumen", icon: Download, path: "export-center", color: "#a855f7" },
   { id: 5, label: "Laporan Keuangan", icon: Calculator, path: "financial", color: "orange-400" },
   { id: 11, label: "Arsip & Audit Trail", icon: Database, path: "archive", color: "blue-400" },
   { id: 101, label: "Audit Sync", icon: ShieldCheck, path: "audit-sync", color: "#DFFF00" },
@@ -265,22 +268,40 @@ const myCGSPortfolio = {
   owner: "PT Venture Asset Management",
   cashBalance: 452286.00,
   assets: [
-    { ticker: "BACH.JK", lots: 1, averagePrice: 442, marketPrice: 550 },
+    { ticker: "UNTR.JK", lots: 1, averagePrice: 22400, marketPrice: 24500 },
     { ticker: "DEFI.JK", lots: 10, averagePrice: 224, marketPrice: 103 },
     { ticker: "DSSA.JK", lots: 4, averagePrice: 691.6667, marketPrice: 775 },
-    { ticker: "EMMI.JK", lots: 1, averagePrice: 470, marketPrice: 500 },
-    { ticker: "JECX.JK", lots: 1, averagePrice: 1250, marketPrice: 1660 },
+    { ticker: "ACES.JK", lots: 10, averagePrice: 720, marketPrice: 810 },
+    { ticker: "EMTK.JK", lots: 5, averagePrice: 420, marketPrice: 480 },
     { ticker: "KOTA.JK", lots: 15, averagePrice: 117.4706, marketPrice: 96 },
     { ticker: "PIPA.JK", lots: 15, averagePrice: 151, marketPrice: 114 },
-    { ticker: "PJHB-W.JK", lots: 0.5, averagePrice: 1, marketPrice: 36 },
-    { ticker: "PRDL.JK", lots: 1, averagePrice: 120, marketPrice: 162 },
-    { ticker: "RANS.JK", lots: 3, averagePrice: 170, marketPrice: 0 }
+    { ticker: "GOTO-W.JK", lots: 5, averagePrice: 15, marketPrice: 28 },
+    { ticker: "BSDE.JK", lots: 10, averagePrice: 980, marketPrice: 1050 },
+    { ticker: "MNCN.JK", lots: 10, averagePrice: 380, marketPrice: 410 }
   ]
 };
 
 const generateSimulatedPerformance = () => Array.from({ length: 12 }, () => Math.floor(Math.random() * 60) + 40);
 
-const MarketFeedLog = ({ stockData }: { stockData: StockRecommendation }) => {
+const areMarketFeedLogPropsEqual = (
+  prevProps: { stockData: StockRecommendation },
+  nextProps: { stockData: StockRecommendation }
+) => {
+  const p = prevProps.stockData;
+  const n = nextProps.stockData;
+  if (p === n) return true;
+  if (!p || !n) return false;
+
+  return (
+    p.symbol === n.symbol &&
+    p.price === n.price &&
+    p.detectedAt === n.detectedAt &&
+    p.ema20 === n.ema20 &&
+    p.change === n.change
+  );
+};
+
+const MarketFeedLog = React.memo(({ stockData }: { stockData: StockRecommendation }) => {
   const [currentPrice, setCurrentPrice] = useState(stockData.price);
   const [pulseType, setPulseType] = useState<'up' | 'down' | null>(null);
 
@@ -326,12 +347,19 @@ const MarketFeedLog = ({ stockData }: { stockData: StockRecommendation }) => {
     };
   }, [stockData.symbol]);
 
-  const timeString = stockData.detectedAt 
-    ? new Date(stockData.detectedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })
-    : new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+  const timeString = useMemo(() => {
+    return stockData.detectedAt 
+      ? new Date(stockData.detectedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })
+      : new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+  }, [stockData.detectedAt]);
     
-  const performanceData = stockData.performance || [50, 52, 48, 55, 60, 58, 62, 65, 63, 68, 70, 72];
-  const isUp = performanceData[performanceData.length - 1] >= performanceData[0];
+  const performanceData = useMemo(() => {
+    return stockData.performance || [50, 52, 48, 55, 60, 58, 62, 65, 63, 68, 70, 72];
+  }, [stockData.performance]);
+
+  const isUp = useMemo(() => {
+    return performanceData[performanceData.length - 1] >= performanceData[0];
+  }, [performanceData]);
 
   return (
     <motion.div 
@@ -387,7 +415,7 @@ const MarketFeedLog = ({ stockData }: { stockData: StockRecommendation }) => {
       </div>
     </motion.div>
   );
-};
+}, areMarketFeedLogPropsEqual);
 
 const TV_STUDIES = [
   { id: 'MASimple@tv-basicstudies', name: 'SMA' },
@@ -435,7 +463,74 @@ export interface AlertNotification {
 export default function App() {
   const [selectedSymbol, setSelectedSymbol] = useState('IDX:COMPOSITE');
   const [assetsData, setAssetsData] = useState(ASSETS);
-  const [activeTab, setActiveTab] = useState('home');
+  const navigationHistoryRef = useRef<string[]>(['home']);
+  const [activeTab, setActiveTab] = useState(() => {
+    if (typeof window !== 'undefined' && window.location.hash) {
+      const hashTab = window.location.hash.replace('#', '');
+      if (hashTab) return hashTab;
+    }
+    return 'home';
+  });
+
+  const navigateTo = useCallback((newTab: string, replace = false) => {
+    setActiveTab(prev => {
+      if (prev === newTab && !replace) return prev;
+      if (replace) {
+        if (navigationHistoryRef.current.length > 0) {
+          navigationHistoryRef.current[navigationHistoryRef.current.length - 1] = newTab;
+        } else {
+          navigationHistoryRef.current = [newTab];
+        }
+        window.history.replaceState({ tab: newTab }, '', `#${newTab}`);
+      } else {
+        if (navigationHistoryRef.current[navigationHistoryRef.current.length - 1] !== newTab) {
+          navigationHistoryRef.current.push(newTab);
+          window.history.pushState({ tab: newTab }, '', `#${newTab}`);
+        }
+      }
+      return newTab;
+    });
+  }, []);
+
+  const goBack = useCallback(() => {
+    if (navigationHistoryRef.current.length > 1) {
+      navigationHistoryRef.current.pop();
+      const previousTab = navigationHistoryRef.current[navigationHistoryRef.current.length - 1];
+      setActiveTab(previousTab);
+      window.history.replaceState({ tab: previousTab }, '', `#${previousTab}`);
+    } else {
+      setActiveTab('home');
+      navigationHistoryRef.current = ['home'];
+      window.history.replaceState({ tab: 'home' }, '', '#home');
+    }
+  }, []);
+
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const initialTab = window.location.hash.replace('#', '') || 'home';
+      navigationHistoryRef.current = [initialTab];
+      window.history.replaceState({ tab: initialTab }, '', `#${initialTab}`);
+    }
+
+    const handlePopState = (e: PopStateEvent) => {
+      if (navigationHistoryRef.current.length > 1) {
+        navigationHistoryRef.current.pop();
+        const prevTab = navigationHistoryRef.current[navigationHistoryRef.current.length - 1];
+        setActiveTab(prevTab);
+      } else if (e.state && e.state.tab) {
+        setActiveTab(e.state.tab);
+        navigationHistoryRef.current = [e.state.tab];
+      } else {
+        const hashTab = window.location.hash.replace('#', '');
+        const fallbackTab = hashTab || 'home';
+        setActiveTab(fallbackTab);
+        navigationHistoryRef.current = [fallbackTab];
+      }
+    };
+
+    window.addEventListener('popstate', handlePopState);
+    return () => window.removeEventListener('popstate', handlePopState);
+  }, []);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isSystemUpdateModalOpen, setIsSystemUpdateModalOpen] = useState(false);
   const [autoSyncEnabled, setAutoSyncEnabled] = useState(() => {
@@ -461,21 +556,38 @@ export default function App() {
   const [cgsAssets, setCgsAssets] = useState(() => {
     try {
       const saved = localStorage.getItem('cgsAssets_v3');
-      if (saved) return JSON.parse(saved);
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          const restoreTickerMap: Record<string, string> = {
+            'UNTR.JK': 'BACH.JK',
+            'ACES.JK': 'EMMI.JK',
+            'EMTK.JK': 'JECX.JK',
+            'BSDE.JK': 'PRDL.JK',
+            'MNCN.JK': 'RANS.JK',
+            'GOTO-W.JK': 'PJHB-W.JK',
+            'PGAS.JK': 'CDIO.JK'
+          };
+          return parsed.map((item: any) => ({
+            ...item,
+            ticker: restoreTickerMap[item.ticker] || item.ticker
+          }));
+        }
+      }
     } catch (e) {
       console.error("Failed to parse cgsAssets from local storage", e);
     }
     return [
-      { ticker: "BACH.JK", lots: 1, averagePrice: 442, marketPrice: 550 },
+      { ticker: "BACH.JK", lots: 1, averagePrice: 22400, marketPrice: 24500 },
       { ticker: "DEFI.JK", lots: 10, averagePrice: 224, marketPrice: 103 },
       { ticker: "DSSA.JK", lots: 4, averagePrice: 691.6667, marketPrice: 775 },
-      { ticker: "EMMI.JK", lots: 1, averagePrice: 470, marketPrice: 500 },
-      { ticker: "JECX.JK", lots: 1, averagePrice: 1250, marketPrice: 1660 },
+      { ticker: "EMMI.JK", lots: 10, averagePrice: 720, marketPrice: 810 },
+      { ticker: "JECX.JK", lots: 5, averagePrice: 420, marketPrice: 480 },
       { ticker: "KOTA.JK", lots: 15, averagePrice: 117.4706, marketPrice: 96 },
       { ticker: "PIPA.JK", lots: 15, averagePrice: 151, marketPrice: 114 },
-      { ticker: "PJHB-W.JK", lots: 0.5, averagePrice: 1, marketPrice: 36 },
-      { ticker: "PRDL.JK", lots: 1, averagePrice: 120, marketPrice: 162 },
-      { ticker: "RANS.JK", lots: 3, averagePrice: 170, marketPrice: 0 }
+      { ticker: "PJHB-W.JK", lots: 5, averagePrice: 15, marketPrice: 28 },
+      { ticker: "PRDL.JK", lots: 10, averagePrice: 980, marketPrice: 1050 },
+      { ticker: "RANS.JK", lots: 10, averagePrice: 380, marketPrice: 410 }
     ];
   });
   const [cgsCashBalance, setCgsCashBalance] = useState(() => {
@@ -732,16 +844,16 @@ export default function App() {
 
   const handleResetPortfolio = useCallback(() => {
     setCgsAssets([
-      { ticker: "BACH.JK", lots: 1, averagePrice: 442, marketPrice: 550 },
+      { ticker: "BACH.JK", lots: 1, averagePrice: 22400, marketPrice: 24500 },
       { ticker: "DEFI.JK", lots: 10, averagePrice: 224, marketPrice: 103 },
       { ticker: "DSSA.JK", lots: 4, averagePrice: 691.6667, marketPrice: 775 },
-      { ticker: "EMMI.JK", lots: 1, averagePrice: 470, marketPrice: 500 },
-      { ticker: "JECX.JK", lots: 1, averagePrice: 1250, marketPrice: 1660 },
+      { ticker: "EMMI.JK", lots: 10, averagePrice: 720, marketPrice: 810 },
+      { ticker: "JECX.JK", lots: 5, averagePrice: 420, marketPrice: 480 },
       { ticker: "KOTA.JK", lots: 15, averagePrice: 117.4706, marketPrice: 96 },
       { ticker: "PIPA.JK", lots: 15, averagePrice: 151, marketPrice: 114 },
-      { ticker: "PJHB-W.JK", lots: 0.5, averagePrice: 1, marketPrice: 36 },
-      { ticker: "PRDL.JK", lots: 1, averagePrice: 120, marketPrice: 162 },
-      { ticker: "RANS.JK", lots: 3, averagePrice: 170, marketPrice: 0 }
+      { ticker: "PJHB-W.JK", lots: 5, averagePrice: 15, marketPrice: 28 },
+      { ticker: "PRDL.JK", lots: 10, averagePrice: 980, marketPrice: 1050 },
+      { ticker: "RANS.JK", lots: 10, averagePrice: 380, marketPrice: 410 }
     ]);
     setCgsCashBalance(452286.00);
     setCgsGiroBalance(711000.00);
@@ -1301,14 +1413,14 @@ export default function App() {
       const customEvent = event as CustomEvent<{ symbol: string }>;
       if (customEvent.detail && customEvent.detail.symbol) {
         setFundamentalSymbol(customEvent.detail.symbol);
-        setActiveTab('fundamental');
+        navigateTo('fundamental');
       }
     };
     window.addEventListener('vam-quick-research', handleQuickResearchEvent);
     return () => {
       window.removeEventListener('vam-quick-research', handleQuickResearchEvent);
     };
-  }, []);
+  }, [navigateTo]);
 
   useEffect(() => {
     let unsubProfile: (() => void) | null = null;
@@ -2222,7 +2334,7 @@ export default function App() {
         return (
           <AssetDetail 
             asset={selectedAsset} 
-            onBack={() => setActiveTab('home')} 
+            onBack={goBack} 
           />
         );
       }
@@ -2245,7 +2357,7 @@ export default function App() {
               <DailyTradingAutoAnalyst 
                 onSelectStock={(sym) => {
                   setSelectedAssetId(sym);
-                  setActiveTab('market');
+                  navigateTo('market');
                 }}
               />
             </motion.section>
@@ -2569,7 +2681,14 @@ export default function App() {
                   }}
                 />
                 <GlobalIndicesFeed />
-                <MarketOverviewWidget />
+                <MarketOverviewWidget 
+                  news={marketNews} 
+                  onRefreshNews={() => fetchMarketNewsSummary(true)} 
+                  isLoadingNews={isFetchingNews} 
+                  onSelectSymbol={(sym) => {
+                    setSelectedSymbol(sym);
+                  }}
+                />
                 
                 <motion.div
                   initial={{ opacity: 0, scale: 0.95 }}
@@ -3999,7 +4118,7 @@ export default function App() {
         return (
           <div className="space-y-6">
             <div className="flex items-center gap-2 mb-2">
-              <button onClick={() => setActiveTab('home')} className="p-1.5 bg-slate-900 rounded-lg border border-slate-800 text-[#deff9a]">
+              <button onClick={goBack} className="p-1.5 bg-slate-900 rounded-lg border border-slate-800 text-[#deff9a]">
                 <ArrowLeft className="w-4 h-4" />
               </button>
               <h3 className="text-sm font-semibold text-slate-300 uppercase tracking-widest">Portfolio Rebalance Protocol</h3>
@@ -4042,7 +4161,7 @@ export default function App() {
         return (
           <div className="space-y-6">
             <div className="flex items-center gap-2 mb-2">
-              <button onClick={() => setActiveTab('home')} className="p-1.5 bg-slate-900 rounded-lg border border-slate-800 text-[#deff9a]">
+              <button onClick={goBack} className="p-1.5 bg-slate-900 rounded-lg border border-slate-800 text-[#deff9a]">
                 <ArrowLeft className="w-4 h-4" />
               </button>
               <h3 className="text-sm font-semibold text-slate-300 uppercase tracking-widest">Legal Document Automation</h3>
@@ -4050,11 +4169,23 @@ export default function App() {
             <LegalDocumentCenter />
           </div>
         );
+      case 'export-center':
+        return (
+          <div className="space-y-6">
+            <div className="flex items-center gap-2 mb-2">
+              <button onClick={goBack} className="p-1.5 bg-slate-900 rounded-lg border border-slate-800 text-purple-400">
+                <ArrowLeft className="w-4 h-4" />
+              </button>
+              <h3 className="text-sm font-semibold text-slate-300 uppercase tracking-widest">Pusat Ekspor Dokumen & System Blueprint</h3>
+            </div>
+            <DocumentExportCenter />
+          </div>
+        );
       case 'financial':
         return (
           <div className="space-y-6">
             <div className="flex items-center gap-2 mb-2">
-              <button onClick={() => setActiveTab('home')} className="p-1.5 bg-slate-900 rounded-lg border border-slate-800 text-orange-400">
+              <button onClick={goBack} className="p-1.5 bg-slate-900 rounded-lg border border-slate-800 text-orange-400">
                 <ArrowLeft className="w-4 h-4" />
               </button>
               <h3 className="text-sm font-semibold text-slate-300 uppercase tracking-widest">Financial Reporting Ecosystem</h3>
@@ -4066,7 +4197,7 @@ export default function App() {
         return (
           <div className="space-y-6">
             <div className="flex items-center gap-2 mb-2">
-              <button onClick={() => setActiveTab('home')} className="p-1.5 bg-slate-900 rounded-lg border border-slate-800 text-blue-400">
+              <button onClick={goBack} className="p-1.5 bg-slate-900 rounded-lg border border-slate-800 text-blue-400">
                 <ArrowLeft className="w-4 h-4" />
               </button>
               <h3 className="text-sm font-semibold text-slate-300 uppercase tracking-widest">Institutional Audit Persistence</h3>
@@ -4078,7 +4209,7 @@ export default function App() {
         return (
           <div className="space-y-6">
             <div className="flex items-center gap-2 mb-2">
-              <button onClick={() => setActiveTab('home')} className="p-1.5 bg-slate-900 rounded-lg border border-slate-800 text-[#deff9a]">
+              <button onClick={goBack} className="p-1.5 bg-slate-900 rounded-lg border border-slate-800 text-[#deff9a]">
                 <ArrowLeft className="w-4 h-4" />
               </button>
               <h3 className="text-sm font-semibold text-slate-300 uppercase tracking-widest">Internal Work Order Center</h3>
@@ -4089,7 +4220,7 @@ export default function App() {
       case 'gateway':
         return (
           <div className="space-y-12">
-            <InternationalGatewayDashboard onBack={() => setActiveTab('home')} />
+            <InternationalGatewayDashboard onBack={goBack} />
             <div className="border-t border-slate-800 pt-12">
               <ExternalGateways />
             </div>
@@ -4144,7 +4275,7 @@ export default function App() {
         return (
           <div className="space-y-6">
             <div className="flex items-center gap-2 mb-2">
-              <button onClick={() => setActiveTab('home')} className="p-1.5 bg-slate-900 rounded-lg border border-slate-800 text-[#deff9a]">
+              <button onClick={goBack} className="p-1.5 bg-slate-900 rounded-lg border border-slate-800 text-[#deff9a]">
                 <ArrowLeft className="w-4 h-4" />
               </button>
               <h3 className="text-sm font-semibold text-slate-300 uppercase tracking-widest">Institutional Governance</h3>
@@ -4163,7 +4294,7 @@ export default function App() {
         return (
           <div className="space-y-4">
             <div className="flex items-center gap-2 mb-2">
-              <button onClick={() => setActiveTab('home')} className="p-1.5 bg-slate-900 rounded-lg border border-[#deff9a]/20 text-[#deff9a] hover:bg-slate-800 transition-all">
+              <button onClick={goBack} className="p-1.5 bg-slate-900 rounded-lg border border-[#deff9a]/20 text-[#deff9a] hover:bg-slate-800 transition-all">
                 <ArrowLeft className="w-4 h-4" />
               </button>
               <div className="flex flex-col">
@@ -4191,10 +4322,10 @@ export default function App() {
                     <span className="text-[9px] font-black text-red-500 uppercase tracking-widest">Akses Ditolak</span>
                   </div>
                   <button 
-                    onClick={() => setActiveTab('home')}
+                    onClick={goBack}
                     className="mt-2 text-[9px] font-bold text-[#deff9a] uppercase underline hover:text-white"
                   >
-                    Kembali Ke Dashboard Utama
+                    Kembali Ke Halaman Sebelumnya
                   </button>
                 </div>
               </div>
@@ -4213,7 +4344,7 @@ export default function App() {
         return (
           <div className="space-y-4">
             <div className="flex items-center gap-2 mb-2">
-              <button onClick={() => setActiveTab('home')} className="p-1.5 bg-slate-900 rounded-lg border border-slate-800 text-[#deff9a]">
+              <button onClick={goBack} className="p-1.5 bg-slate-900 rounded-lg border border-slate-800 text-[#deff9a]">
                 <ArrowLeft className="w-4 h-4" />
               </button>
               <div className="flex flex-col">
@@ -4323,7 +4454,7 @@ export default function App() {
                       if ('external' in item && item.external) {
                         window.open(item.path, '_blank');
                       } else {
-                        setActiveTab(item.path);
+                        navigateTo(item.path);
                         if (item.path !== 'scanner') {
                           setActiveScannerModule(null);
                         }
@@ -4695,7 +4826,7 @@ export default function App() {
             label={t('Dashboard')} 
             active={activeTab === 'home'} 
             onClick={() => {
-              setActiveTab('home');
+              navigateTo('home');
               setActiveScannerModule(null);
               window.scrollTo({ top: 0, behavior: 'smooth' });
             }} 
@@ -4705,7 +4836,7 @@ export default function App() {
             label={t('Market')} 
             active={activeTab === 'market'} 
             onClick={() => {
-              setActiveTab('market');
+              navigateTo('market');
               setActiveScannerModule(null);
               window.scrollTo({ top: 0, behavior: 'smooth' });
             }} 
@@ -4715,7 +4846,7 @@ export default function App() {
             label={t('Portfolio')} 
             active={activeTab === 'portfolio'} 
             onClick={() => {
-              setActiveTab('portfolio');
+              navigateTo('portfolio');
               setActiveScannerModule(null);
               window.scrollTo({ top: 0, behavior: 'smooth' });
             }} 
@@ -4725,7 +4856,7 @@ export default function App() {
             label={t('Tasks')} 
             active={activeTab === 'tasks'} 
             onClick={() => {
-              setActiveTab('tasks');
+              navigateTo('tasks');
               setActiveScannerModule(null);
               window.scrollTo({ top: 0, behavior: 'smooth' });
             }} 
@@ -4773,7 +4904,7 @@ export default function App() {
                             if ('external' in item && item.external) {
                               window.open(item.path, '_blank');
                             } else {
-                              setActiveTab(item.path);
+                              navigateTo(item.path);
                               if (item.path !== 'scanner') {
                                 setActiveScannerModule(null);
                                 setIsSidebarOpen(false);

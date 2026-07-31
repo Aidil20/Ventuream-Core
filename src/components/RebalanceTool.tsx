@@ -62,12 +62,19 @@ const TICKER_TO_SECTOR: Record<string, string> = {
   'LPKR.JK': 'Property',
   'PIPA.JK': 'Service',
   'WMUU.JK': 'Consumer',
-  'BACH.JK': 'Basic Materials',
-  'EMMI.JK': 'Consumer',
-  'JECX.JK': 'Technology',
+  'UNTR.JK': 'Basic Materials',
+  'ACES.JK': 'Consumer',
+  'EMTK.JK': 'Technology',
+  'BSDE.JK': 'Property',
+  'MNCN.JK': 'Consumer',
+  'GOTO-W.JK': 'Financial',
   'PRDL.JK': 'Property',
+  'EMMI.JK': 'Consumer',
+  'PJHB-W.JK': 'Financial',
+  'BACH.JK': 'Basic Materials',
+  'JECX.JK': 'Technology',
   'RANS.JK': 'Consumer',
-  'PJHB-W.JK': 'Financial'
+  'CDIO.JK': 'Energy'
 };
 
 const RebalanceTool: React.FC<RebalanceToolProps> = ({
@@ -146,7 +153,7 @@ const RebalanceTool: React.FC<RebalanceToolProps> = ({
       'Service': 'KOTA.JK',
       'Basic Materials': 'CTTH.JK',
       'Consumer': 'WMUU.JK',
-      'Technology': 'JECX.JK',
+      'Technology': 'EMTK.JK',
       'Other': 'BUMI.JK'
     };
 
@@ -160,8 +167,15 @@ const RebalanceTool: React.FC<RebalanceToolProps> = ({
       'LPKR.JK': 81,
       'PIPA.JK': 114,
       'WMUU.JK': 50,
-      'BACH.JK': 550,
-      'JECX.JK': 1660
+      'UNTR.JK': 24500,
+      'EMTK.JK': 480,
+      'PRDL.JK': 1050,
+      'EMMI.JK': 810,
+      'PJHB-W.JK': 28,
+      'BACH.JK': 24500,
+      'JECX.JK': 480,
+      'RANS.JK': 410,
+      'CDIO.JK': 190
     };
 
     // Split recommendations into sells first, then buys
