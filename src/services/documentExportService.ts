@@ -477,62 +477,249 @@ export async function generatePresentationPDF() {
 export async function generatePresentationPPTX() {
   const pptx = new pptxgen();
   pptx.layout = 'LAYOUT_16x9';
-  pptx.author = 'VentureAM Systems';
+  pptx.author = 'VentureAM Compliance & Tech Systems';
   pptx.company = 'PT Venture AM Institutional';
-  pptx.title = 'VentureAM Institutional Presentation Deck';
+  pptx.title = 'VentureAM Institutional & Regulatory Presentation Deck';
 
-  // SLIDE 1
+  // SLIDE 1: COVER
   const slide1 = pptx.addSlide();
   slide1.background = { color: "0B0E14" };
   slide1.addShape(pptx.ShapeType.rect, {
-    x: 0.5, y: 0.5, w: 9.0, h: 4.6,
+    x: 0.5, y: 0.5, w: 12.3, h: 6.2,
     line: { color: "DFFF00", width: 1.5 },
     fill: { color: "111622" }
   });
-  slide1.addText("VENTUREAM INSTITUTIONAL", {
-    x: 0.8, y: 1.2, w: 8.4, h: 0.8,
-    fontSize: 28, bold: true, color: "DFFF00", fontFace: "Calibri", align: "center"
+  slide1.addText("VENTUREAM INSTITUTIONAL SYSTEM", {
+    x: 0.8, y: 1.5, w: 11.7, h: 0.8,
+    fontSize: 32, bold: true, color: "DFFF00", fontFace: "Calibri", align: "center"
   });
-  slide1.addText("Next-Generation Multi-Asset Portfolio & Trading System", {
-    x: 0.8, y: 2.0, w: 8.4, h: 0.5,
-    fontSize: 16, bold: true, color: "FFFFFF", fontFace: "Calibri", align: "center"
+  slide1.addText("Sistem Manajemen Portofolio, Analytics & Trading Inovatif", {
+    x: 0.8, y: 2.4, w: 11.7, h: 0.5,
+    fontSize: 18, bold: true, color: "FFFFFF", fontFace: "Calibri", align: "center"
+  });
+  slide1.addText("Dokumen Presentasi Regulator (OJK & BI) | Kepatuhan, Keamanan & Arsitektur Teknis", {
+    x: 0.8, y: 3.1, w: 11.7, h: 0.4,
+    fontSize: 12, color: "94A3B8", fontFace: "Calibri", align: "center"
   });
 
-  // SLIDE 2: RECOMMENDATION BASIS
+  slide1.addTable([
+    [{ text: "International Gateway", options: { bold: true, color: "DFFF00", align: "center" } },
+     { text: "AI Analytics Engine", options: { bold: true, color: "DFFF00", align: "center" } },
+     { text: "Security & Governance", options: { bold: true, color: "DFFF00", align: "center" } },
+     { text: "Regulatory Audit Log", options: { bold: true, color: "DFFF00", align: "center" } }],
+    [{ text: "IBKR & CGS CIMB API", options: { color: "CBD5E1", align: "center" } },
+     { text: "Google Gemini Grounded", options: { color: "CBD5E1", align: "center" } },
+     { text: "RBAC & OAuth 2.0", options: { color: "CBD5E1", align: "center" } },
+     { text: "Immutable Audit Trail", options: { color: "CBD5E1", align: "center" } }]
+  ], {
+    x: 1.2, y: 4.2, w: 10.9, h: 1.5,
+    fill: { color: "1E293B" },
+    fontSize: 10,
+    fontFace: "Calibri"
+  });
+
+  // SLIDE 2: EXECUTIVE SUMMARY & OBJECTIVES
   const slide2 = pptx.addSlide();
   slide2.background = { color: "0B0E14" };
-  slide2.addText("REKOMENDASI SAHAM & BASIS ANALISIS", {
-    x: 0.5, y: 0.4, w: 9.0, h: 0.5,
+  slide2.addText("1. RINGKASAN EKSEKUTIF & TUJUAN SISTEM", {
+    x: 0.6, y: 0.4, w: 12.0, h: 0.5,
     fontSize: 20, bold: true, color: "DFFF00", fontFace: "Calibri"
   });
 
-  const recCards = [
-    { title: "1. MACD & RSI Momentum", text: "Perpotongan MACD signal line & RSI 14 di zona akumulasi ideal." },
-    { title: "2. Moving Averages & Vol", text: "EMA 20/50 Golden Cross disertai lonjakan volume harian di atas 200%." },
-    { title: "3. Fibonacci Retracement", text: "Penentuan area support/resistance presisi (23.6%, 38.2%, 61.8%)." },
-    { title: "4. Sentimen & Gemini AI", text: "Audit skor 0-100 berbasis pengolahan berita emiten & laporan keuangan." }
+  const objCards = [
+    { title: "Transparansi & Visibilitas NAV", text: "Konsolidasi nilai portofolio multi-aset secara real-time, pencatatan saldo RDN, dan pelacakan 30-Day Realized P&L yang akurat." },
+    { title: "Gateway Transaksi Institusional", text: "Konektivitas terintegrasi dengan broker terlisensi (Interactive Brokers & CGS CIMB) dengan perlindungan saldo & batas lot." },
+    { title: "Analisis Riset Teruji (Grounded AI)", text: "Penggabungan indikator teknikal murni (MACD/RSI/EMA/Fibonacci) dengan audit sentimen emiten berbasis Google Gemini AI." },
+    { title: "Manajemen Risiko & Rebalance", text: "Kalkulasi lot presisi, verifikasi rasio solvabilitas Altman Z-Score emiten, dan pengesahan kriteria sebelum eksekusi." }
   ];
 
-  recCards.forEach((c, i) => {
-    const xPos = 0.5 + (i % 2) * 4.6;
-    const yPos = 1.1 + Math.floor(i / 2) * 1.8;
+  objCards.forEach((c, i) => {
+    const xPos = 0.6 + (i % 2) * 6.0;
+    const yPos = 1.1 + Math.floor(i / 2) * 2.5;
     slide2.addShape(pptx.ShapeType.roundRect, {
-      x: xPos, y: yPos, w: 4.3, h: 1.6,
+      x: xPos, y: yPos, w: 5.6, h: 2.2,
       fill: { color: "18202E" },
       line: { color: "334155", width: 1 }
     });
     slide2.addText(c.title, {
-      x: xPos + 0.2, y: yPos + 0.2, w: 3.9, h: 0.35,
-      fontSize: 12, bold: true, color: "DFFF00", fontFace: "Calibri"
+      x: xPos + 0.3, y: yPos + 0.3, w: 5.0, h: 0.4,
+      fontSize: 13, bold: true, color: "DFFF00", fontFace: "Calibri"
     });
     slide2.addText(c.text, {
-      x: xPos + 0.2, y: yPos + 0.6, w: 3.9, h: 0.8,
-      fontSize: 10, color: "E2E8F0", fontFace: "Calibri"
+      x: xPos + 0.3, y: yPos + 0.8, w: 5.0, h: 1.2,
+      fontSize: 10.5, color: "E2E8F0", fontFace: "Calibri"
     });
   });
 
-  await pptx.writeFile({ fileName: 'VentureAM_Presentation_Deck.pptx' });
+  // SLIDE 3: REGULATORY COMPLIANCE & GOVERNANCE
+  const slide3 = pptx.addSlide();
+  slide3.background = { color: "0B0E14" };
+  slide3.addText("2. KERANGKA REGULASI & KEPATUHAN (OJK & BI)", {
+    x: 0.6, y: 0.4, w: 12.0, h: 0.5,
+    fontSize: 20, bold: true, color: "DFFF00", fontFace: "Calibri"
+  });
+
+  const regRows = [
+    { pillar: "Perlindungan Dana Nasabah", std: "Peraturan OJK No. 10/POJK.04/2018", impl: "Pemisahan tegas saldo RDN/Giro bank penampung dari rekening operasional sistem. Sistem tidak memegang dana nasabah secara langsung." },
+    { pillar: "Tata Kelola AI Transparan", std: "Prinsip AI Governance & Transparansi", impl: "Penggunaan AI Gemini bersifat assistive (penunjang riset), bukan pembuat keputusan transaksi otomatis (non-discretionary autonomous execution)." },
+    { pillar: "Akuntansi Aset Tak Berwujud", std: "PSAK 19 / IAS 38 Valuation Standard", impl: "Sistem Blueprint & komponen software telah diaudit dengan Direct Cost Replacement Method untuk kapitalisasi aset resmi." },
+    { pillar: "Pelaporan Keuangan Responif", std: "Standardisasi Financial Reporting Center", impl: "Penerbitan otomatis Laporan Neraca, Laba Rugi, dan Arus Kas sesuai format pelaporan regulator secara periodik." }
+  ];
+
+  slide3.addTable([
+    [
+      { text: "PILAR KEPATUHAN", options: { bold: true, color: "DFFF00", fill: { color: "1E293B" } } },
+      { text: "STANDAR ACUAN", options: { bold: true, color: "DFFF00", fill: { color: "1E293B" } } },
+      { text: "IMPLEMENTASI PADA VENTUREAM", options: { bold: true, color: "DFFF00", fill: { color: "1E293B" } } }
+    ],
+    ...regRows.map(r => [
+      { text: r.pillar, options: { bold: true, color: "FFFFFF", fill: { color: "111827" } } },
+      { text: r.std, options: { color: "94A3B8", fill: { color: "111827" } } },
+      { text: r.impl, options: { color: "CBD5E1", fill: { color: "111827" } } }
+    ])
+  ], {
+    x: 0.6, y: 1.1, w: 12.0, h: 5.0,
+    fontSize: 10,
+    fontFace: "Calibri"
+  });
+
+  // SLIDE 4: SECURITY & AUDIT TRAIL
+  const slide4 = pptx.addSlide();
+  slide4.background = { color: "0B0E14" };
+  slide4.addText("3. KEAMANAN SISTEM & JEJAK AUDIT (AUDIT TRAIL)", {
+    x: 0.6, y: 0.4, w: 12.0, h: 0.5,
+    fontSize: 20, bold: true, color: "DFFF00", fontFace: "Calibri"
+  });
+
+  const secPillars = [
+    { title: "Otentikasi & RBAC", desc: "Peran pengguna terverifikasi via Firebase Auth & OAuth 2.0. Hak akses menu dibatasi bertingkat (Public, Manager, Admin)." },
+    { title: "Enkripsi Transmisi", desc: "Semua komunikasi data antar gateway menggunakan enkripsi SSL/TLS 1.3 dan Secure WebSocket (WSS) Socket.IO." },
+    { title: "Immutable Audit Log", desc: "Pencatatan otomatis setiap aktivitas simulasi order, perubahan portofolio, dan ekspor laporan dengan hash verifikasi." },
+    { title: "Cloud Backup & Disaster Recovery", desc: "Integrasi Google Drive Enterprise dengan skema auto-sync untuk pencadangan berkas sistem dan dokumen hukum." }
+  ];
+
+  secPillars.forEach((p, idx) => {
+    const xPos = 0.6 + (idx % 2) * 6.0;
+    const yPos = 1.1 + Math.floor(idx / 2) * 2.5;
+    slide4.addShape(pptx.ShapeType.roundRect, {
+      x: xPos, y: yPos, w: 5.6, h: 2.2,
+      fill: { color: "18202E" },
+      line: { color: "334155", width: 1 }
+    });
+    slide4.addText(p.title, {
+      x: xPos + 0.3, y: yPos + 0.3, w: 5.0, h: 0.4,
+      fontSize: 13, bold: true, color: "DFFF00", fontFace: "Calibri"
+    });
+    slide4.addText(p.desc, {
+      x: xPos + 0.3, y: yPos + 0.8, w: 5.0, h: 1.2,
+      fontSize: 10.5, color: "E2E8F0", fontFace: "Calibri"
+    });
+  });
+
+  // SLIDE 5: ANALYTICS ENGINE & AI DISCLOSURE
+  const slide5 = pptx.addSlide();
+  slide5.background = { color: "0B0E14" };
+  slide5.addText("4. ANALYTICS ENGINE & TRANSPARANSI AI", {
+    x: 0.6, y: 0.4, w: 12.0, h: 0.5,
+    fontSize: 20, bold: true, color: "DFFF00", fontFace: "Calibri"
+  });
+
+  const aiCards = [
+    { title: "Kombinasi Teknikal Murni", text: "MACD Crossover, RSI 14 Momentum, EMA 20/50/200, & Fibonacci Retracement dihitung secara deterministic tanpa halusinasi." },
+    { title: "Grounded Live Research", text: "Integrasi Google Gemini API dengan pencarian Google Search langsung (Grounded Search) untuk menyaring berita Bloomberg & Reuters." },
+    { title: "Audit Kebangkrutan Altman Z-Score", text: "Evaluasi kesehatan solvabilitas emiten menggunakan formula akademis Altman Z-Score untuk mengelompokkan emiten Safe, Grey, atau Distress." },
+    { title: "Decoupled Human-in-the-Loop", text: "Semua sinyal AI bersifat indikatif. Eksekusi transaksi wajib memerlukan persetujuan dan verifikasi pengguna (User Order Authorization)." }
+  ];
+
+  aiCards.forEach((c, i) => {
+    const xPos = 0.6 + (i % 2) * 6.0;
+    const yPos = 1.1 + Math.floor(i / 2) * 2.5;
+    slide5.addShape(pptx.ShapeType.roundRect, {
+      x: xPos, y: yPos, w: 5.6, h: 2.2,
+      fill: { color: "18202E" },
+      line: { color: "334155", width: 1 }
+    });
+    slide5.addText(c.title, {
+      x: xPos + 0.3, y: yPos + 0.3, w: 5.0, h: 0.4,
+      fontSize: 13, bold: true, color: "DFFF00", fontFace: "Calibri"
+    });
+    slide5.addText(c.text, {
+      x: xPos + 0.3, y: yPos + 0.8, w: 5.0, h: 1.2,
+      fontSize: 10.5, color: "E2E8F0", fontFace: "Calibri"
+    });
+  });
+
+  // SLIDE 6: RISK MANAGEMENT & REBALANCE
+  const slide6 = pptx.addSlide();
+  slide6.background = { color: "0B0E14" };
+  slide6.addText("5. MANAJEMEN RISIKO & PROTOKOL REBALANCE", {
+    x: 0.6, y: 0.4, w: 12.0, h: 0.5,
+    fontSize: 20, bold: true, color: "DFFF00", fontFace: "Calibri"
+  });
+
+  slide6.addTable([
+    [
+      { text: "PARAMETIK RISIKO", options: { bold: true, color: "DFFF00", fill: { color: "1E293B" } } },
+      { text: "MEKANISME KONTROL SINKRONISASI", options: { bold: true, color: "DFFF00", fill: { color: "1E293B" } } }
+    ],
+    [
+      { text: "Kecukupan Saldo RDN", options: { bold: true, color: "FFFFFF", fill: { color: "111827" } } },
+      { text: "Pemeriksaan otomatis saldo kas sebelum kalkulasi penambahan lot saham untuk mencegah overdraft RDN.", options: { color: "CBD5E1", fill: { color: "111827" } } }
+    ],
+    [
+      { text: "Batas Max Exposure Sektor", options: { bold: true, color: "FFFFFF", fill: { color: "111827" } } },
+      { text: "Diversifikasi bobot maksimal per sektor untuk meminimalisir risiko konsentrasi portofolio.", options: { color: "CBD5E1", fill: { color: "111827" } } }
+    ],
+    [
+      { text: "Presisi Risk/Reward Ratio", options: { bold: true, color: "FFFFFF", fill: { color: "111827" } } },
+      { text: "Penerapan batas Target Price 1, Target Price 2, dan Stop Loss wajib rasio minimal 1:2.", options: { color: "CBD5E1", fill: { color: "111827" } } }
+    ],
+    [
+      { text: "Kalkulasi Biaya Transaksi", options: { bold: true, color: "FFFFFF", fill: { color: "111827" } } },
+      { text: "Memperhitungkan komisi broker, levy bursa, dan PPh sebelum menyetujui transaksi rebalance.", options: { color: "CBD5E1", fill: { color: "111827" } } }
+    ]
+  ], {
+    x: 0.6, y: 1.1, w: 12.0, h: 5.0,
+    fontSize: 10.5,
+    fontFace: "Calibri"
+  });
+
+  // SLIDE 7: CONCLUSION & TECHNICAL SPECS
+  const slide7 = pptx.addSlide();
+  slide7.background = { color: "0B0E14" };
+  slide7.addText("6. KESIMPULAN & SIAP DEPLOYMENT INSTITUSIONAL", {
+    x: 0.6, y: 0.4, w: 12.0, h: 0.5,
+    fontSize: 20, bold: true, color: "DFFF00", fontFace: "Calibri"
+  });
+
+  slide7.addShape(pptx.ShapeType.roundRect, {
+    x: 0.6, y: 1.1, w: 12.0, h: 4.8,
+    fill: { color: "18202E" },
+    line: { color: "DFFF00", width: 1 }
+  });
+
+  slide7.addText("VENTUREAM SIAP MEMENUHI KEBUTUHAN INSTITUSI", {
+    x: 0.9, y: 1.4, w: 11.4, h: 0.5,
+    fontSize: 18, bold: true, color: "DFFF00", fontFace: "Calibri", align: "center"
+  });
+
+  const summaryBullets = [
+    "✓ Arsitektur Full-Stack Modern: React 18, TypeScript, Tailwind CSS, Express Node.js & Vite.",
+    "✓ Kepatuhan Teruji: Memenuhi standar transparansi pelaporan keuangan OJK dan valuasi aset PSAK 19.",
+    "✓ Pengamanan Multi-tier: Firebase Auth, RBAC, HTTPS/WSS, & pencetakan dokumen ber-watermark resmi.",
+    "✓ Kontak Sistem & Registrasi Regulasi: Email pt.ventuream@gmail.com | Gateway IBKR / CGS Active."
+  ];
+
+  summaryBullets.forEach((b, i) => {
+    slide7.addText(b, {
+      x: 1.2, y: 2.2 + i * 0.8, w: 10.8, h: 0.6,
+      fontSize: 12, color: "FFFFFF", fontFace: "Calibri"
+    });
+  });
+
+  await pptx.writeFile({ fileName: 'VentureAM_Regulatory_Institutional_Deck.pptx' });
 }
+
 
 
 // ==========================================

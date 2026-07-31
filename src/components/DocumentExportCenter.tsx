@@ -105,33 +105,33 @@ export const DocumentExportCenter: React.FC<DocumentExportCenterProps> = ({ onCl
       {/* Grid of Documents */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         
-        {/* CARD 1: PRESENTASI APLIKASI */}
+        {/* CARD 1: PRESENTASI REGULATOR & SYSTEM OVERVIEW (PPTX & PDF) */}
         <div className="bg-zinc-900/60 border border-zinc-800/80 rounded-[2rem] p-6 flex flex-col justify-between space-y-6 hover:border-[#DFFF00]/30 transition-all group backdrop-blur-xl">
           <div>
             <div className="flex items-center justify-between mb-4">
               <div className="p-3 bg-[#DFFF00]/10 rounded-xl border border-[#DFFF00]/20 group-hover:scale-105 transition-transform">
                 <Presentation className="w-6 h-6 text-[#DFFF00]" />
               </div>
-              <span className="px-3 py-1 bg-zinc-800 rounded-full text-[9px] font-black text-zinc-300 uppercase tracking-widest border border-zinc-700">
-                PITCH DECK & EXECUTIVE SUMMARY
+              <span className="px-3 py-1 bg-[#DFFF00]/10 rounded-full text-[9px] font-black text-[#DFFF00] uppercase tracking-widest border border-[#DFFF00]/30">
+                REGULATORY & INSTITUTIONAL PRESENTATION DECK
               </span>
             </div>
 
             <h3 className="text-lg font-black text-white uppercase tracking-tight group-hover:text-[#DFFF00] transition-colors">
-              1. Dokumen Presentasi Aplikasi
+              1. Dokumen Presentasi Regulator (OJK & BI)
             </h3>
             <p className="text-xs text-zinc-400 mt-2 leading-relaxed">
-              Slide deck komprehensif mencakup ringkasan eksekutif, arsitektur modul (Market Intelligence, Gateway IBKR/CGS, AI Fundamental Audit, Rebalance Engine), serta standar keamanan OJK & IDX.
+              Slide deck resmi presentasi sistem untuk regulator mencakup Ringkasan Eksekutif, Pilar Kepatuhan OJK/BI, Arsitektur AI Assistive Governance, Keamanan & Audit Trail, serta Protokol Manajemen Risiko.
             </p>
 
             <div className="mt-4 p-3 bg-zinc-950/50 rounded-xl border border-zinc-800/50 space-y-1.5 text-[11px] text-zinc-400">
               <div className="flex items-center gap-2">
                 <FileCheck2 className="w-3.5 h-3.5 text-[#DFFF00]" />
-                <span>Format Ringkas 16:9 Widescreen & Multi-page PDF</span>
+                <span className="font-mono text-zinc-300 font-bold">File Target: <span className="text-[#DFFF00]">VentureAM_Regulatory_Institutional_Deck.pptx</span></span>
               </div>
               <div className="flex items-center gap-2">
                 <FileCheck2 className="w-3.5 h-3.5 text-[#DFFF00]" />
-                <span>Tabel Spesifikasi Teknis & Roadmap Terintegrasi</span>
+                <span>Format Standardized 16:9 Widescreen Presentation (PowerPoint & PDF)</span>
               </div>
             </div>
           </div>
@@ -139,7 +139,7 @@ export const DocumentExportCenter: React.FC<DocumentExportCenterProps> = ({ onCl
           <div className="space-y-3 pt-2">
             <div className="grid grid-cols-2 gap-3">
               <button
-                onClick={() => handleExport('pres_pdf', generatePresentationPDF, 'Presentasi Aplikasi (PDF)')}
+                onClick={() => handleExport('pres_pdf', generatePresentationPDF, 'Presentasi Regulator (PDF)')}
                 disabled={loadingAction !== null}
                 className="py-3 px-4 bg-zinc-800 hover:bg-[#DFFF00] hover:text-black text-white text-xs font-black rounded-xl transition-all flex items-center justify-center gap-2 disabled:opacity-50 border border-zinc-700 active:scale-95 shadow-md"
               >
@@ -152,7 +152,7 @@ export const DocumentExportCenter: React.FC<DocumentExportCenterProps> = ({ onCl
               </button>
 
               <button
-                onClick={() => handleExport('pres_pptx', generatePresentationPPTX, 'Presentasi Aplikasi (PPTX)')}
+                onClick={() => handleExport('pres_pptx', generatePresentationPPTX, 'VentureAM_Regulatory_Institutional_Deck.pptx')}
                 disabled={loadingAction !== null}
                 className="py-3 px-4 bg-[#DFFF00] hover:bg-white text-black text-xs font-black rounded-xl transition-all flex items-center justify-center gap-2 disabled:opacity-50 active:scale-95 shadow-lg shadow-[#DFFF00]/10"
               >
@@ -161,7 +161,7 @@ export const DocumentExportCenter: React.FC<DocumentExportCenterProps> = ({ onCl
                 ) : (
                   <Presentation className="w-4 h-4" />
                 )}
-                <span>Cetak PPTX</span>
+                <span>Unduh PPTX Deck</span>
               </button>
             </div>
           </div>
