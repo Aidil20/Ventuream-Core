@@ -20,7 +20,8 @@ import {
   generateUserManualPDF, 
   generateUserManualPPTX,
   generateWeeklyMarketInsightPDF,
-  generateSystemBlueprintPDF
+  generateSystemBlueprintPDF,
+  generateSystemBlueprintPPTX
 } from '../services/documentExportService';
 
 interface DocumentExportCenterProps {
@@ -339,18 +340,33 @@ export const DocumentExportCenter: React.FC<DocumentExportCenterProps> = ({ onCl
           </div>
 
           <div className="space-y-3 pt-2">
-            <button
-              onClick={() => handleExport('blueprint_pdf', async () => { await generateSystemBlueprintPDF(); }, 'Spesifikasi Teknis System Blueprint (PDF)')}
-              disabled={loadingAction !== null}
-              className="w-full py-3 px-4 bg-purple-600 hover:bg-purple-500 text-white text-xs font-black rounded-xl transition-all flex items-center justify-center gap-2 disabled:opacity-50 active:scale-95 shadow-lg shadow-purple-600/20"
-            >
-              {loadingAction === 'blueprint_pdf' ? (
-                <Loader2 className="w-4 h-4 animate-spin" />
-              ) : (
-                <Download className="w-4 h-4" />
-              )}
-              <span>Cetak Technical Specification Blueprint (PDF - PSAK 19)</span>
-            </button>
+            <div className="grid grid-cols-2 gap-3">
+              <button
+                onClick={() => handleExport('blueprint_pdf', async () => { await generateSystemBlueprintPDF(); }, 'Spesifikasi Teknis System Blueprint (PDF)')}
+                disabled={loadingAction !== null}
+                className="py-3 px-4 bg-zinc-800 hover:bg-purple-600 hover:text-white text-white text-xs font-black rounded-xl transition-all flex items-center justify-center gap-2 disabled:opacity-50 border border-zinc-700 active:scale-95 shadow-md"
+              >
+                {loadingAction === 'blueprint_pdf' ? (
+                  <Loader2 className="w-4 h-4 animate-spin text-purple-400" />
+                ) : (
+                  <FileText className="w-4 h-4" />
+                )}
+                <span>Cetak PDF (PSAK 19)</span>
+              </button>
+
+              <button
+                onClick={() => handleExport('blueprint_pptx', async () => { await generateSystemBlueprintPPTX(); }, 'Spesifikasi Teknis System Blueprint (PPTX)')}
+                disabled={loadingAction !== null}
+                className="py-3 px-4 bg-purple-600 hover:bg-purple-500 text-white text-xs font-black rounded-xl transition-all flex items-center justify-center gap-2 disabled:opacity-50 active:scale-95 shadow-lg shadow-purple-600/20"
+              >
+                {loadingAction === 'blueprint_pptx' ? (
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                ) : (
+                  <Presentation className="w-4 h-4" />
+                )}
+                <span>Cetak PPTX (Blueprint Deck)</span>
+              </button>
+            </div>
           </div>
         </div>
 

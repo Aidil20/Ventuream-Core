@@ -1726,8 +1726,8 @@ export default function App() {
           };
         });
 
-        setPortfolioData(() => {
-          return cgsAssets.map(asset => {
+        setPortfolioData(prev => {
+          const next = cgsAssets.map(asset => {
             const cleanTicker = asset.ticker.replace('.JK', '').toUpperCase();
             const liveMatch = liveMap[cleanTicker];
             
@@ -1753,6 +1753,18 @@ export default function App() {
               dailyChange: changePercentFromSource
             };
           });
+
+          const isUnchanged = prev.length === next.length && prev.every((item, idx) => {
+            const n = next[idx];
+            return item.ticker === n.ticker &&
+                   item.currentPrice === n.currentPrice &&
+                   item.dailyChange === n.dailyChange &&
+                   item.marketValue === n.marketValue &&
+                   item.unrealized === n.unrealized;
+          });
+
+          if (isUnchanged) return prev;
+          return next;
         });
       }
     } catch (err: any) {
