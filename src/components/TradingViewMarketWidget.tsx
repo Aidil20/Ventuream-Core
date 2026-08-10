@@ -34,7 +34,7 @@ const TradingViewMarketWidget: React.FC = () => {
             "symbols": [
               { "name": "FX_IDC:USDIDR", "displayName": "USD / IDR" },
               { "name": "TVC:GOLD", "displayName": "GOLD Spot" },
-              { "name": "STI", "displayName": "STI Index" },
+              { "name": "FTSE:STI", "displayName": "STI Index (SGX)" },
               { "name": "FOREXCOM:SPX500", "displayName": "S&P 500" }
             ]
           }

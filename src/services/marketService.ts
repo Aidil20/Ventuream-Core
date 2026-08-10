@@ -1,3 +1,5 @@
+import { formatStockPrice } from '../lib/stockUtils';
+
 export interface MarketNews {
   headline: string;
   summary: string;
@@ -400,6 +402,7 @@ export async function fetchLivePrices(symbols: string[]): Promise<LivePrice[]> {
         else if (s === 'BBRI') price = 4850;
         else if (s === 'TLKM') price = 2820;
         else if (s === 'CTTH') price = 134;
+        else if (s === 'JGLE') price = 100;
 
         const simulated: LivePrice = {
           symbol: s,
@@ -433,7 +436,21 @@ export interface AssetSearchInfo {
   volume: string;
   marketCap: string;
   summary: string;
+  market?: string;
+  currency?: string;
   sparkline?: number[];
+}
+
+export function formatCurrencyByMarket(
+  price: number | string | undefined | null,
+  symbol?: string,
+  market?: string,
+  currency?: string
+): string {
+  if (price === undefined || price === null || price === '' || price === 'N/A') return 'N/A';
+  const num = typeof price === 'number' ? price : parseFloat(String(price).replace(/[^0-9.-]/g, ''));
+  if (isNaN(num)) return String(price);
+  return formatStockPrice(num, symbol, market);
 }
 
 export async function searchAsset(query: string): Promise<AssetSearchInfo[]> {
@@ -482,7 +499,8 @@ export async function searchAsset(query: string): Promise<AssetSearchInfo[]> {
         { symbol: "ASII", name: "PT Astra International Tbk.", price: 4850, changePercent: -0.5, volume: "42M", marketCap: "196T", summary: "Offline Fallback: Conglomerate.", sparkline: Array.from({ length: 12 }, () => 4850 * (1 + (Math.random() - 0.5) * 0.025)) },
         { symbol: "DSSA", name: "PT Dian Swastatika Sentosa Tbk.", price: 815, changePercent: 0.12, volume: "12M", marketCap: "2.1T", summary: "Official Google Finance Real-Time Quote.", sparkline: Array.from({ length: 12 }, () => 815 * (1 + (Math.random() - 0.5) * 0.01)) },
         { symbol: "BUMI", name: "PT Bumi Resources Tbk.", price: 140, changePercent: 1.45, volume: "500M", marketCap: "52.3T", summary: "Official Google Finance Real-Time Quote.", sparkline: Array.from({ length: 12 }, () => 140 * (1 + (Math.random() - 0.5) * 0.015)) },
-        { symbol: "CTTH", name: "PT Citatah Tbk.", price: 134, changePercent: 0.0, volume: "1.2M", marketCap: "2.4B", summary: "Marble extraction and building materials.", sparkline: Array.from({ length: 12 }, () => 134 * (1 + (Math.random() - 0.5) * 0.02)) }
+        { symbol: "CTTH", name: "PT Citatah Tbk.", price: 134, changePercent: 0.0, volume: "1.2M", marketCap: "2.4B", summary: "Marble extraction and building materials.", sparkline: Array.from({ length: 12 }, () => 134 * (1 + (Math.random() - 0.5) * 0.02)) },
+        { symbol: "JGLE", name: "PT Graha Andrasentra Propertindo Tbk.", price: 100, changePercent: 22.89, volume: "18.5M", marketCap: "1.35T", summary: "Development and management of theme parks (The Jungle, Jungleland) & property.", sparkline: Array.from({ length: 12 }, () => 100 * (1 + (Math.random() - 0.5) * 0.03)) }
       ].filter(item => 
         item.symbol.toLowerCase().includes(query.toLowerCase()) || 
         item.name.toLowerCase().includes(query.toLowerCase())

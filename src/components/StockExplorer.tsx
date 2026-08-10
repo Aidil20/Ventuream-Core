@@ -9,7 +9,8 @@ import Sparkline from './Sparkline';
 import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from 'recharts';
 import { fetchMarketNewsSummary } from '../services/geminiService';
 import { PriceAlert } from '../App';
-import { searchAsset, AssetSearchInfo, fetchNewsSentimentSummary, NewsSentimentAnalysis } from '../services/marketService';
+import { searchAsset, AssetSearchInfo, fetchNewsSentimentSummary, NewsSentimentAnalysis, formatCurrencyByMarket } from '../services/marketService';
+import { getTradingViewSymbol, getStockInfo } from '../lib/stockUtils';
 
 interface StockNews {
   headline: string;
@@ -279,35 +280,38 @@ export const StockExplorer: React.FC<StockExplorerProps> = ({
   }, [selectedStock]);
 
   useEffect(() => {
-    if (selectedStock && stockInfo && tickHistory.length === 0) {
+    if (selectedStock && stockInfo) {
       const isSymbolMatch = 
         stockInfo.symbol.toUpperCase() === selectedStock.toUpperCase() ||
         selectedStock.toUpperCase().endsWith(stockInfo.symbol.toUpperCase()) ||
         stockInfo.symbol.toUpperCase().endsWith(selectedStock.toUpperCase());
         
       if (isSymbolMatch) {
-        const basePrice = stockInfo.price || 5000;
-        const baseChange = stockInfo.changePercent || 0;
-        const now = Date.now();
-        const seededTicks: { price: number, changePercent: number, timestamp: number }[] = [];
-        
-        // Populate 20 previous ticks stretching 5 minutes back (15 seconds apart)
-        for (let i = 19; i >= 0; i--) {
-          const timestamp = now - i * 15000;
-          // Simulated micro random walk around basePrice
-          const walk = (Math.sin(i / 2.5) * 0.12 + Math.cos(i / 4) * 0.08 + (Math.random() - 0.5) * 0.05) * (basePrice * 0.001);
-          const tickPrice = Math.max(1, Math.round(basePrice - walk));
-          const tickChange = baseChange - (walk / basePrice) * 100;
-          seededTicks.push({
-            price: tickPrice,
-            changePercent: Number(tickChange.toFixed(2)),
-            timestamp
-          });
-        }
-        setTickHistory(seededTicks);
+        setTickHistory(prev => {
+          if (prev.length > 0) return prev;
+          const basePrice = stockInfo.price || 5000;
+          const baseChange = stockInfo.changePercent || 0;
+          const now = Date.now();
+          const seededTicks: { price: number, changePercent: number, timestamp: number }[] = [];
+          
+          // Populate 20 previous ticks stretching 5 minutes back (15 seconds apart)
+          for (let i = 19; i >= 0; i--) {
+            const timestamp = now - i * 15000;
+            // Simulated micro random walk around basePrice
+            const walk = (Math.sin(i / 2.5) * 0.12 + Math.cos(i / 4) * 0.08 + (Math.random() - 0.5) * 0.05) * (basePrice * 0.001);
+            const tickPrice = Math.max(1, Math.round(basePrice - walk));
+            const tickChange = baseChange - (walk / basePrice) * 100;
+            seededTicks.push({
+              price: tickPrice,
+              changePercent: Number(tickChange.toFixed(2)),
+              timestamp
+            });
+          }
+          return seededTicks;
+        });
       }
     }
-  }, [selectedStock, stockInfo?.symbol, stockInfo?.price, tickHistory.length]);
+  }, [selectedStock, stockInfo?.symbol]);
 
   const toggleWatchlist = (symbol: string) => {
     setWatchlist(prev => 
@@ -632,7 +636,7 @@ export const StockExplorer: React.FC<StockExplorerProps> = ({
                     </div>
 
                     <div className="text-right mr-2">
-                      <p className="text-xs font-black text-white">Rp {typeof result.price === 'number' ? result.price.toLocaleString('id-ID') : (result.price || 'N/A')}</p>
+                      <p className="text-xs font-black text-white">{formatCurrencyByMarket(result.price, result.symbol, result.market, result.currency)}</p>
                       <p className={`text-[10px] font-black ${result.changePercent >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
                         {result.changePercent > 0 ? '+' : ''}{result.changePercent}%
                       </p>
@@ -780,7 +784,7 @@ export const StockExplorer: React.FC<StockExplorerProps> = ({
                         transition={{ duration: 0.5 }}
                         className="text-xl font-black text-white tracking-tighter"
                       >
-                        Rp {typeof stockInfo.price === 'number' ? stockInfo.price.toLocaleString('id-ID') : (stockInfo.price || 'N/A')}
+                        {formatCurrencyByMarket(stockInfo.price, stockInfo.symbol, stockInfo.market, stockInfo.currency)}
                       </motion.p>
                     </AnimatePresence>
                   </div>
@@ -913,7 +917,7 @@ export const StockExplorer: React.FC<StockExplorerProps> = ({
                 <div className={`${isChartExpanded ? 'h-[700px]' : 'h-[500px]'} transition-all duration-500 flex flex-col md:flex-row divide-y md:divide-y-0 md:divide-x divide-zinc-800`}>
                   <div className="flex-1 h-full min-w-0">
                     <TradingViewWidget 
-                      symbol={selectedStock.includes(':') ? selectedStock : `IDX:${selectedStock}`} 
+                      symbol={getTradingViewSymbol(selectedStock)} 
                       studies={["MASimple@tv-basicstudies", "MAExp@tv-basicstudies", "RSI@tv-basicstudies", "MACD@tv-basicstudies", "BB@tv-basicstudies"]}
                     />
                   </div>
@@ -1066,7 +1070,7 @@ export const StockExplorer: React.FC<StockExplorerProps> = ({
                     
                     <div className="h-[380px]">
                       <TradingViewTechnicalAnalysisWidget 
-                        symbol={selectedStock.includes(':') ? selectedStock : `IDX:${selectedStock}`}
+                        symbol={getTradingViewSymbol(selectedStock)}
                         interval="1D"
                       />
                     </div>
@@ -1333,7 +1337,7 @@ export const StockExplorer: React.FC<StockExplorerProps> = ({
                                             {new Date(data.timestamp).toLocaleTimeString([], { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' })}
                                           </p>
                                           <p className="font-bold text-white">
-                                            Rp {data.price.toLocaleString('id-ID')}
+                                            {formatCurrencyByMarket(data.price, stockInfo?.symbol, stockInfo?.market, stockInfo?.currency)}
                                           </p>
                                           <p className={`font-bold ${data.changePercent >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
                                             {data.changePercent >= 0 ? '+' : ''}{data.changePercent.toFixed(2)}%
@@ -1388,7 +1392,7 @@ export const StockExplorer: React.FC<StockExplorerProps> = ({
                                 <span className="text-[7px] opacity-40 ml-0.5">.{String(tick.timestamp % 1000).padStart(3, '0')}</span>
                               </span>
                               <span className="text-[11px] font-black text-white tracking-tighter">
-                                Rp {tick.price.toLocaleString('id-ID')}
+                                {formatCurrencyByMarket(tick.price, stockInfo?.symbol, stockInfo?.market, stockInfo?.currency)}
                               </span>
                             </div>
                             <div className={`flex items-center gap-1 px-2 py-0.5 rounded-lg text-[9px] font-black ${tick.changePercent >= 0 ? 'bg-emerald-500/10 text-emerald-500' : 'bg-red-500/10 text-red-500'}`}>

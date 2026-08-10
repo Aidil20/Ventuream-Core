@@ -55,7 +55,8 @@ const IDX_TICKER_SECTORS: Record<string, { name: string; sector: string; baselin
   "COAL": { name: "PT Black Diamond Resources Tbk.", sector: "INFRA_CONGLOM", baseline: 75 },
   "DEFI": { name: "PT Danasupra Erapacific Tbk.", sector: "INFRA_CONGLOM", baseline: 82 },
   "DEWA": { name: "PT Darma Henwa Tbk.", sector: "INFRA_CONGLOM", baseline: 65 },
-  "CTTH": { name: "PT Citatah Tbk.", sector: "INFRA_CONGLOM", baseline: 134 }
+  "CTTH": { name: "PT Citatah Tbk.", sector: "INFRA_CONGLOM", baseline: 134 },
+  "JGLE": { name: "PT Graha Andrasentra Propertindo Tbk.", sector: "PROPERTY_CONSUMER", baseline: 100 }
 };
 
 export const MarketHeatmap = ({ onViewAsset }: MarketHeatmapProps) => {

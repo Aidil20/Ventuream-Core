@@ -166,24 +166,10 @@ const generateCsv = (data: any[]) => {
 
 const DEFAULT_STUDIES = ["MASimple@tv-basicstudies", "MAExp@tv-basicstudies"];
 
-const formatSymbolForTradingView = (sym: string): string => {
-  if (!sym) return 'IDX:BBCA';
-  let clean = sym.trim().replace(/\.JK$/i, '').toUpperCase();
-  if (clean.includes(':')) return clean;
+import { getTradingViewSymbol, getStockInfo } from '../lib/stockUtils';
 
-  if (['AAPL', 'NVDA', 'MSFT', 'TSLA', 'AMZN', 'GOOGL', 'META', 'AMD', 'PLTR', 'NFLX', 'SPY', 'QQQ'].includes(clean)) {
-    return `NASDAQ:${clean}`;
-  }
-  if (clean.startsWith('BTC') || clean.startsWith('ETH') || clean === 'SOLUSD') {
-    return `BITSTAMP:${clean.replace('/', '')}`;
-  }
-  if (clean === 'USDIDR' || clean === 'USD/IDR') {
-    return 'FX_IDC:USDIDR';
-  }
-  if (clean === 'IHSG' || clean === 'COMPOSITE') {
-    return 'IDX:COMPOSITE';
-  }
-  return `IDX:${clean}`;
+const formatSymbolForTradingView = (sym: string): string => {
+  return getTradingViewSymbol(sym);
 };
 
 function TradingViewWidget({ symbol = "IDX:BBCA", studies = DEFAULT_STUDIES, interval = "D" }: TradingViewWidgetProps) {

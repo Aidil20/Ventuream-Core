@@ -20,6 +20,7 @@ const PRESET_TICKERS = [
   { symbol: 'DEFI.JK', name: 'Danasupra Erapacific' },
   { symbol: 'KOTA.JK', name: 'DMS Propertindo' },
   { symbol: 'CTTH.JK', name: 'PT Citatah Tbk' },
+  { symbol: 'JGLE.JK', name: 'Graha Andrasentra Propertindo' },
   { symbol: 'LAND.JK', name: 'Trimitra Propertindo' },
   { symbol: 'LPKR.JK', name: 'Lippo Karawaci' },
   { symbol: 'PIPA.JK', name: 'Multi Makmur Lemindo' },
@@ -67,6 +68,7 @@ const ALL_SUGGESTIONS = [
   { symbol: 'DSSA.JK', name: 'PT Dian Swastatika Sentosa Tbk.', priceKey: 'DSSA', market: 'IDX' },
   { symbol: 'KOTA.JK', name: 'PT DMS Propertindo Tbk.', priceKey: 'KOTA', market: 'IDX' },
   { symbol: 'CTTH.JK', name: 'PT Citatah Tbk.', priceKey: 'CTTH', market: 'IDX' },
+  { symbol: 'JGLE.JK', name: 'PT Graha Andrasentra Propertindo Tbk.', priceKey: 'JGLE', market: 'IDX' },
   { symbol: 'LAND.JK', name: 'PT Trinitan Land Tbk.', priceKey: 'LAND', market: 'IDX' },
   { symbol: 'PIPA.JK', name: 'PT Multi Spunindo Jaya Tbk.', priceKey: 'PIPA', market: 'IDX' },
   { symbol: 'CGAS.JK', name: 'PT Citra Nusantara Energi Tbk.', priceKey: 'CGAS', market: 'IDX' },
@@ -76,14 +78,15 @@ const ALL_SUGGESTIONS = [
   { symbol: 'NICE.JK', name: 'PT Adhi Kartiko Pratama Tbk.', priceKey: 'NICE', market: 'IDX' },
   { symbol: 'ALII.JK', name: 'PT Ancara Logistics Indonesia Tbk.', priceKey: 'ALII', market: 'IDX' },
   { symbol: 'MSJA.JK', name: 'PT Multisrana Agrindo Tbk.', priceKey: 'MSJA', market: 'IDX' },
-  { symbol: 'MHYI.JK', name: 'PT Mobility Technology Indonesia Tbk.', priceKey: 'MHYI', market: 'IDX' },
+  { symbol: 'SUNI.JK', name: 'PT Sunindo Pratama Tbk.', priceKey: 'SUNI', market: 'IDX' },
   { symbol: 'LIVE.JK', name: 'PT Homeco Victoria Makmur Tbk.', priceKey: 'LIVE', market: 'IDX' },
   { symbol: 'NEST.JK', name: 'PT Era Media Sejahtera Tbk.', priceKey: 'NEST', market: 'IDX' },
   { symbol: 'GOLF.JK', name: 'PT Intra GolfLink Resorts Tbk.', priceKey: 'GOLF', market: 'IDX' },
   { symbol: 'SOLA.JK', name: 'PT Xolare Ropa Energy Tbk.', priceKey: 'SOLA', market: 'IDX' },
   { symbol: 'BATR.JK', name: 'PT Benteng Anugrah Sejahtera Tbk.', priceKey: 'BATR', market: 'IDX' },
   { symbol: 'DATA.JK', name: 'PT Remala Abadi Tbk.', priceKey: 'DATA', market: 'IDX' },
-  { symbol: 'MKLH.JK', name: 'PT Multikarya Asia Pasifik Raya Tbk.', priceKey: 'MKLH', market: 'IDX' },
+  { symbol: 'MKAP.JK', name: 'PT Multikarya Asia Pasifik Raya Tbk.', priceKey: 'MKAP', market: 'IDX' },
+  { symbol: 'MHKI.JK', name: 'PT Multi Hanna Kreasindo Tbk.', priceKey: 'MHKI', market: 'IDX' },
   { symbol: 'PTRO.JK', name: 'PT Petrosea Tbk.', priceKey: 'PTRO', market: 'IDX' },
   { symbol: 'LPKR.JK', name: 'PT Lippo Karawaci Tbk.', priceKey: 'LPKR', market: 'IDX' },
   { symbol: 'UNTR.JK', name: 'PT United Tractors Tbk.', priceKey: 'UNTR', market: 'IDX' },
@@ -96,13 +99,13 @@ const ALL_SUGGESTIONS = [
   // SGX Stocks
   { symbol: 'DBS', name: 'DBS Group Holdings Ltd', priceKey: 'DBS', market: 'SGX' },
   { symbol: 'UOB', name: 'United Overseas Bank Ltd', priceKey: 'UOB', market: 'SGX' },
-  { symbol: 'OCBC', name: 'Overseas-Chinese Banking Corp', priceKey: 'OCBC', market: 'SGX' },
-  { symbol: 'Singtel', name: 'Singapore Telecommunications Ltd', priceKey: 'Singtel', market: 'SGX' },
-  { symbol: 'Keppel', name: 'Keppel Ltd', priceKey: 'Keppel', market: 'SGX' },
-  { symbol: 'CapitaLand', name: 'CapitaLand Investment Ltd', priceKey: 'CapitaLand', market: 'SGX' },
-  { symbol: 'Wilmar', name: 'Wilmar International Ltd', priceKey: 'Wilmar', market: 'SGX' },
+  { symbol: 'OCBC', name: 'Overseas-Chinese Banking Corp Ltd', priceKey: 'OCBC', market: 'SGX' },
+  { symbol: 'SINGTEL', name: 'Singapore Telecommunications Ltd', priceKey: 'SINGTEL', market: 'SGX' },
+  { symbol: 'KEPPEL', name: 'Keppel Ltd', priceKey: 'KEPPEL', market: 'SGX' },
+  { symbol: 'CAPITALAND', name: 'CapitaLand Investment Ltd', priceKey: 'CAPITALAND', market: 'SGX' },
+  { symbol: 'WILMAR', name: 'Wilmar International Ltd', priceKey: 'WILMAR', market: 'SGX' },
   { symbol: 'SIA', name: 'Singapore Airlines Ltd', priceKey: 'SIA', market: 'SGX' },
-  { symbol: 'ComfortDelGro', name: 'ComfortDelGro Corp Ltd', priceKey: 'ComfortDelGro', market: 'SGX' },
+  { symbol: 'COMFORTDELGRO', name: 'ComfortDelGro Corp Ltd', priceKey: 'COMFORTDELGRO', market: 'SGX' },
   { symbol: 'SATS', name: 'SATS Ltd', priceKey: 'SATS', market: 'SGX' },
 
   // US Stocks
@@ -199,6 +202,7 @@ export const ManualRebalanceForm: React.FC<ManualRebalanceFormProps> = ({
         else if (activeTicker === 'DSSA.JK') fallback = '775';
         else if (activeTicker === 'BUMI.JK') fallback = '140';
         else if (activeTicker === 'CTTH.JK') fallback = '134';
+        else if (activeTicker === 'JGLE.JK') fallback = '100';
         
         setPriceInput(fallback);
         const p = parseFloat(fallback) || 0;

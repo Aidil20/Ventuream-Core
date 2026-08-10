@@ -102,6 +102,304 @@ export default function RegulatoryReport() {
     }, 1200);
   };
 
+  const handleGenerateIntangibleAssetPDF = () => {
+    try {
+      const doc = new jsPDF({
+        orientation: 'portrait',
+        unit: 'mm',
+        format: 'a4'
+      });
+
+      // --- PAGE 1 ---
+      // Header Bar Accent Strip
+      doc.setFillColor(15, 23, 42); 
+      doc.rect(0, 0, 210, 18, 'F');
+
+      // Brand Title
+      doc.setTextColor(222, 255, 154); // #deff9a
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(13);
+      doc.text('PT VENTURE ASSET MANAGEMENT GROUP', 15, 11);
+
+      doc.setTextColor(148, 163, 184); // slate-400
+      doc.setFont('helvetica', 'normal');
+      doc.setFontSize(7.5);
+      doc.text('FINANCIAL & REGULATORY REPORTING // KAPITALISASI ASET TAK BERWUJUD (PSAK 19 / IAS 38)', 15, 23);
+
+      // Main Title
+      doc.setTextColor(15, 23, 42); // slate-900
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(14);
+      doc.text('LAPORAN BIAYA ASET TAK BERWUJUD & JADWAL AMORTISASI ERP', 15, 32);
+
+      // Status Box
+      doc.setFillColor(241, 245, 249); // slate-100 bg
+      doc.rect(15, 37, 180, 24, 'F');
+      doc.setDrawColor(203, 213, 225); // slate-300 border
+      doc.rect(15, 37, 180, 24, 'D');
+
+      doc.setTextColor(15, 23, 42);
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(9);
+      doc.text('PERNYATAAN RESMI KAPITALISASI ASET TAK BERWUJUD (INTANGIBLE ASSET)', 20, 43);
+
+      doc.setFont('helvetica', 'normal');
+      doc.setFontSize(8);
+      doc.setTextColor(71, 85, 105);
+      const timestamp = new Date().toLocaleString('id-ID');
+      doc.text(`Tanggal Audit / Pelaporan : ${timestamp} WIB (GMT+7)`, 20, 48.5);
+      doc.text('Standar Akuntansi        : PSAK 19 (Aset Tak Berwujud) / IAS 38 Intangible Assets', 20, 53);
+      doc.text('Peruntukan Pelaporan      : Otoritas Jasa Keuangan (OJK), Direktorat Jenderal Pajak (DJP) & Auditor', 20, 57.5);
+
+      // Section 1: Breakdown Biaya Pengembangan
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(10.5);
+      doc.setTextColor(15, 23, 42);
+      doc.text('1. RINCIAN BIAYA PEROLEHAN KAPITALISASI SISTEM ERP VAM', 15, 68);
+      doc.setDrawColor(226, 232, 240);
+      doc.setLineWidth(0.3);
+      doc.line(15, 70, 195, 70);
+
+      // Table Header
+      doc.setFillColor(30, 41, 59); // slate-800
+      doc.rect(15, 73, 180, 7, 'F');
+      doc.setTextColor(255, 255, 255);
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(8);
+      doc.text('No', 18, 77.5);
+      doc.text('Komponen Development System ERP VAM', 28, 77.5);
+      doc.text('Nilai Kapitalisasi (IDR)', 150, 77.5);
+
+      const items = [
+        { no: '1', name: 'Core Architecture & Institutional UI/UX System', cost: 'Rp 175.000.000' },
+        { no: '2', name: 'Portfolio Management & Execution Engine', cost: 'Rp 285.000.000' },
+        { no: '3', name: 'Analisis Teknikal & Custom PineScript Screener', cost: 'Rp 220.000.000' },
+        { no: '4', name: 'Analisis Fundamental & Chart of Accounts (CoA) Auto-Mapping', cost: 'Rp 260.000.000' },
+        { no: '5', name: 'Risk Analytics, Compliance & Beneficial Ownership GNN', cost: 'Rp 240.000.000' },
+        { no: '6', name: 'Server Gateway & Multi-Market Sync Engine', cost: 'Rp 195.000.000' },
+        { no: '7', name: 'Quality Assurance (QA) & Cross-Market Data Audit', cost: 'Rp 125.000.000' },
+      ];
+
+      let rowY = 81;
+      items.forEach((item, idx) => {
+        if (idx % 2 === 1) {
+          doc.setFillColor(248, 250, 252);
+          doc.rect(15, rowY - 3.5, 180, 6.5, 'F');
+        }
+        doc.setFont('helvetica', 'normal');
+        doc.setFontSize(8);
+        doc.setTextColor(51, 65, 85);
+        doc.text(item.no, 18, rowY);
+        doc.text(item.name, 28, rowY);
+        doc.setFont('helvetica', 'bold');
+        doc.text(item.cost, 150, rowY);
+        rowY += 6;
+      });
+
+      // Total Row
+      doc.setFillColor(226, 232, 240);
+      doc.rect(15, rowY - 3, 180, 8, 'F');
+      doc.setDrawColor(148, 163, 184);
+      doc.rect(15, rowY - 3, 180, 8, 'D');
+
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(9);
+      doc.setTextColor(15, 23, 42);
+      doc.text('TOTAL NILAI PEROLEHAN ASET TAK BERWUJUD (CapEx)', 28, rowY + 2);
+      doc.text('Rp 1.500.000.000,-', 150, rowY + 2);
+
+      // Section 2: Fair Market Valuation & OpEx Estimates
+      const sec2Y = rowY + 12;
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(10);
+      doc.setTextColor(15, 23, 42);
+      doc.text('2. VALUASI PASAR WAJAR (REPLACEMENT COST) & PROYEKSI OpEx TAHUNAN', 15, sec2Y);
+      doc.line(15, sec2Y + 2, 195, sec2Y + 2);
+
+      doc.setFontSize(8);
+      doc.setFont('helvetica', 'bold');
+      doc.text('Nilai Pasar Wajar (Replacement Value) :', 15, sec2Y + 8);
+      doc.setFont('helvetica', 'normal');
+      doc.text('Rp 2.200.000.000 – Rp 2.800.000.000,- (Enterprise Software Integrator Cost)', 75, sec2Y + 8);
+
+      doc.setFont('helvetica', 'bold');
+      doc.text('Estimasi OpEx Tahunan Total           :', 15, sec2Y + 14);
+      doc.setFont('helvetica', 'bold');
+      doc.setTextColor(180, 83, 9); // amber-700
+      doc.text('Rp 270.000.000,- / Tahun', 75, sec2Y + 14);
+
+      doc.setFont('helvetica', 'normal');
+      doc.setFontSize(7.5);
+      doc.setTextColor(71, 85, 105);
+      doc.text('• Lisensi API Market Data Feed & Data Provider : ~Rp 120.000.000 / tahun', 20, sec2Y + 19);
+      doc.text('• Cloud Hosting & Serverless DB Architecture   : ~Rp 60.000.000 / tahun', 20, sec2Y + 23.5);
+      doc.text('• Pemeliharaan & Pembaruan Regulasi / Ticker   : ~Rp 90.000.000 / tahun', 20, sec2Y + 28);
+
+      // Section 3: Parameter Akuntansi Amortisasi
+      const sec3Y = sec2Y + 35;
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(10);
+      doc.setTextColor(15, 23, 42);
+      doc.text('3. PARAMETER AKUNTANSI & METODE AMORTISASI (PSAK 19 / IAS 38)', 15, sec3Y);
+      doc.line(15, sec3Y + 2, 195, sec3Y + 2);
+
+      doc.setFontSize(8);
+      doc.setFont('helvetica', 'bold');
+      doc.text('Metode Amortisasi       :', 15, sec3Y + 8);
+      doc.setFont('helvetica', 'normal');
+      doc.text('Metode Garis Lurus (Straight-Line Amortization Method)', 62, sec3Y + 8);
+
+      doc.setFont('helvetica', 'bold');
+      doc.text('Masa Manfaat (Useful Life) :', 15, sec3Y + 13.5);
+      doc.setFont('helvetica', 'normal');
+      doc.text('20 Tahun (240 Bulan Masa Operasional)', 62, sec3Y + 13.5);
+
+      doc.setFont('helvetica', 'bold');
+      doc.text('Nilai Sisa (Residual Value):', 15, sec3Y + 19);
+      doc.setFont('helvetica', 'normal');
+      doc.text('Rp 0,- (Zero Residual Value)', 62, sec3Y + 19);
+
+      doc.setFont('helvetica', 'bold');
+      doc.text('Beban Amortisasi / Tahun  :', 15, sec3Y + 24.5);
+      doc.setFont('helvetica', 'bold');
+      doc.setTextColor(21, 128, 61); // emerald-700
+      doc.text('Rp 210.000.000,- / Tahun', 62, sec3Y + 24.5);
+
+      doc.setFont('helvetica', 'bold');
+      doc.setTextColor(15, 23, 42);
+      doc.text('Beban Amortisasi / Bulan  :', 15, sec3Y + 30);
+      doc.setFont('helvetica', 'bold');
+      doc.setTextColor(21, 128, 61);
+      doc.text('Rp 17.500.000,- / Bulan', 62, sec3Y + 30);
+
+      // --- PAGE 2 ---
+      doc.addPage();
+
+      // Page 2 Header
+      doc.setFillColor(15, 23, 42); 
+      doc.rect(0, 0, 210, 14, 'F');
+      doc.setTextColor(222, 255, 154);
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(11);
+      doc.text('PT VENTURE ASSET MANAGEMENT GROUP', 15, 9);
+      doc.setTextColor(255, 255, 255);
+      doc.setFontSize(8);
+      doc.text('JADWAL AMORTISASI ASET TAK BERWUJUD (20 TAHUN)', 120, 9);
+
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(10.5);
+      doc.setTextColor(15, 23, 42);
+      doc.text('4. JADWAL LENGKAP AMORTISASI GARIS LURUS (TAHUN 1 - TAHUN 20)', 15, 23);
+      doc.setDrawColor(226, 232, 240);
+      doc.line(15, 25, 195, 25);
+
+      // Table Header Page 2
+      doc.setFillColor(30, 41, 59);
+      doc.rect(15, 28, 180, 7, 'F');
+      doc.setTextColor(255, 255, 255);
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(8);
+      doc.text('Tahun', 18, 32.5);
+      doc.text('Nilai Buku Awal (IDR)', 35, 32.5);
+      doc.text('Beban Amortisasi (IDR)', 82, 32.5);
+      doc.text('Akumulasi Amortisasi (IDR)', 122, 32.5);
+      doc.text('Nilai Buku Akhir (IDR)', 162, 32.5);
+
+      const totalCost = 4200000000;
+      const annualAmort = 210000000;
+      let accum = 0;
+      let currentBookValue = totalCost;
+      let scheduleY = 36;
+
+      for (let year = 1; year <= 20; year++) {
+        const startValue = currentBookValue;
+        accum += annualAmort;
+        currentBookValue -= annualAmort;
+
+        if (year % 2 === 0) {
+          doc.setFillColor(248, 250, 252);
+          doc.rect(15, scheduleY - 3.2, 180, 5.8, 'F');
+        }
+
+        doc.setFont('helvetica', 'normal');
+        doc.setFontSize(7.5);
+        doc.setTextColor(51, 65, 85);
+
+        doc.text(`Tahun ${year}`, 18, scheduleY);
+        doc.text(`Rp ${startValue.toLocaleString('id-ID')}`, 35, scheduleY);
+        doc.text(`Rp ${annualAmort.toLocaleString('id-ID')}`, 82, scheduleY);
+        doc.text(`Rp ${accum.toLocaleString('id-ID')}`, 122, scheduleY);
+        doc.setFont('helvetica', 'bold');
+        doc.text(`Rp ${Math.max(0, currentBookValue).toLocaleString('id-ID')}`, 162, scheduleY);
+
+        scheduleY += 5.8;
+      }
+
+      // Legal Sign Off Box Page 2
+      const signY = scheduleY + 10;
+      doc.setDrawColor(203, 213, 225);
+      doc.line(15, signY, 195, signY);
+
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(9);
+      doc.setTextColor(15, 23, 42);
+      doc.text('DISAHKAN OLEH MANAJEMEN PT VENTURE ASSET MANAGEMENT', 15, signY + 7);
+
+      doc.setFont('helvetica', 'normal');
+      doc.setFontSize(7.5);
+      doc.setTextColor(100, 116, 139);
+      doc.text('Dokumen ini diterbitkan sebagai bukti sah amortisasi aset tak berwujud berdasarkan standar akuntansi PSAK 19 / IAS 38.', 15, signY + 12);
+      doc.text(`ID Verifikasi Sistem: VAM-INTANGIBLE-ASSET-${Math.random().toString(36).substring(2, 10).toUpperCase()}-2026`, 15, signY + 16);
+
+      // Signature Wave
+      doc.setDrawColor(15, 23, 42);
+      doc.setLineWidth(0.45);
+      doc.line(15, signY + 23, 19, signY + 20);
+      doc.line(19, signY + 20, 24, signY + 27);
+      doc.line(24, signY + 27, 30, signY + 18);
+      doc.line(30, signY + 18, 35, signY + 25);
+      doc.line(35, signY + 25, 48, signY + 22);
+
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(9);
+      doc.setTextColor(15, 23, 42);
+      doc.text('Aidil Syahdan Al Fitrah', 15, signY + 33);
+      doc.setFont('helvetica', 'normal');
+      doc.setFontSize(7.5);
+      doc.setTextColor(100, 116, 139);
+      doc.text('President Director / Chief Executive Officer', 15, signY + 37);
+
+      // Corporate Seal Box
+      doc.setFillColor(248, 250, 252);
+      doc.setDrawColor(222, 255, 154);
+      doc.setLineWidth(0.5);
+      doc.rect(138, signY + 5, 57, 33, 'DF');
+
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(7.5);
+      doc.setTextColor(15, 23, 42);
+      doc.text('VENTUREAM FINANCIAL SEAL', 141, signY + 11);
+      doc.setFontSize(6.5);
+      doc.setFont('helvetica', 'normal');
+      doc.setTextColor(71, 85, 105);
+      doc.text('ASET TAK BERWUJUD TERVERIFIKASI', 141, signY + 16);
+      doc.text('NILAI PEROLEHAN : Rp 1.500.000.000', 141, signY + 20);
+      doc.text('MASA MANFAAT    : 20 TAHUN', 141, signY + 24);
+      doc.text('AMORTISASI/THN  : Rp 75.000.000', 141, signY + 28);
+      doc.text(`TANGGAL CAP     : ${new Date().toLocaleDateString('id-ID')}`, 141, signY + 32);
+
+      // Save PDF
+      doc.save(`VentureAM_Laporan_Aset_Tak_Berwujud_20Tahun_${new Date().toISOString().slice(0, 10)}.pdf`);
+
+      setSaveSuccess(true);
+      setSuccessMsg('PDF Laporan Aset Tak Berwujud & Jadwal Amortisasi 20 Tahun berhasil diunduh!');
+      setTimeout(() => setSaveSuccess(false), 4000);
+    } catch (err: any) {
+      console.error(err);
+      alert('Gagal membuat PDF Aset Tak Berwujud: ' + err.message);
+    }
+  };
+
   const handleGenerateDomesticPDF = () => {
     try {
       const doc = new jsPDF({
@@ -361,7 +659,13 @@ export default function RegulatoryReport() {
             Portal Kepatuhan Terpadu PT Venture Asset Management
           </p>
         </div>
-        <div className="flex items-center gap-3">
+        <div className="flex flex-wrap items-center gap-3">
+          <button
+            onClick={handleGenerateIntangibleAssetPDF}
+            className="px-4 py-2 bg-amber-500/10 hover:bg-amber-500/20 border border-amber-500/40 hover:border-amber-500/80 text-amber-300 transition-all font-bold text-[10px] uppercase tracking-wider rounded-xl flex items-center gap-2 active:scale-95 cursor-pointer shadow-lg shadow-amber-500/5"
+          >
+            <FileText className="w-3.5 h-3.5" /> CETAK PDF ASET TAK BERWUJUD (20 TAHUN)
+          </button>
           <button
             onClick={handleGenerateDomesticPDF}
             className="px-4 py-2 bg-slate-950/80 hover:bg-slate-900 border border-[#deff9a]/40 hover:border-[#deff9a]/80 text-[#deff9a] transition-all font-bold text-[10px] uppercase tracking-wider rounded-xl flex items-center gap-2 active:scale-95 cursor-pointer"
@@ -385,6 +689,53 @@ export default function RegulatoryReport() {
               </>
             )}
           </button>
+        </div>
+      </div>
+
+      {/* Intangible Asset Accounting Summary Box */}
+      <div className="bg-gradient-to-r from-amber-950/20 via-slate-900/60 to-slate-950 p-5 rounded-[2rem] border border-amber-500/30 shadow-xl space-y-4">
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 pb-3 border-b border-slate-800/80">
+          <div className="flex items-center gap-3">
+            <div className="p-2.5 bg-amber-500/10 border border-amber-500/30 rounded-xl text-amber-400">
+              <Scale className="w-5 h-5" />
+            </div>
+            <div>
+              <h3 className="text-sm font-black text-white uppercase tracking-tight">KAPITALISASI ASET TAK BERWUJUD (PSAK 19 / IAS 38)</h3>
+              <p className="text-[10px] text-amber-200/70 font-semibold">Dasar Pelaporan Laporan Keuangan & Regulator OJK/DJP • System ERP VAM</p>
+            </div>
+          </div>
+          <button
+            onClick={handleGenerateIntangibleAssetPDF}
+            className="self-start md:self-auto px-4 py-2 bg-amber-400 text-black hover:bg-amber-300 font-bold rounded-xl text-[10px] uppercase tracking-wider flex items-center gap-2 transition-all cursor-pointer shadow-lg shadow-amber-500/10 active:scale-95"
+          >
+            <Download className="w-3.5 h-3.5" /> CETAK PDF LAPORAN & JADWAL 20 TAHUN
+          </button>
+        </div>
+
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+          <div className="p-3 bg-slate-950/80 rounded-xl border border-slate-800">
+            <span className="text-[9px] font-black text-zinc-500 uppercase tracking-widest block">Nilai Perolehan ERP</span>
+            <span className="text-sm font-black text-amber-400 font-mono mt-1 block">Rp 7.000.000.000,-</span>
+            <span className="text-[8px] text-zinc-400 mt-1 block">Total Kapitalisasi Development</span>
+          </div>
+
+          <div className="p-3 bg-slate-950/80 rounded-xl border border-slate-800">
+            <span className="text-[9px] font-black text-zinc-500 uppercase tracking-widest block">Metode & Masa Manfaat</span>
+            <span className="text-sm font-black text-white font-mono mt-1 block">Garis Lurus • 20 Thn</span>
+            <span className="text-[8px] text-zinc-400 mt-1 block">240 Bulan Masa Operasional</span>
+          </div>
+
+          <div className="p-3 bg-slate-950/80 rounded-xl border border-slate-800">
+            <span className="text-[9px] font-black text-zinc-500 uppercase tracking-widest block">Beban Amortisasi / Tahun</span>
+            <span className="text-sm font-black text-emerald-400 font-mono mt-1 block">Rp 350.000.000,-</span>
+            <span className="text-[8px] text-emerald-500/80 mt-1 block">Pengurangan Nilai Buku Per Tahun</span>
+          </div>
+
+          <div className="p-3 bg-slate-950/80 rounded-xl border border-slate-800">
+            <span className="text-[9px] font-black text-zinc-500 uppercase tracking-widest block">Beban Amortisasi / Bulan</span>
+            <span className="text-sm font-black text-[#deff9a] font-mono mt-1 block">Rp 29.166.667,-</span>
+            <span className="text-[8px] text-zinc-400 mt-1 block">Beban Operasional Bulanan</span>
+          </div>
         </div>
       </div>
 

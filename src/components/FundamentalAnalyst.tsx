@@ -31,6 +31,7 @@ import {
 } from 'lucide-react';
 import { fetchFundamentalAudit, FundamentalAudit, searchAsset, AssetSearchInfo } from '../services/marketService';
 import TradingViewWidget from './TradingViewWidget';
+import { getTradingViewSymbol } from '../lib/stockUtils';
 
 interface FundamentalAnalystProps {
   onSelectSymbol?: (symbol: string) => void;
@@ -126,7 +127,7 @@ export const FundamentalAnalyst: React.FC<FundamentalAnalystProps> = ({ onSelect
           } catch {
             // ignore
           }
-          setSuggestions([]);
+          setSuggestions(prev => prev.length === 0 ? prev : []);
         } finally {
           setIsSearching(false);
         }
@@ -134,8 +135,8 @@ export const FundamentalAnalyst: React.FC<FundamentalAnalystProps> = ({ onSelect
 
       return () => clearTimeout(delayDebounceFn);
     } else {
-      setSuggestions([]);
-      setShowSuggestions(false);
+      setSuggestions(prev => prev.length === 0 ? prev : []);
+      setShowSuggestions(prev => !prev ? prev : false);
     }
   }, [searchQuery, isLoading, auditData]);
 
@@ -571,7 +572,7 @@ export const FundamentalAnalyst: React.FC<FundamentalAnalystProps> = ({ onSelect
             {/* Deep Chart Analysis Section */}
             <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
                <div className="lg:col-span-3 bg-[#020407] rounded-[2.5rem] border border-zinc-800 p-1 overflow-hidden shadow-2xl h-[500px]">
-                  <TradingViewWidget symbol={auditData.ticker.includes(':') ? auditData.ticker : `IDX:${auditData.ticker}`} />
+                  <TradingViewWidget symbol={getTradingViewSymbol(auditData.ticker)} />
                </div>
                
                <div className="lg:col-span-1 space-y-6">

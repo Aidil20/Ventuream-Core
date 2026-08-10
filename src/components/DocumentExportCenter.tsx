@@ -21,7 +21,8 @@ import {
   generateUserManualPPTX,
   generateWeeklyMarketInsightPDF,
   generateSystemBlueprintPDF,
-  generateSystemBlueprintPPTX
+  generateSystemBlueprintPPTX,
+  generateValuationInvoicePDF
 } from '../services/documentExportService';
 
 interface DocumentExportCenterProps {
@@ -367,6 +368,53 @@ export const DocumentExportCenter: React.FC<DocumentExportCenterProps> = ({ onCl
                 <span>Cetak PPTX (Blueprint Deck)</span>
               </button>
             </div>
+          </div>
+        </div>
+
+        {/* CARD 5: FAKTUR PENILAIAN ASET TAK BERWUJUD & CHANGELOG REVISI STUDIO (PDF) */}
+        <div className="bg-zinc-900/60 border border-zinc-800/80 rounded-[2rem] p-6 flex flex-col justify-between space-y-6 hover:border-[#DFFF00]/30 transition-all group backdrop-blur-xl md:col-span-2">
+          <div>
+            <div className="flex items-center justify-between mb-4">
+              <div className="p-3 bg-[#DFFF00]/10 rounded-xl border border-[#DFFF00]/20 group-hover:scale-105 transition-transform">
+                <Sparkles className="w-6 h-6 text-[#DFFF00]" />
+              </div>
+              <span className="px-3 py-1 bg-zinc-800 rounded-full text-[9px] font-black text-[#DFFF00] uppercase tracking-widest border border-zinc-700">
+                FAKTUR VALUASI ASET TAK BERWUJUD & STUDIO CHANGELOG
+              </span>
+            </div>
+
+            <h3 className="text-lg font-black text-white uppercase tracking-tight group-hover:text-[#DFFF00] transition-colors">
+              5. Faktur Penilaian Aset Tak Berwujud & Ringkasan Revisi Studio (PDF)
+            </h3>
+            <p className="text-xs text-zinc-400 mt-2 leading-relaxed">
+              Dokumen faktur sertifikasi penilaian resmi untuk pencatatan nilai aplikasi VentureAM ke Laporan Keuangan sebagai Aset Tak Berwujud (PSAK 19 / IAS 38 - Masa Manfaat 20 Tahun), rincian jam kerja pengembangan (1.950 Jam), serta catatan perbaikan bug & fitur baru studio.
+            </p>
+
+            <div className="mt-4 p-3 bg-zinc-950/50 rounded-xl border border-zinc-800/50 space-y-1.5 text-[11px] text-zinc-400">
+              <div className="flex items-center gap-2">
+                <FileCheck2 className="w-3.5 h-3.5 text-[#DFFF00]" />
+                <span>Rincian Biaya & Jam Kerja ERP (Direct Replacement Cost Rp 1,5M & Kapitalisasi Recommended Rp 4,2M - 20 Thn)</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <FileCheck2 className="w-3.5 h-3.5 text-[#DFFF00]" />
+                <span>Ringkasan Perbaikan Bug (Build Artifact Upload Fix & React Re-render Depth Fix) & Fitur Baru Studio</span>
+              </div>
+            </div>
+          </div>
+
+          <div className="space-y-3 pt-2">
+            <button
+              onClick={() => handleExport('val_invoice_pdf', async () => { await generateValuationInvoicePDF(); }, 'Faktur Penilaian Aset Tak Berwujud & Ringkasan Revisi Studio (PDF)')}
+              disabled={loadingAction !== null}
+              className="w-full py-3.5 px-4 bg-[#DFFF00] hover:bg-yellow-300 text-black text-xs font-black rounded-xl transition-all flex items-center justify-center gap-2 disabled:opacity-50 active:scale-95 shadow-xl shadow-[#DFFF00]/15"
+            >
+              {loadingAction === 'val_invoice_pdf' ? (
+                <Loader2 className="w-4 h-4 animate-spin" />
+              ) : (
+                <Download className="w-4 h-4" />
+              )}
+              <span>Cetak Faktur Penilaian Aset Tak Berwujud & Ringkasan Revisi Studio (PDF)</span>
+            </button>
           </div>
         </div>
 

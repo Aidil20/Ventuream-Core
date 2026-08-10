@@ -3,6 +3,8 @@ import { motion, AnimatePresence } from 'motion/react';
 import { X, ChartCandlestick, Search, Maximize2, Minimize2, ExternalLink, Activity, Sparkles } from 'lucide-react';
 import TradingViewWidget from './TradingViewWidget';
 
+import { getTradingViewSymbol } from '../lib/stockUtils';
+
 interface AdvanceChartModalProps {
   symbol: string | null;
   isOpen: boolean;
@@ -47,16 +49,7 @@ export const AdvanceChartModal: React.FC<AdvanceChartModalProps> = ({
   // Sync internal currentSymbol when prop symbol changes
   React.useEffect(() => {
     if (symbol) {
-      let formatted = symbol;
-      if (!symbol.includes(':')) {
-        if (market === 'US' || symbol === 'AAPL' || symbol === 'NVDA' || symbol === 'MSFT' || symbol === 'TSLA') {
-          formatted = `NASDAQ:${symbol}`;
-        } else if (market === 'CRYPTO' || symbol.includes('BTC') || symbol.includes('ETH')) {
-          formatted = `BITSTAMP:${symbol.replace('/', '')}`;
-        } else {
-          formatted = `IDX:${symbol.replace('.JK', '')}`;
-        }
-      }
+      const formatted = getTradingViewSymbol(symbol);
       setCurrentSymbol(prev => prev !== formatted ? formatted : prev);
     }
   }, [symbol, market]);
@@ -64,10 +57,7 @@ export const AdvanceChartModal: React.FC<AdvanceChartModalProps> = ({
   const handleSearchSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!searchInput.trim()) return;
-    let sym = searchInput.trim().toUpperCase();
-    if (!sym.includes(':')) {
-      sym = `${market === 'US' ? 'NASDAQ' : market === 'CRYPTO' ? 'BITSTAMP' : 'IDX'}:${sym}`;
-    }
+    const sym = getTradingViewSymbol(searchInput.trim());
     setCurrentSymbol(sym);
     setSearchInput('');
   };

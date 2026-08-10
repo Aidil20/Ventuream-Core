@@ -31,6 +31,7 @@ import {
   Check
 } from 'lucide-react';
 import AdvanceChartModal from './AdvanceChartModal';
+import { getTradingViewSymbol } from '../lib/stockUtils';
 
 const PINE_SCRIPT_CODE = `//@version=5
 indicator("VAM Institutional - Day Trading & Potensi ARA Screener", overlay=true)
@@ -2571,7 +2572,7 @@ ${araInfo ? `• Potensi ARA Limit (BEI): Rp ${araInfo.limitPrice} (+${araInfo.p
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4 relative z-10">
         <AnimatePresence mode="popLayout">
           {filteredStocks.map((stock) => {
-            const tradingViewSym = stock.market === 'US' ? `NASDAQ:${stock.symbol}` : `IDX:${stock.symbol}`;
+            const tradingViewSym = getTradingViewSymbol(stock.symbol);
             const isVolumeSurge = stock.volRatio >= 5.0;
             const isHighAraPotential = stock.orderBook.bidOfferRatio >= 3.0 && stock.momentum.macdIsPositiveGoldenCross && (stock.bandarAndFundamentals.isBandarAccumulation || stock.bandarAndFundamentals.isIpoLowFloat);
 

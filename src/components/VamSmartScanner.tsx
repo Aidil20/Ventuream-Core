@@ -272,19 +272,17 @@ function VamSmartScanner() {
           setSelectedIssue(null);
         }
       } else {
-        setMaIssues(prev => {
-          if (prev.length === 0) {
-            if (data && data.length > 0) {
-              setSelectedIssue(data[0]);
-            }
-            return data;
+        if (maIssues.length === 0) {
+          setMaIssues(data);
+          if (data && data.length > 0) {
+            setSelectedIssue(data[0]);
           }
-          
-          const existingIds = new Set(prev.map(p => p.id));
+        } else {
+          const existingIds = new Set(maIssues.map(p => p.id));
           const newItems = data.filter(d => !existingIds.has(d.id));
           
           if (newItems.length > 0) {
-            return [...newItems, ...prev];
+            setMaIssues(prev => [...newItems, ...prev]);
           } else if (isManual) {
             const JCI_ISSUES_TEMPLATES = [
               {
@@ -328,11 +326,10 @@ function VamSmartScanner() {
               }
             ];
             const randomTemplate = JCI_ISSUES_TEMPLATES[Math.floor(Math.random() * JCI_ISSUES_TEMPLATES.length)];
+            setMaIssues(prev => [randomTemplate, ...prev]);
             setSelectedIssue(randomTemplate);
-            return [randomTemplate, ...prev];
           }
-          return prev;
-        });
+        }
       }
       
       setTotalAccumulatedFeedsCount(prev => prev + 1);
@@ -411,7 +408,7 @@ function VamSmartScanner() {
     const interval = setInterval(() => {
       setSecondsToNextFeedRefresh(prev => {
         if (prev <= 1) {
-          fetchMaLiveIssues(true); // Poll and add some live variations
+          fetchMaLiveIssues(true);
           return 12;
         }
         return prev - 1;

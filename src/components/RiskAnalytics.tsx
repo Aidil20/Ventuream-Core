@@ -55,6 +55,7 @@ const TICKER_RISK_METADATA: Record<string, { name: string; dailyVol: number; exp
   'BUMI': { name: "BUMI (Bumi Resources Tbk)", dailyVol: 0.038, expectedReturn: 0.15, beta: 1.45, sector: "Energy" },
   'KOTA': { name: "KOTA (Service & Logistics)", dailyVol: 0.052, expectedReturn: 0.18, beta: 1.75, sector: "Service" },
   'CTTH': { name: "CTTH (PT Citatah Tbk)", dailyVol: 0.032, expectedReturn: 0.11, beta: 1.05, sector: "Basic Materials" },
+  'JGLE': { name: "JGLE (PT Graha Andrasentra Propertindo Tbk)", dailyVol: 0.048, expectedReturn: 0.15, beta: 1.42, sector: "Consumer Cyclicals / Property" },
   'LAND': { name: "LAND (Property & Dev)", dailyVol: 0.035, expectedReturn: 0.14, beta: 1.30, sector: "Property" },
   'LPKR': { name: "LPKR (Lippo Karawaci)", dailyVol: 0.025, expectedReturn: 0.10, beta: 1.10, sector: "Property" },
   'PIPA': { name: "PIPA (Multi Makmur Lemindo)", dailyVol: 0.039, expectedReturn: 0.16, beta: 1.40, sector: "Basic Materials" },

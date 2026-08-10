@@ -12,8 +12,14 @@ import {
   PieChart, 
   ShieldCheck, 
   TrendingUp, 
+  TrendingDown,
   ArrowUpRight, 
   ArrowDownRight,
+  ArrowUp,
+  ArrowDown,
+  ChevronsUp,
+  ChevronsDown,
+  Minus,
   Search,
   Bell,
   Menu,
@@ -52,7 +58,8 @@ import {
   Calendar,
   Presentation,
   BookOpen,
-  Download
+  Download,
+  Terminal
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { Decimal } from 'decimal.js';
@@ -90,6 +97,7 @@ import RegulatoryArchive from './components/RegulatoryArchive';
 import RegulatoryReport from './components/RegulatoryReport';
 import TaskCenter from './components/TaskCenter';
 import IdxPriceList from './components/IdxPriceList';
+import WebSocketDiagnosticPanel from './components/WebSocketDiagnosticPanel';
 import { MarketHeatmap } from './components/MarketHeatmap';
 import { MarketSentimentBanner } from './components/MarketSentimentBanner';
 import GlobalIntelFeed from './components/GlobalIntelFeed';
@@ -99,6 +107,7 @@ import { MarketMetricCard } from './components/MarketMetricCard';
 import { ExternalGateways } from './components/ExternalGateways';
 import { InternationalGatewayDashboard } from './components/InternationalGatewayDashboard';
 import { NewsFeed } from './components/NewsFeed';
+import MarketNewsTicker from './components/MarketNewsTicker';
 import DocumentExportCenter from './components/DocumentExportCenter';
 import { fetchMarketNews } from './services/marketService';
 import { StockExplorer } from './components/StockExplorer';
@@ -215,6 +224,7 @@ const SIDEBAR_MENU = [
   { id: 5, label: "Laporan Keuangan", icon: Calculator, path: "financial", color: "orange-400" },
   { id: 11, label: "Arsip & Audit Trail", icon: Database, path: "archive", color: "blue-400" },
   { id: 101, label: "Audit Sync", icon: ShieldCheck, path: "audit-sync", color: "#DFFF00" },
+  { id: 105, label: "Pusat Diagnostik Web Socket Panel", icon: Terminal, path: "websocket-diagnostic", color: "#10b981" },
   { id: 12, label: "Manajemen Tugas", icon: ListTodo, path: "tasks", color: "#deff9a" },
   { id: 9, label: "Sistem Keamanan", icon: ShieldCheck, path: "security", color: "#deff9a" },
   { id: 7, label: "Rebalancing Asset", icon: Scale, path: "rebalancer", color: "#deff9a" },
@@ -361,6 +371,88 @@ const MarketFeedLog = React.memo(({ stockData }: { stockData: StockRecommendatio
     return performanceData[performanceData.length - 1] >= performanceData[0];
   }, [performanceData]);
 
+  const trendInfo = useMemo(() => {
+    const parseNum = (val: any) => {
+      if (!val) return 0;
+      const str = String(val).replace(/[^0-9.-]/g, '');
+      return parseFloat(str) || 0;
+    };
+
+    const numPrice = parseNum(currentPrice);
+    const numEma20 = parseNum(stockData.ema20);
+    const rawChange = parseNum(stockData.change);
+
+    let pct = rawChange;
+    if (!pct && numEma20 > 0 && numPrice > 0) {
+      pct = ((numPrice - numEma20) / numEma20) * 100;
+    } else if (!pct && performanceData.length > 1 && performanceData[0] > 0) {
+      pct = ((performanceData[performanceData.length - 1] - performanceData[0]) / performanceData[0]) * 100;
+    }
+
+    if (pct >= 2.5) {
+      return {
+        level: 'significant_up',
+        category: 'Significant Breakout',
+        tag: 'STRONG BREAKOUT',
+        pctText: `+${pct.toFixed(1)}%`,
+        badgeClass: 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40 shadow-[0_0_8px_rgba(16,185,129,0.25)]',
+        arrowType: 'chevrons_up'
+      };
+    } else if (pct > 0.3) {
+      return {
+        level: 'minor_up',
+        category: 'Minor Fluctuation',
+        tag: 'MINOR FLUCTUATION',
+        pctText: `+${pct.toFixed(1)}%`,
+        badgeClass: 'bg-emerald-500/10 text-emerald-400 border-emerald-500/25',
+        arrowType: 'arrow_up'
+      };
+    } else if (pct <= -2.5) {
+      return {
+        level: 'significant_down',
+        category: 'Significant Breakdown',
+        tag: 'STRONG BREAKDOWN',
+        pctText: `${pct.toFixed(1)}%`,
+        badgeClass: 'bg-rose-500/20 text-rose-300 border-rose-500/40 shadow-[0_0_8px_rgba(244,63,94,0.25)]',
+        arrowType: 'chevrons_down'
+      };
+    } else if (pct < -0.3) {
+      return {
+        level: 'minor_down',
+        category: 'Minor Fluctuation',
+        tag: 'MINOR FLUCTUATION',
+        pctText: `${pct.toFixed(1)}%`,
+        badgeClass: 'bg-rose-500/10 text-rose-400 border-rose-500/25',
+        arrowType: 'arrow_down'
+      };
+    } else {
+      return {
+        level: 'neutral',
+        category: 'Sideways / Stable',
+        tag: 'MINOR FLUCTUATION',
+        pctText: `${pct >= 0 ? '+' : ''}${pct.toFixed(1)}%`,
+        badgeClass: 'bg-zinc-800/80 text-zinc-300 border-zinc-700/60',
+        arrowType: 'minus'
+      };
+    }
+  }, [currentPrice, stockData.ema20, stockData.change, performanceData]);
+
+  const renderTrendIcon = () => {
+    switch (trendInfo.arrowType) {
+      case 'chevrons_up':
+        return <ChevronsUp className="w-3.5 h-3.5 text-emerald-400 animate-bounce stroke-[3]" />;
+      case 'arrow_up':
+        return <ArrowUp className="w-3.5 h-3.5 text-emerald-400 stroke-[2.5]" />;
+      case 'chevrons_down':
+        return <ChevronsDown className="w-3.5 h-3.5 text-rose-400 animate-bounce stroke-[3]" />;
+      case 'arrow_down':
+        return <ArrowDown className="w-3.5 h-3.5 text-rose-400 stroke-[2.5]" />;
+      case 'minus':
+      default:
+        return <Minus className="w-3.5 h-3.5 text-zinc-400 stroke-[2.5]" />;
+    }
+  };
+
   return (
     <motion.div 
       initial={{ opacity: 0, x: -8 }}
@@ -389,19 +481,30 @@ const MarketFeedLog = React.memo(({ stockData }: { stockData: StockRecommendatio
       </div>
       <div className="flex-1 flex items-center justify-between gap-4 relative z-10">
         <div className="flex-1">
-          <p className="text-[11px] leading-relaxed text-zinc-300">
+          <p className="text-[11px] leading-relaxed text-zinc-300 flex flex-wrap items-center gap-x-1.5 gap-y-1">
             <span className="font-black text-white">{stockData.symbol}</span> detected: 
-            Price (<motion.span 
+            <span>Price (</span>
+            <motion.span 
               animate={pulseType ? { scale: [1, 1.12, 1] } : {}}
               transition={{ duration: 0.4 }}
               className={`inline-block font-mono font-bold transition-colors duration-300 ${
                 pulseType === 'up' ? 'text-emerald-400 font-extrabold' : pulseType === 'down' ? 'text-red-400 font-extrabold' : 'text-blue-400'
               }`}
-            >Rp {currentPrice}</motion.span> <span className={`text-[8px] font-black uppercase transition-all duration-300 ${
+            >Rp {currentPrice}</motion.span> 
+            <span className={`text-[8px] font-black uppercase transition-all duration-300 ${
               pulseType === 'up' ? 'text-emerald-400 scale-110' : pulseType === 'down' ? 'text-red-400 scale-110' : 'text-blue-500/80 animate-pulse'
             }`}>LIVE</span>) &gt; EMA20 (<span className="text-orange-400">Rp {stockData.ema20}</span>). 
-            <span className="ml-2 inline-flex items-center gap-1.5 font-bold uppercase tracking-widest text-[9px]">
-              Strength: <span className="text-[#00ff00] bg-[#00ff00]/10 px-1.5 py-0.5 rounded border border-[#00ff00]/20">QUALIFIED</span>
+
+            {/* Color-coded Trend Strength Indicator */}
+            <span 
+              className={`ml-1 inline-flex items-center gap-1.5 px-2 py-0.5 rounded text-[9px] font-mono font-bold uppercase tracking-wider border transition-all duration-300 ${trendInfo.badgeClass}`}
+              title={`Trend Strength: ${trendInfo.category} (${trendInfo.pctText})`}
+            >
+              <span className="flex items-center">
+                {renderTrendIcon()}
+              </span>
+              <span>{trendInfo.tag}</span>
+              <span className="font-mono text-[9px] opacity-90">({trendInfo.pctText})</span>
             </span>
           </p>
         </div>
@@ -568,10 +671,15 @@ export default function App() {
             'GOTO-W.JK': 'PJHB-W.JK',
             'PGAS.JK': 'CDIO.JK'
           };
-          return parsed.map((item: any) => ({
+          const updated = parsed.map((item: any) => ({
             ...item,
             ticker: restoreTickerMap[item.ticker] || item.ticker
           }));
+          const hasJgle = updated.some((item: any) => item.ticker === 'JGLE.JK' || item.ticker === 'JGLE');
+          if (!hasJgle) {
+            updated.push({ ticker: "JGLE.JK", lots: 20, averagePrice: 82, marketPrice: 100 });
+          }
+          return updated;
         }
       }
     } catch (e) {
@@ -583,6 +691,7 @@ export default function App() {
       { ticker: "DSSA.JK", lots: 4, averagePrice: 691.6667, marketPrice: 775 },
       { ticker: "EMMI.JK", lots: 10, averagePrice: 720, marketPrice: 810 },
       { ticker: "JECX.JK", lots: 5, averagePrice: 420, marketPrice: 480 },
+      { ticker: "JGLE.JK", lots: 20, averagePrice: 82, marketPrice: 100 },
       { ticker: "KOTA.JK", lots: 15, averagePrice: 117.4706, marketPrice: 96 },
       { ticker: "PIPA.JK", lots: 15, averagePrice: 151, marketPrice: 114 },
       { ticker: "PJHB-W.JK", lots: 5, averagePrice: 15, marketPrice: 28 },
@@ -669,17 +778,23 @@ export default function App() {
     setPortfolioData(prev => {
       const isUnchanged = prev.length === cgsAssets.length && prev.every((p, idx) => {
         const a = cgsAssets[idx];
-        return a && p.ticker === a.ticker && p.lots === a.lots && p.averagePrice === a.averagePrice && p.marketPrice === a.marketPrice;
+        return a && 
+               p.ticker === a.ticker && 
+               p.lots === a.lots && 
+               p.averagePrice === a.averagePrice && 
+               p.isCustomInvestment === a.isCustomInvestment &&
+               p.customCategory === a.customCategory &&
+               p.customName === a.customName;
       });
       if (isUnchanged) return prev;
 
       return cgsAssets.map(asset => {
         const existing = prev.find(p => p.ticker.toUpperCase() === asset.ticker.toUpperCase());
-        const currentPrice = existing?.currentPrice || asset.marketPrice || asset.averagePrice || 0;
+        const currentPrice = existing?.currentPrice || existing?.marketPrice || asset.marketPrice || asset.averagePrice || 0;
         const changePercentFromSource = existing?.dailyChange || 0;
 
-        const lots = new Decimal(asset.lots);
-        const avgPrice = new Decimal(asset.averagePrice);
+        const lots = new Decimal(asset.lots || 0);
+        const avgPrice = new Decimal(asset.averagePrice || 0);
         const multiplier = new Decimal(100);
 
         const totalCost = avgPrice.times(lots).times(multiplier);
@@ -691,7 +806,7 @@ export default function App() {
           ticker: asset.ticker,
           lots: asset.lots,
           averagePrice: asset.averagePrice,
-          marketPrice: asset.marketPrice,
+          marketPrice: currentPrice,
           currentPrice: currentPrice,
           change: change.toNumber(),
           marketValue: marketValue.toNumber(),
@@ -1568,6 +1683,7 @@ export default function App() {
     });
 
     if (thresholdsUpdated) {
+      alertThresholdsRef.current = updatedThresholds;
       setAlertThresholds(updatedThresholds);
     }
 
@@ -1746,6 +1862,7 @@ export default function App() {
 
             return {
               ...asset,
+              marketPrice: currentPrice,
               currentPrice: currentPrice,
               change: change.toNumber(),
               marketValue: marketValue.toNumber(),
@@ -1830,12 +1947,17 @@ export default function App() {
     }
   }, []);
 
+  const scanOptionsRef = useRef(scanOptions);
+  useEffect(() => {
+    scanOptionsRef.current = scanOptions;
+  }, [scanOptions]);
+
   const updateStocks = useCallback(async () => {
     if (isScanningRef.current) return;
     isScanningRef.current = true;
     setIsScanning(true);
     try {
-      const rawStocks = await fetchStockRecommendations(scanOptions);
+      const rawStocks = await fetchStockRecommendations(scanOptionsRef.current);
       let newStocks: any[] = [];
       if (Array.isArray(rawStocks)) {
         newStocks = rawStocks;
@@ -1879,7 +2001,7 @@ export default function App() {
       isScanningRef.current = false;
       setIsScanning(false);
     }
-  }, [scanOptions]);
+  }, []);
 
   const syncMarketConnectivity = useCallback(async () => {
     if (isMarketSyncingRef.current) return;
@@ -1912,59 +2034,115 @@ export default function App() {
 
       if (livePrices && livePrices.length > 0) {
         // Update Assets List
-        setAssetsData(prev => prev.map(asset => {
-          const live = livePrices.find(l => l.symbol === asset.symbol);
-          if (live) {
-            return {
-              ...asset,
-              value: `Rp ${(typeof live.price === 'number' ? live.price / 1000 : 0).toFixed(1)}k`,
-              percentage: (typeof live.changePercent === 'number' ? (live.changePercent >= 0 ? '+' : '') + live.changePercent.toFixed(1) : '0.0') + '%',
-              status: live.changePercent > 0.5 ? 'Bullish' : live.changePercent < -0.5 ? 'Bearish' : 'Stable'
-            };
-          }
-          return asset;
-        }));
+        setAssetsData(prev => {
+          let changed = false;
+          const next = prev.map(asset => {
+            const live = livePrices.find(l => l.symbol === asset.symbol);
+            if (live) {
+              const newValue = `Rp ${(typeof live.price === 'number' ? live.price / 1000 : 0).toFixed(1)}k`;
+              const newPercentage = (typeof live.changePercent === 'number' ? (live.changePercent >= 0 ? '+' : '') + live.changePercent.toFixed(1) : '0.0') + '%';
+              const newStatus = live.changePercent > 0.5 ? 'Bullish' : live.changePercent < -0.5 ? 'Bearish' : 'Stable';
+              if (asset.value !== newValue || asset.percentage !== newPercentage || asset.status !== newStatus) {
+                changed = true;
+                return {
+                  ...asset,
+                  value: newValue,
+                  percentage: newPercentage,
+                  status: newStatus
+                };
+              }
+            }
+            return asset;
+          });
+          return changed ? next : prev;
+        });
 
         // Update Portfolio Data
-        setPortfolioData(prev => prev.map(asset => {
-          const ticker = asset.ticker.replace('.JK', '');
-          const live = livePrices.find(l => l.symbol === ticker || l.symbol === asset.ticker);
-          if (live) {
-            return { 
-              ...asset, 
-              marketPrice: live.price,
-              currentPrice: live.price,
-              dailyChange: typeof live.changePercent === 'number' ? live.changePercent : (asset.dailyChange || 0)
-            };
-          }
-          return asset;
-        }));
+        setPortfolioData(prev => {
+          let changed = false;
+          const next = prev.map(asset => {
+            const ticker = asset.ticker.replace('.JK', '');
+            const live = livePrices.find(l => l.symbol === ticker || l.symbol === asset.ticker);
+            if (live && typeof live.price === 'number') {
+              const currentPrice = live.price;
+              const dailyChange = typeof live.changePercent === 'number' ? live.changePercent : (asset.dailyChange || 0);
+
+              const lots = new Decimal(asset.lots || 0);
+              const avgPrice = new Decimal(asset.averagePrice || 0);
+              const multiplier = new Decimal(100);
+
+              const totalCost = avgPrice.times(lots).times(multiplier);
+              const marketValue = new Decimal(currentPrice).times(lots).times(multiplier).toNumber();
+              const unrealized = new Decimal(marketValue).minus(totalCost).toNumber();
+              const change = avgPrice.isZero() ? 0 : new Decimal(currentPrice).minus(avgPrice).div(avgPrice).times(multiplier).toNumber();
+
+              if (
+                asset.currentPrice !== currentPrice ||
+                asset.marketPrice !== currentPrice ||
+                Math.abs((asset.marketValue || 0) - marketValue) > 0.01 ||
+                Math.abs((asset.unrealized || 0) - unrealized) > 0.01 ||
+                Math.abs((asset.dailyChange || 0) - dailyChange) > 0.01
+              ) {
+                changed = true;
+                return { 
+                  ...asset, 
+                  marketPrice: currentPrice,
+                  currentPrice: currentPrice,
+                  change: change,
+                  marketValue: marketValue,
+                  unrealized: unrealized,
+                  dailyChange: dailyChange
+                };
+              }
+            }
+            return asset;
+          });
+          return changed ? next : prev;
+        });
 
         // Update Scan/Stock List Data
-        setStocks(prev => prev.map(stock => {
-          const live = livePrices.find(l => l.symbol === stock.symbol);
-          if (live) {
-            return {
-              ...stock,
-              price: typeof live.price === 'number' ? live.price.toLocaleString('id-ID') : (live.price || 'N/A'),
-              change: (typeof live.changePercent === 'number' ? (live.changePercent >= 0 ? '+' : '') + live.changePercent.toFixed(2) : '0.00') + '%'
-            };
-          }
-          return stock;
-        }));
+        setStocks(prev => {
+          let changed = false;
+          const next = prev.map(stock => {
+            const live = livePrices.find(l => l.symbol === stock.symbol);
+            if (live) {
+              const newPrice = typeof live.price === 'number' ? live.price.toLocaleString('id-ID') : (live.price || 'N/A');
+              const newChange = (typeof live.changePercent === 'number' ? (live.changePercent >= 0 ? '+' : '') + live.changePercent.toFixed(2) : '0.00') + '%';
+              if (stock.price !== newPrice || stock.change !== newChange) {
+                changed = true;
+                return {
+                  ...stock,
+                  price: newPrice,
+                  change: newChange
+                };
+              }
+            }
+            return stock;
+          });
+          return changed ? next : prev;
+        });
 
         // Update Technical Logs
-        setTechnicalLogs(prev => prev.map(log => {
-          const live = livePrices.find(l => l.symbol === log.symbol);
-          if (live) {
-            return {
-              ...log,
-              price: typeof live.price === 'number' ? live.price.toLocaleString('id-ID') : (live.price || 'N/A'),
-              change: (typeof live.changePercent === 'number' ? (live.changePercent >= 0 ? '+' : '') + live.changePercent.toFixed(2) : '0.00') + '%'
-            };
-          }
-          return log;
-        }));
+        setTechnicalLogs(prev => {
+          let changed = false;
+          const next = prev.map(log => {
+            const live = livePrices.find(l => l.symbol === log.symbol);
+            if (live) {
+              const newPrice = typeof live.price === 'number' ? live.price.toLocaleString('id-ID') : (live.price || 'N/A');
+              const newChange = (typeof live.changePercent === 'number' ? (live.changePercent >= 0 ? '+' : '') + live.changePercent.toFixed(2) : '0.00') + '%';
+              if (log.price !== newPrice || log.change !== newChange) {
+                changed = true;
+                return {
+                  ...log,
+                  price: newPrice,
+                  change: newChange
+                };
+              }
+            }
+            return log;
+          });
+          return changed ? next : prev;
+        });
 
       }
       setLastMarketSync(new Date().toLocaleTimeString());
@@ -2020,10 +2198,34 @@ export default function App() {
 
     socket.on('connect', () => {
       console.log('[VAM PROTOCOL] Real-time Gateway Tunnel Established');
+      window.dispatchEvent(new CustomEvent('vam-websocket-log', {
+        detail: {
+          id: `conn-${Date.now()}`,
+          timestamp: new Date().toISOString(),
+          timeStr: new Date().toLocaleTimeString('id-ID', { hour12: false }) + '.' + String(new Date().getMilliseconds()).padStart(3, '0'),
+          type: 'CONNECT',
+          direction: 'SYSTEM',
+          status: 'OK',
+          payload: { event: 'GATEWAY_TUNNEL_ESTABLISHED', sid: socket.id, transport: 'websocket' },
+          latencyMs: 14
+        }
+      }));
     });
 
     socket.on('market-init', (data: Record<string, any>) => {
       console.log('[VAM PROTOCOL] Received Initial Market State');
+      window.dispatchEvent(new CustomEvent('vam-websocket-log', {
+        detail: {
+          id: `init-${Date.now()}`,
+          timestamp: new Date().toISOString(),
+          timeStr: new Date().toLocaleTimeString('id-ID', { hour12: false }) + '.' + String(new Date().getMilliseconds()).padStart(3, '0'),
+          type: 'MARKET_INIT',
+          direction: 'INBOUND',
+          status: 'OK',
+          payload: { event: 'INITIAL_MARKET_STATE_RECEIVED', totalSymbols: Object.keys(data).length, symbols: Object.keys(data) },
+          latencyMs: 22
+        }
+      }));
       
       const initialPrices: Record<string, number> = {};
       Object.entries(data).forEach(([key, val]) => {
@@ -2191,17 +2393,20 @@ export default function App() {
         });
 
         if (triggeredAlerts.length > 0) {
-          setNotifications(prev => [
-            ...triggeredAlerts.map(a => ({
-              id: Math.random().toString(36).substring(7),
-              symbol: a.symbol,
-              price: price,
-              targetPrice: a.targetPrice,
-              condition: a.condition,
-              timestamp: Date.now()
-            })),
-            ...prev
-          ].slice(0, 5)); // Keep last 5 notifications
+          // Schedule notification update outside the current reducer tick
+          setTimeout(() => {
+            setNotifications(prev => [
+              ...triggeredAlerts.map(a => ({
+                id: Math.random().toString(36).substring(7),
+                symbol: a.symbol,
+                price: price,
+                targetPrice: a.targetPrice,
+                condition: a.condition,
+                timestamp: Date.now()
+              })),
+              ...prev
+            ].slice(0, 5));
+          }, 0);
 
           // Deactivate triggered alerts
           return currentAlerts.map(a => {
@@ -2230,7 +2435,9 @@ export default function App() {
 
     socket.on('system-update', (updateData: any) => {
       console.log('[VAM SYSTEM UPDATE] Received system-wide update broadcast:', updateData);
-      syncMarketConnectivity();
+      if (!isMarketSyncingRef.current) {
+        syncMarketConnectivity();
+      }
       window.dispatchEvent(new CustomEvent('vam-system-update', { detail: updateData }));
     });
 
@@ -2358,6 +2565,17 @@ export default function App() {
           <div className="space-y-6">
             {/* Global Gateway Sync Status Banner */}
             <GlobalGatewayBanner />
+
+            {/* Horizontal Scrolling Market News Ticker */}
+            <MarketNewsTicker 
+              news={marketNews}
+              onRefresh={() => updateMarketNews(true)}
+              isLoading={isFetchingNews}
+              onSelectSymbol={(sym) => {
+                setSelectedAssetId(sym);
+                setActiveTab('market');
+              }}
+            />
 
             {/* Saham Trading Harian - Auto Analis AI */}
             <motion.section
@@ -2693,6 +2911,14 @@ export default function App() {
                   }}
                 />
                 <GlobalIndicesFeed />
+                <MarketNewsTicker 
+                  news={marketNews} 
+                  onRefresh={() => updateMarketNews(true)} 
+                  isLoading={isFetchingNews} 
+                  onSelectSymbol={(sym) => {
+                    setSelectedSymbol(sym);
+                  }}
+                />
                 <MarketOverviewWidget 
                   news={marketNews} 
                   onRefreshNews={() => fetchMarketNewsSummary(true)} 
@@ -4202,7 +4428,39 @@ export default function App() {
               </button>
               <h3 className="text-sm font-semibold text-slate-300 uppercase tracking-widest">Financial Reporting Ecosystem</h3>
             </div>
-            <FinancialReportingCenter portfolioData={portfolioData} cashBalance={cgsCashBalance} giroBalance={cgsGiroBalance} realizedPnL={cgsRealizedPnL} totalFees={cgsTotalFees} transactions={history} />
+            <FinancialReportingCenter 
+              portfolioData={portfolioData} 
+              cashBalance={cgsCashBalance} 
+              giroBalance={cgsGiroBalance} 
+              realizedPnL={cgsRealizedPnL} 
+              totalFees={cgsTotalFees} 
+              transactions={history}
+              onTransferFunds={(fromAccount, toAccount, amount) => {
+                if (fromAccount === 'RDN' && toAccount === 'GIRO') {
+                  setCgsCashBalance(prev => {
+                    const next = Math.max(0, prev - amount);
+                    localStorage.setItem('cgsCashBalance_v3', String(next));
+                    return next;
+                  });
+                  setCgsGiroBalance(prev => {
+                    const next = prev + amount;
+                    localStorage.setItem('cgsGiroBalance_v3', String(next));
+                    return next;
+                  });
+                } else if (fromAccount === 'GIRO' && toAccount === 'RDN') {
+                  setCgsGiroBalance(prev => {
+                    const next = Math.max(0, prev - amount);
+                    localStorage.setItem('cgsGiroBalance_v3', String(next));
+                    return next;
+                  });
+                  setCgsCashBalance(prev => {
+                    const next = prev + amount;
+                    localStorage.setItem('cgsCashBalance_v3', String(next));
+                    return next;
+                  });
+                }
+              }} 
+            />
           </div>
         );
       case 'archive':
@@ -4281,6 +4539,22 @@ export default function App() {
         return <WapAssetManagement portfolioData={portfolioData} />;
       case 'audit-sync':
         return <AuditSync autoSyncEnabled={autoSyncEnabled} />;
+      case 'websocket-diagnostic':
+        return (
+          <div className="space-y-6">
+            <div className="flex items-center gap-2 mb-2">
+              <button onClick={goBack} className="p-1.5 bg-slate-900 rounded-lg border border-slate-800 text-[#deff9a]">
+                <ArrowLeft className="w-4 h-4" />
+              </button>
+              <h3 className="text-sm font-semibold text-slate-300 uppercase tracking-widest">Pusat Diagnostik Web Socket Panel</h3>
+            </div>
+            <WebSocketDiagnosticPanel 
+              portfolioCount={portfolioData.length}
+              lastSyncedTime={lastMarketSync}
+              onForceReconnect={syncMarketConnectivity}
+            />
+          </div>
+        );
       case 'vamsmartscanner':
         return <VamSmartScanner />;
       case 'users':

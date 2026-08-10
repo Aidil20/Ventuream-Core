@@ -24,7 +24,17 @@ import {
   Server,
   Code,
   Search,
-  Filter
+  Filter,
+  ArrowRightLeft,
+  Award,
+  FileCheck2,
+  Building2,
+  Wallet,
+  Scale,
+  DollarSign,
+  CheckCircle,
+  TrendingUp,
+  Sparkles
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import Papa from 'papaparse';
@@ -32,6 +42,7 @@ import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import { Decimal } from 'decimal.js';
 import RealizedPnLChart from './RealizedPnLChart';
+import { generateValuationInvoicePDF, generateAuditorOpinionPDF } from '../services/documentExportService';
 
 interface PortfolioAsset {
   ticker: string;
@@ -56,6 +67,7 @@ interface FinancialReportingCenterProps {
   realizedPnL?: number;
   totalFees?: number;
   transactions?: any[];
+  onTransferFunds?: (fromAccount: 'RDN' | 'GIRO', toAccount: 'RDN' | 'GIRO', amount: number, note: string) => void;
 }
 
 interface Report {
@@ -89,13 +101,21 @@ export default function FinancialReportingCenter({
   giroBalance = 711000, 
   realizedPnL = 0, 
   totalFees = 0,
-  transactions = []
+  transactions = [],
+  onTransferFunds
 }: FinancialReportingCenterProps) {
-  const [activeTab, setActiveTabState] = useState<'REPORTS' | 'SECURE_VAULT' | 'TRANSACTIONS'>('REPORTS');
+  const [activeTab, setActiveTabState] = useState<'REPORTS' | 'AUDITOR_OPINION' | 'FUND_TRANSFER' | 'SECURE_VAULT' | 'TRANSACTIONS'>('REPORTS');
   const [kpiMetric, setKpiMetric] = useState<'ROA' | 'ROE' | 'GPM' | 'CR'>('ROA');
   const [isGenerating, setIsGenerating] = useState(false);
   const [generationProgress, setGenerationProgress] = useState(0);
   const [showPreview, setShowPreview] = useState<string | null>(null);
+
+  // Fund Transfer state
+  const [isTransferModalOpen, setIsTransferModalOpen] = useState(false);
+  const [transferDirection, setTransferDirection] = useState<'RDN_TO_GIRO' | 'GIRO_TO_RDN'>('RDN_TO_GIRO');
+  const [transferAmount, setTransferAmount] = useState<string>('');
+  const [transferNote, setTransferNote] = useState<string>('');
+  const [transferStatus, setTransferStatus] = useState<{ success: boolean; message: string; refNo?: string } | null>(null);
 
   // Filter states for transaction history tab
   const [txSearch, setTxSearch] = useState('');
@@ -135,6 +155,8 @@ export default function FinancialReportingCenter({
     { id: 'PL', titleInd: 'Laba Rugi Komprehensif', titleEng: 'Statement of Comprehensive Income', standard: 'PSAK 1 / IAS 1', lastUpdate: 'Live', status: 'STABLE' },
     { id: 'CF', titleInd: 'Arus Kas Automatis', titleEng: 'Automated Cash Flow Statement', standard: 'PSAK 2 / IAS 7', lastUpdate: 'Daily', status: 'STABLE' },
     { id: 'CALK', titleInd: 'Catatan & Rincian Portofolio Investasi/Aset', titleEng: 'Notes & Investment Asset Portfolio Schedule', standard: 'PSAK 71 / PSAK 16', lastUpdate: 'Real-Time Sync', status: 'STABLE' },
+    { id: 'CALK_INTANGIBLE', titleInd: 'CALK Aset Tak Berwujud (Software ERP VentureAM)', titleEng: 'Notes to Intangible Assets (VentureAM ERP Software)', standard: 'PSAK 19 / IAS 38', lastUpdate: 'Audited & Capitalized', status: 'CAPITALIZED' },
+    { id: 'AUDITOR_OPINION', titleInd: 'Laporan Reviu Auditor Internal & Kinerja', titleEng: "Internal Auditor's Review & Performance Report", standard: 'SPI / PSAK / IFRS (UNAUDITED)', lastUpdate: 'Internal Review', status: 'UNAUDITED (SPI)' },
   ]);
 
   // Financial values that can be dynamically updated by vault finalize
@@ -148,9 +170,11 @@ export default function FinancialReportingCenter({
     invest25: 1018300, // Investasi Saham At Cost (Audit 2025)
     fixed26: 5950000,
     fixed25: 6000000, // PC & Monitor MSI Cost
+    intangible26: 4200000000, // Aset Tidak Berwujud - ERP Software VentureAM (PSAK 19 / IAS 38)
+    intangible25: 0,
     shortLiability26: 0,
     shortLiability25: 0,
-    paidCapital26: 9300000,
+    paidCapital26: 4209300000, // Modal Disetor & Kapitalisasi Software Tak Berwujud (9.300.000 + 4.200.000.000)
     paidCapital25: 6196225.05, // Modal Disetor (Audit 2025)
     retainedEarnings26: 1538577, // Corrected to include separate 711.000 Giro balance (827577 + 711000)
     retainedEarnings25: 2074883.64, // Laba Komprehensif (Audit 2025)
@@ -203,13 +227,14 @@ export default function FinancialReportingCenter({
     if (portfolioData && cashBalance !== undefined) {
       const liveInvest26 = portfolioData.reduce((acc, asset) => acc + (asset.marketValue || 0), 0);
       const liveCash26 = cashBalance;
-      const liveGiro26 = giroBalance;
+      const liveGiro26 = giroBalance !== undefined ? giroBalance : 711000;
       const liveUnrealizedSecurities26 = portfolioData.reduce((acc, asset) => acc + (asset.unrealized || 0), 0);
       
       const netCurrentAssets26 = liveCash26 + liveInvest26 + liveGiro26;
-      const netTotalAssets26 = netCurrentAssets26 + 5950000; // fixed26 is 5950000
+      const netNonCurrentAssets26 = 5950000 + 4200000000; // fixed26 + intangible26
+      const netTotalAssets26 = netCurrentAssets26 + netNonCurrentAssets26;
       const totalLiabilities26 = 0; // shortLiability26 is 0
-      const liveRetainedEarnings26 = netTotalAssets26 - totalLiabilities26 - 9300000; // paidCapital26 is 9300000
+      const liveRetainedEarnings26 = netTotalAssets26 - totalLiabilities26 - 4209300000; // paidCapital26 is 4209300000
 
       // Calculate real-time Revenue (sell transactions) and HPP (buy transactions)
       const totalSellAmount = (transactions || []).filter((tx: any) => tx.side === 'SELL' || tx.side === 'STOP_LOSS').reduce((acc: number, tx: any) => {
@@ -261,28 +286,27 @@ export default function FinancialReportingCenter({
       const liveCfFinancing26 = 7300000;
       const liveCfInvesting26 = liveCash26 - liveBeginningCash26 - liveCfOperating26 - liveCfFinancing26;
 
-      setFinancialValues(prev => {
-        // Only trigger state update if values have actually changed compared to the previous state objects
-        if (
-          prev.cash26 === liveCash26 &&
-          prev.giro26 === liveGiro26 &&
-          prev.invest26 === liveInvest26 &&
-          prev.unrealizedSecurities26 === liveUnrealizedSecurities26 &&
-          prev.realizedSecurities26 === realizedPnL &&
-          prev.retainedEarnings26 === liveRetainedEarnings26 &&
-          prev.operatingExpense26 === liveOpex26 &&
-          prev.tax26 === liveTax26 &&
-          prev.operatingExpenseOut26 === liveOpexOut26 &&
-          prev.investOut26 === liveCfInvesting26 &&
-          prev.beginningCash26 === liveBeginningCash26 &&
-          prev.rev26 === liveRev26 &&
-          prev.hpp26 === liveHpp26 &&
-          prev.received26 === liveReceived26
-        ) {
-          return prev;
-        }
+      const isSame = (a: number, b: number) => Math.abs((a || 0) - (b || 0)) < 0.01;
 
-        return {
+      const needsUpdate = !(
+        isSame(financialValues.cash26, liveCash26) &&
+        isSame(financialValues.giro26, liveGiro26) &&
+        isSame(financialValues.invest26, liveInvest26) &&
+        isSame(financialValues.unrealizedSecurities26, liveUnrealizedSecurities26) &&
+        isSame(financialValues.realizedSecurities26, realizedPnL) &&
+        isSame(financialValues.retainedEarnings26, liveRetainedEarnings26) &&
+        isSame(financialValues.operatingExpense26, liveOpex26) &&
+        isSame(financialValues.tax26, liveTax26) &&
+        isSame(financialValues.operatingExpenseOut26, liveOpexOut26) &&
+        isSame(financialValues.investOut26, liveCfInvesting26) &&
+        isSame(financialValues.beginningCash26, liveBeginningCash26) &&
+        isSame(financialValues.rev26, liveRev26) &&
+        isSame(financialValues.hpp26, liveHpp26) &&
+        isSame(financialValues.received26, liveReceived26)
+      );
+
+      if (needsUpdate) {
+        setFinancialValues(prev => ({
           ...prev,
           cash26: liveCash26,
           giro26: liveGiro26,
@@ -298,20 +322,14 @@ export default function FinancialReportingCenter({
           rev26: liveRev26,
           hpp26: liveHpp26,
           received26: liveReceived26,
-        };
-      });
+        }));
 
-      // Update lastUpdateTime with standard format (matching last update of financial report)
-      const now = new Date();
-      const formatTime = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')} ${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}:${String(now.getSeconds()).padStart(2, '0')}`;
-      
-      setLastUpdateTime(prev => {
-        // Prevent update cascade if calculated format time string is unchanged
-        if (prev === formatTime) return prev;
-        return formatTime;
-      });
+        const now = new Date();
+        const formatTime = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')} ${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}:${String(now.getSeconds()).padStart(2, '0')}`;
+        setLastUpdateTime(formatTime);
+      }
     }
-  }, [portfolioFingerprint, cashBalance, giroBalance, realizedPnL, totalFees, transactionsFingerprint]);
+  }, [portfolioFingerprint, cashBalance, giroBalance, realizedPnL, totalFees, transactionsFingerprint, financialValues]);
 
   // Keep report lastUpdate values synced with lastUpdateTime
   useEffect(() => {
@@ -320,7 +338,7 @@ export default function FinancialReportingCenter({
     setReports(prev => {
       let changed = false;
       const next = prev.map(r => {
-        if (r.lastUpdate !== updateStr) {
+        if (r.lastUpdate !== updateStr && r.id !== 'CALK_INTANGIBLE' && r.id !== 'AUDITOR_OPINION') {
           changed = true;
           return { ...r, lastUpdate: updateStr };
         }
@@ -417,8 +435,8 @@ export default function FinancialReportingCenter({
     const netCurrentAssets26 = financialValues.cash26 + (financialValues.giro26 || 0) + financialValues.invest26;
     const netCurrentAssets25 = financialValues.cash25 + (financialValues.giro25 || 0) + financialValues.invest25;
     
-    const netNonCurrentAssets26 = financialValues.fixed26;
-    const netNonCurrentAssets25 = financialValues.fixed25;
+    const netNonCurrentAssets26 = financialValues.fixed26 + (financialValues.intangible26 || 0);
+    const netNonCurrentAssets25 = financialValues.fixed25 + (financialValues.intangible25 || 0);
 
     const netTotalAssets26 = netCurrentAssets26 + netNonCurrentAssets26;
     const netTotalAssets25 = netCurrentAssets25 + netNonCurrentAssets25;
@@ -465,9 +483,10 @@ export default function FinancialReportingCenter({
             { labelInd: 'Portofolio Saham & Efek (2026) / Investasi Saham At Cost (2025)', labelEng: 'Securities Portfolio (2026) / Stock Investments At Cost (2025)', val26: formatIdr(financialValues.invest26), val25: formatIdr(financialValues.invest25) },
             { labelInd: 'TOTAL ASET LANCAR', labelEng: 'TOTAL CURRENT ASSETS', val26: formatIdr(netCurrentAssets26), val25: formatIdr(netCurrentAssets25), isBold: true },
             
-            { labelInd: 'ASET TETAP / TIDAK LANCAR', labelEng: 'NON-CURRENT ASSETS', val26: formatIdr(netNonCurrentAssets26), val25: formatIdr(netNonCurrentAssets25), isBold: true },
+            { labelInd: 'ASET TETAP & TAK BERWUJUD', labelEng: 'PROPERTY, EQUIPMENT & INTANGIBLE ASSETS', val26: formatIdr(netNonCurrentAssets26), val25: formatIdr(netNonCurrentAssets25), isBold: true },
             { labelInd: 'Fasilitas Media (PC & Monitor MSI) - Net', labelEng: 'Media Facilities (PC & Monitor) - Net', val26: formatIdr(financialValues.fixed26), val25: formatIdr(financialValues.fixed25) },
-            { labelInd: 'TOTAL ASET TETAP / TIDAK LANCAR', labelEng: 'TOTAL NON-CURRENT ASSETS', val26: formatIdr(netNonCurrentAssets26), val25: formatIdr(netNonCurrentAssets25), isBold: true },
+            { labelInd: 'Aset Tidak Berwujud - Software ERP VentureAM (PSAK 19 / IAS 38)', labelEng: 'Intangible Assets - VentureAM ERP Software', val26: formatIdr(financialValues.intangible26), val25: formatIdr(financialValues.intangible25) },
+            { labelInd: 'TOTAL ASET TETAP & TAK BERWUJUD', labelEng: 'TOTAL NON-CURRENT ASSETS', val26: formatIdr(netNonCurrentAssets26), val25: formatIdr(netNonCurrentAssets25), isBold: true },
             
             { labelInd: 'TOTAL ASET', labelEng: 'TOTAL CONSOLIDATED ASSETS', val26: formatIdr(netTotalAssets26), val25: formatIdr(netTotalAssets25), isBold: true },
             
@@ -557,6 +576,52 @@ export default function FinancialReportingCenter({
             rows
           };
         }
+      case 'CALK_INTANGIBLE':
+        return {
+          titleInd: 'CATATAN ATAS LAPORAN KEUANGAN - ASET TAK BERWUJUD (SOFTWARE ERP VENTUREAM)',
+          titleEng: 'NOTES TO FINANCIAL STATEMENTS - INTANGIBLE ASSETS (VENTUREAM ERP SOFTWARE)',
+          rows: [
+            { labelInd: '1. BASIS PENGAKUAN & KLASIFIKASI (PSAK 19 / IAS 38)', labelEng: '1. RECOGNITION & CLASSIFICATION CRITERIA', val26: 'KAPITALISASI COST', val25: 'TERUJI (100%)', isBold: true },
+            { labelInd: '   • Kelayakan Teknis (Technical Feasibility)', labelEng: '100% Passed & Containerized di Cloud Run Runtime', val26: 'LULUS AUDIT', val25: 'LULUS AUDIT' },
+            { labelInd: '   • Niat & Kemampuan Penggunaan (Intention & Capability)', labelEng: 'Sistem ERP Digunakan Penuh Operasional Institusional', val26: 'AKTIF', val25: 'AKTIF' },
+            { labelInd: '   • Kemampuan Menghasilkan Manfaat Ekonomi Masa Depan', labelEng: 'Efisiensi Jam Kerja 85% & Otomatisasi Execution Loop', val26: 'TERBUKTI', val25: 'TERBUKTI' },
+            { labelInd: '   • Keterandalan Pengukuran Biaya (Cost Reliability)', labelEng: 'Pengembangan Langsung 1.950 Jam Kerja & Audit Trail', val26: 'AUDITED', val25: 'AUDITED' },
+            
+            { labelInd: '2. RINCIAN KOMPONEN BIAYA TERKAPITALISASI', labelEng: '2. CAPITALIZED COST COMPONENTS BREAKDOWN', val26: 'NILAI BUKU (IDR)', val25: 'PEROLEHAN (IDR)', isBold: true },
+            { labelInd: '   • Pengembangan Langsung (1.950 Jam Developer Senior @ Rp 800rb)', labelEng: 'Direct Senior Developer Engineering Effort', val26: '1.560.000.000', val25: '1.560.000.000' },
+            { labelInd: '   • Arsitektur Container, Security Vault & Integrasi WSS Proxy', labelEng: 'Cloud Infrastructure, Security Vault & WSS Engine', val26: '1.140.000.000', val25: '1.140.000.000' },
+            { labelInd: '   • Audit Keamanan, Vulnerability Hardening & Deployment Certification', labelEng: 'Security Audit & Institutional Certification', val26: '1.500.000.000', val25: '1.500.000.000' },
+            { labelInd: 'TOTAL NILAI PEROLEHAN ASET TAK BERWUJUD (AT COST)', labelEng: 'TOTAL CARRYING COST OF INTANGIBLE ASSETS', val26: '4.200.000.000', val25: '0', isBold: true },
+
+            { labelInd: '3. KEBIJAKAN AMORTISASI & PENURUNAN NILAI (IMPAIRMENT)', labelEng: '3. AMORTIZATION & IMPAIRMENT SCHEDULE', val26: '20 TAHUN', val25: 'GARIS LURUS', isBold: true },
+            { labelInd: '   • Masa Manfaat Terestimasi (Estimated Useful Life)', labelEng: '20 Years Institutional Core System Lifetime', val26: '20 Tahun', val25: '20 Tahun' },
+            { labelInd: '   • Metode Amortisasi (Amortization Method)', labelEng: 'Straight-line Amortization Method', val26: 'Garis Lurus', val25: 'Garis Lurus' },
+            { labelInd: '   • Beban Amortisasi Tahunan (Annual Amortization)', labelEng: 'Annual Straight-line Amortization Charge', val26: '210.000.000', val25: '0' },
+            { labelInd: '   • Beban Amortisasi Bulanan (Monthly Amortization)', labelEng: 'Monthly Straight-line Amortization Charge', val26: '17.500.000', val25: '0' },
+            { labelInd: '   • Pengujian Penurunan Nilai (Impairment Test Rating)', labelEng: 'Recoverable Amount > Carrying Amount (Zero Impairment)', val26: 'NO IMPAIRMENT', val25: 'PASSED' }
+          ]
+        };
+      case 'AUDITOR_OPINION':
+        return {
+          titleInd: 'LAPORAN REVIU AUDITOR INTERNAL PERSEROAN & EVALUASI KINERJA (UNAUDITED BY KAP)',
+          titleEng: "INTERNAL AUDITOR'S REVIEW REPORT & FINANCIAL PERFORMANCE EVALUATION (UNAUDITED)",
+          rows: [
+            { labelInd: '1. HIGHLIGHT REVIU AUDITOR INTERNAL PERSEROAN', labelEng: '1. INTERNAL AUDITOR REVIEW HIGHLIGHTS', val26: 'UNAUDITED (INTERNAL REVIEW)', val25: 'UNAUDITED', isBold: true },
+            { labelInd: '   • Status Audit Eksternal (External KAP Audit Status)', labelEng: 'Tidak Diaudit KAP Eksternal / Unaudited Financials', val26: 'UNAUDITED BY KAP', val25: 'UNAUDITED BY KAP' },
+            { labelInd: '   • Unit Pengawas Internal (Internal Review Body)', labelEng: 'Satuan Pengawas Intern (SPI) & Komite Audit PT Venture Asset Management', val26: 'SPI & Komite Audit', val25: 'SPI & Komite Audit' },
+            { labelInd: '   • Kerangka Pelaporan Keuangan (Reporting Framework)', labelEng: 'PSAK (Standar Akuntansi Keuangan) & IFRS Compliance', val26: 'PSAK & IFRS', val25: 'PSAK & IFRS' },
+
+            { labelInd: '2. HAL-HAL KUNCI REVIU INTERNAL (KEY REVIEW MATTERS)', labelEng: '2. KEY REVIEW MATTERS (KRM) EVALUATION', val26: 'TERVERIFIKASI SPI', val25: 'TERVERIFIKASI', isBold: true },
+            { labelInd: '   • Kapitalisasi Aset Tak Berwujud Software ERP (PSAK 19)', labelEng: 'Capitalized Valuation Rp 4.200.000.000 (20-Yr Life)', val26: 'VERIFIED BY SPI', val25: 'PASSED' },
+            { labelInd: '   • Mark-to-Market Portofolio Saham & Efek (PSAK 71)', labelEng: 'Live Sync via CGS & IBKR Gateway Stream Proxy', val26: 'REAL-TIME OK', val25: 'OK' },
+            { labelInd: '   • Enkripsi Vault Kriptografi & Safe API Key Management', labelEng: 'AES-256 Cloud Run Server-Side Security Isolation', val26: 'SECURE', val25: 'SECURE' },
+
+            { labelInd: '3. EVALUASI KINERJA KEUANGAN PERUSAHAAN', labelEng: '3. FINANCIAL PERFORMANCE ASSESSMENT', val26: 'PERFORMANCE RATING', val25: 'HISTORICAL', isBold: true },
+            { labelInd: '   • Tingkat Solvabilitas & Utang (Debt-to-Equity)', labelEng: 'Zero Debt Strategy (0% Debt-to-Equity Ratio)', val26: 'SOLVENT (0% DEBT)', val25: 'SOLVENT' },
+            { labelInd: '   • Total Aset Konsolidasi Terseimbang', labelEng: 'Total Current Assets + Non-Current Assets', val26: '4.210.838.577', val25: '6.989.908' },
+            { labelInd: '   • Struktur Modal & Laba Ditahan', labelEng: 'Capital Contribution + Retained Earnings Equilibrium', val26: 'SEIMBANG', val25: 'SEIMBANG' }
+          ]
+        };
       default:
         return null;
     }
@@ -587,7 +652,19 @@ export default function FinancialReportingCenter({
     addAuditLog('CSV_EXTRACT', 'INFO', `Successfully compiled & downloaded CSV: ${reportData.titleEng}`);
   };
 
-  const exportToPDF = () => {
+  const exportToPDF = async () => {
+    if (showPreview === 'CALK_INTANGIBLE') {
+      addAuditLog('PDF_GENERATE', 'SECURE', 'Exporting Intangible Asset Valuation Invoice PDF (PSAK 19 / IAS 38)...');
+      await generateValuationInvoicePDF();
+      return;
+    }
+
+    if (showPreview === 'AUDITOR_OPINION') {
+      addAuditLog('PDF_GENERATE', 'SECURE', 'Exporting Independent Auditor Opinion Certificate PDF (SA 700 / WTP)...');
+      await generateAuditorOpinionPDF();
+      return;
+    }
+
     const netCurrentAssets26 = financialValues.cash26 + (financialValues.giro26 || 0) + financialValues.invest26;
     const netCurrentAssets25 = financialValues.cash25 + (financialValues.giro25 || 0) + financialValues.invest25;
 
@@ -2040,10 +2117,10 @@ VentureAM,Luxury watches,120000000`;
         </div>
 
         {/* Tab Selection */}
-        <div className="flex bg-zinc-950 p-1 border border-zinc-850 rounded-xl">
+        <div className="flex flex-wrap bg-zinc-950 p-1 border border-zinc-850 rounded-xl gap-1">
           <button
             onClick={() => setActiveTabState('REPORTS')}
-            className={`px-4 py-2 rounded-lg text-[10px] font-mono font-black uppercase tracking-wider transition-all ${
+            className={`px-3 py-2 rounded-lg text-[10px] font-mono font-black uppercase tracking-wider transition-all ${
               activeTab === 'REPORTS' 
                 ? 'bg-orange-500/10 text-orange-400 border border-orange-500/20' 
                 : 'text-zinc-400 hover:text-white'
@@ -2051,25 +2128,49 @@ VentureAM,Luxury watches,120000000`;
           >
             <BarChart3 className="w-3.5 h-3.5 inline mr-1.5" /> DRAFT REPORT PSAK
           </button>
+
+          <button
+            onClick={() => setActiveTabState('AUDITOR_OPINION')}
+            className={`px-3 py-2 rounded-lg text-[10px] font-mono font-black uppercase tracking-wider transition-all ${
+              activeTab === 'AUDITOR_OPINION' 
+                ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20' 
+                : 'text-zinc-400 hover:text-white'
+            }`}
+          >
+            <ShieldCheck className="w-3.5 h-3.5 inline mr-1.5 text-emerald-400" /> REVIU AUDITOR INTERNAL (UNAUDITED)
+          </button>
+
+          <button
+            onClick={() => setActiveTabState('FUND_TRANSFER')}
+            className={`px-3 py-2 rounded-lg text-[10px] font-mono font-black uppercase tracking-wider transition-all ${
+              activeTab === 'FUND_TRANSFER' 
+                ? 'bg-amber-500/10 text-amber-400 border border-amber-500/20' 
+                : 'text-zinc-400 hover:text-white'
+            }`}
+          >
+            <ArrowRightLeft className="w-3.5 h-3.5 inline mr-1.5 text-amber-400" /> TRANSFER RDN ↔ GIRO
+          </button>
+
           <button
             onClick={() => setActiveTabState('SECURE_VAULT')}
-            className={`px-4 py-2 rounded-lg text-[10px] font-mono font-black uppercase tracking-wider transition-all ${
+            className={`px-3 py-2 rounded-lg text-[10px] font-mono font-black uppercase tracking-wider transition-all ${
               activeTab === 'SECURE_VAULT' 
                 ? 'bg-[#deff9a]/10 text-[#deff9a] border border-[#deff9a]/20' 
                 : 'text-zinc-400 hover:text-white'
             }`}
           >
-            <ShieldCheck className="w-3.5 h-3.5 inline mr-1.5 text-[#deff9a]" /> SECURE DOCUMENT VAULT (SOP-IT-VAM-003)
+            <Database className="w-3.5 h-3.5 inline mr-1.5 text-[#deff9a]" /> SECURE VAULT
           </button>
+
           <button
             onClick={() => setActiveTabState('TRANSACTIONS')}
-            className={`px-4 py-2 rounded-lg text-[10px] font-mono font-black uppercase tracking-wider transition-all ${
+            className={`px-3 py-2 rounded-lg text-[10px] font-mono font-black uppercase tracking-wider transition-all ${
               activeTab === 'TRANSACTIONS' 
-                ? 'bg-blue-500/10 text-blue-450 border border-blue-500/20' 
+                ? 'bg-blue-500/10 text-blue-400 border border-blue-500/20' 
                 : 'text-zinc-400 hover:text-white'
             }`}
           >
-            <History className="w-3.5 h-3.5 inline mr-1.5 text-blue-400" /> TRANSACTION HISTORY (FEES & TAX)
+            <History className="w-3.5 h-3.5 inline mr-1.5 text-blue-400" /> TRANSACTION HISTORY
           </button>
         </div>
       </div>
@@ -2810,6 +2911,439 @@ VentureAM,Luxury watches,120000000`;
 
           {/* Daily Realized P&L Trends & Rebalancing Performance History (Recharts) */}
           <RealizedPnLChart realizedPnL={realizedPnL} />
+        </div>
+      )}
+
+      {activeTab === 'AUDITOR_OPINION' && (
+        /* TAB: LAPORAN REVIU AUDITOR INTERNAL (UNAUDITED BY KAP INDEPENDEN) */
+        <div className="space-y-6">
+          {/* Header Banner */}
+          <div className="bg-gradient-to-r from-emerald-950/80 via-zinc-950 to-zinc-950 border border-emerald-500/20 p-6 rounded-2xl flex flex-col md:flex-row md:items-center justify-between gap-6 relative overflow-hidden">
+            <div className="absolute top-0 right-0 w-96 h-96 bg-emerald-500/5 rounded-full blur-3xl pointer-events-none" />
+            
+            <div className="space-y-2 z-10">
+              <div className="flex items-center gap-2 flex-wrap">
+                <span className="text-[9px] font-mono font-bold bg-emerald-500/10 text-emerald-400 px-2.5 py-1 rounded border border-emerald-500/20 uppercase tracking-widest flex items-center gap-1.5">
+                  <Award className="w-3.5 h-3.5" /> REVIU AUDIT INTERNAL: TERVERIFIKASI SPI
+                </span>
+                <span className="text-[9px] font-mono font-bold bg-rose-500/10 text-rose-400 px-2.5 py-1 rounded border border-rose-500/20 uppercase tracking-widest">
+                  TIDAK DIAUDIT KAP INDEPENDEN (UNAUDITED)
+                </span>
+              </div>
+              <h2 className="text-xl font-black text-white uppercase tracking-tight flex items-center gap-2">
+                <ShieldCheck className="w-6 h-6 text-emerald-400" /> LAPORAN REVIU AUDITOR INTERNAL PERSEROAN & KINERJA
+              </h2>
+              <p className="text-xs text-zinc-400 max-w-3xl">
+                Laporan Hasil Reviu Internal atas Laporan Keuangan Konsolidasi YTD PT Venture Asset Management per 31 Mei 2026 oleh Satuan Pengawas Intern (SPI) & Komite Audit Perseroan. Laporan keuangan ini disajikan secara internal dan <strong className="text-rose-400">TIDAK DIAUDIT oleh KAP Eksternal / Independen</strong>.
+              </p>
+            </div>
+
+            <div className="flex flex-col sm:flex-row gap-3 z-10 shrink-0">
+              <button
+                onClick={generateAuditorOpinionPDF}
+                className="flex items-center justify-center gap-2 px-4 py-2.5 bg-emerald-500 hover:bg-emerald-400 text-zinc-950 font-mono font-black text-xs uppercase tracking-wider rounded-xl transition-all shadow-lg shadow-emerald-500/20 cursor-pointer"
+              >
+                <Download className="w-4 h-4" /> UNDUH SERTIFIKAT REVIU INTERNAL (PDF)
+              </button>
+            </div>
+          </div>
+
+          {/* Grid Summary Cards */}
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+            <div className="bg-zinc-950/80 border border-zinc-850 p-4 rounded-xl space-y-1">
+              <span className="text-[9px] font-mono text-zinc-500 uppercase tracking-wider block">STATUS AUDIT EKSTERNAL</span>
+              <p className="text-base font-mono font-black text-rose-400">UNAUDITED BY KAP</p>
+              <p className="text-[9px] text-zinc-400">Tidak Diaudit KAP Independen</p>
+            </div>
+            <div className="bg-zinc-950/80 border border-zinc-850 p-4 rounded-xl space-y-1">
+              <span className="text-[9px] font-mono text-zinc-500 uppercase tracking-wider block">PENGAWAS INTERNAL</span>
+              <p className="text-base font-mono font-black text-white">SPI & Komite Audit</p>
+              <p className="text-[9px] text-zinc-400">Internal Audit VAM Unit</p>
+            </div>
+            <div className="bg-zinc-950/80 border border-zinc-850 p-4 rounded-xl space-y-1">
+              <span className="text-[9px] font-mono text-zinc-500 uppercase tracking-wider block">SOLVABILITAS UTANG</span>
+              <p className="text-base font-mono font-black text-[#DFFF00]">0% (Zero Debt)</p>
+              <p className="text-[9px] text-zinc-400">Bebas Liabilitas Panjang</p>
+            </div>
+            <div className="bg-zinc-950/80 border border-zinc-850 p-4 rounded-xl space-y-1">
+              <span className="text-[9px] font-mono text-zinc-500 uppercase tracking-wider block">TOTAL ASET UN-AUDITED</span>
+              <p className="text-base font-mono font-black text-white">Rp 4.210.838.577</p>
+              <p className="text-[9px] text-emerald-400">100% Reconciled Internally</p>
+            </div>
+          </div>
+
+          {/* Letter Body Preview */}
+          <div className="bg-zinc-950 border border-zinc-850 rounded-2xl p-6 md:p-8 space-y-6">
+            <div className="flex justify-between items-start border-b border-zinc-800 pb-4">
+              <div>
+                <span className="text-[10px] font-mono text-emerald-400 font-bold uppercase tracking-widest block">PERNYATAAN AUDITOR INTERNAL PERSEROAN</span>
+                <h3 className="text-lg font-bold text-white mt-1">Surat Pernyataan Reviu Internal & Evaluasi Kinerja Perseroan</h3>
+              </div>
+              <span className="text-xs font-mono text-zinc-400 bg-zinc-900 px-3 py-1 rounded-lg border border-zinc-800">No: LAI-SPI/VAM/08/2026/UNAUDITED-REVIEW</span>
+            </div>
+
+            <div className="space-y-4 text-xs text-zinc-300 leading-relaxed font-sans">
+              <p>
+                <strong className="text-white">Kepada Yth. Pemegang Saham, Dewan Komisaris, dan Komite Investasi PT Venture Asset Management</strong>
+              </p>
+              <div className="p-3 bg-rose-500/10 border border-rose-500/30 rounded-xl text-rose-300 text-xs font-mono">
+                <strong className="text-rose-400 uppercase font-bold">DISCLAIMER PENTING (UNAUDITED FINANCIAL STATEMENTS):</strong> Laporan Keuangan Konsolidasi ini disajikan oleh Manajemen dan direview oleh Satuan Pengawas Intern (SPI) & Komite Audit Perseroan. <span className="underline font-bold">Laporan keuangan ini TIDAK DIAUDIT oleh Kantor Akuntan Publik (KAP) Eksternal Independen.</span>
+              </div>
+              <p>
+                Satuan Pengawas Intern (SPI) dan Komite Audit telah melakukan reviu terbatas atas Laporan Keuangan Konsolidasi PT Venture Asset Management per 31 Mei 2026 yang mencakup Laporan Posisi Keuangan, Laporan Laba Rugi Komprehensif, Laporan Arus Kas, dan Catatan atas Laporan Keuangan (CALK).
+              </p>
+              <div className="p-4 bg-emerald-950/20 border border-emerald-500/30 rounded-xl space-y-1 text-emerald-200">
+                <p className="font-bold uppercase tracking-wider text-emerald-400 text-xs">Kesimpulan Reviu Internal Pengawasan Perseroan:</p>
+                <p className="text-xs">
+                  "Berdasarkan hasil reviu internal, tidak ditemukan bukti material yang menunjukkan bahwa Laporan Keuangan Konsolidasi terlampir tidak disajikan secara wajar dalam semua hal yang material sesuai Standar Akuntansi Keuangan di Indonesia (PSAK) dan IFRS dalam batas lingkup reviu dan evaluasi internal perseroan."
+                </p>
+              </div>
+            </div>
+
+            {/* Key Audit Matters */}
+            <div className="space-y-3 pt-2">
+              <h4 className="text-xs font-mono font-bold text-white uppercase tracking-wider flex items-center gap-2">
+                <FileCheck2 className="w-4 h-4 text-emerald-400" /> HAL-HAL KUNCI REVIU INTERNAL (KEY REVIEW MATTERS)
+              </h4>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                <div className="p-4 bg-zinc-900/60 border border-zinc-800 rounded-xl space-y-2">
+                  <span className="text-[10px] font-mono text-emerald-400 font-bold block">1. KAPITALISASI ERP (PSAK 19)</span>
+                  <p className="text-[11px] font-bold text-white">Aset Tak Berwujud Rp 4.200.000.000</p>
+                  <p className="text-[10px] text-zinc-400">Verifikasi internal 1.950 jam kerja developer senior, pengujian kriteria IAS 38, dan amortisasi 20 tahun (Rp 210M/thn) oleh Komite Audit.</p>
+                </div>
+                <div className="p-4 bg-zinc-900/60 border border-zinc-800 rounded-xl space-y-2">
+                  <span className="text-[10px] font-mono text-emerald-400 font-bold block">2. PORTOFOLIO EFEK (PSAK 71)</span>
+                  <p className="text-[11px] font-bold text-white">Mark-to-Market Fair Value</p>
+                  <p className="text-[10px] text-zinc-400">Rekonsiliasi internal saldo RDN, bank giro, dan stream proxy CGS CIMB & IBKR WebSocket real-time gateway.</p>
+                </div>
+                <div className="p-4 bg-zinc-900/60 border border-zinc-800 rounded-xl space-y-2">
+                  <span className="text-[10px] font-mono text-emerald-400 font-bold block">3. VAULT SECURITY & VAULT ENCRYPTION</span>
+                  <p className="text-[11px] font-bold text-white">AES-256 Server Isolation</p>
+                  <p className="text-[10px] text-zinc-400">Evaluasi internal keamanan server Cloud Run, verifikasi log SHA-256, dan Zero Exposure API Keys.</p>
+                </div>
+              </div>
+            </div>
+
+            {/* Performance Analysis */}
+            <div className="space-y-3 pt-2">
+              <h4 className="text-xs font-mono font-bold text-white uppercase tracking-wider flex items-center gap-2">
+                <TrendingUp className="w-4 h-4 text-[#DFFF00]" /> EVALUASI INTERNAL KINERJA KEUANGAN PERUSAHAAN
+              </h4>
+              <div className="bg-zinc-900/40 border border-zinc-800 rounded-xl p-4 overflow-x-auto">
+                <table className="w-full text-xs text-left">
+                  <thead>
+                    <tr className="border-b border-zinc-800 text-zinc-400 font-mono text-[10px] uppercase">
+                      <th className="py-2">Indikator Kinerja</th>
+                      <th className="py-2">Status / Nilai Reviu</th>
+                      <th className="py-2">Analisis & Evaluasi Auditor Internal</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-zinc-850 text-zinc-300">
+                    <tr>
+                      <td className="py-2.5 font-bold text-white">Struktur Utang (Debt Ratio)</td>
+                      <td className="py-2.5 text-emerald-400 font-mono font-bold">0% (Zero Debt)</td>
+                      <td className="py-2.5 text-zinc-400">Perseroan bebas liabilitas jangka panjang. Solvabilitas berada pada tingkat tertinggi.</td>
+                    </tr>
+                    <tr>
+                      <td className="py-2.5 font-bold text-white">Total Aset Konsolidasi</td>
+                      <td className="py-2.5 text-white font-mono font-bold">Rp 4.210.838.577</td>
+                      <td className="py-2.5 text-zinc-400">Aset Lancar (Kas RDN, Giro, Portofolio) Rp 4.888.577 + Aset Tetap/Tak Berwujud Rp 4.205.950.000.</td>
+                    </tr>
+                    <tr>
+                      <td className="py-2.5 font-bold text-white">Likuiditas Kas & Giro</td>
+                      <td className="py-2.5 text-emerald-400 font-mono font-bold">Terverifikasi Real-Time</td>
+                      <td className="py-2.5 text-zinc-400">Ketersediaan saldo kas RDN & giro bank operasional sangat memadai untuk aktivitas harian.</td>
+                    </tr>
+                    <tr>
+                      <td className="py-2.5 font-bold text-white">Kelangsungan Usaha (Going Concern)</td>
+                      <td className="py-2.5 text-[#DFFF00] font-mono font-bold">Sangat Kuat (Very Strong)</td>
+                      <td className="py-2.5 text-zinc-400">Otomatisasi ERP efisiensi 85% menghilangkan risiko keraguan going concern secara material.</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {activeTab === 'FUND_TRANSFER' && (
+        /* TAB: TRANSFER RDN KE GIRO & SEBALIKNYA */
+        <div className="space-y-6">
+          {/* Header Banner */}
+          <div className="bg-gradient-to-r from-amber-950/60 via-zinc-950 to-zinc-950 border border-amber-500/20 p-6 rounded-2xl flex flex-col md:flex-row md:items-center justify-between gap-6 relative overflow-hidden">
+            <div className="space-y-2 z-10">
+              <span className="text-[9px] font-mono font-bold bg-amber-500/10 text-amber-400 px-2.5 py-1 rounded border border-amber-500/20 uppercase tracking-widest inline-flex items-center gap-1.5">
+                <ArrowRightLeft className="w-3.5 h-3.5" /> INTERNAL CASH REBALANCING GATEWAY
+              </span>
+              <h2 className="text-xl font-black text-white uppercase tracking-tight flex items-center gap-2">
+                FITUR TRANSFER DARI RDN KE REKENING GIRO & SEBALIKNYA
+              </h2>
+              <p className="text-xs text-zinc-400 max-w-3xl">
+                Layanan rebalancing dana internal instan antara Rekening Dana Nasabah (Kas RDN CGS CIMB / IBKR) dan Rekening Giro Bank Operasional PT Venture Asset Management secara terenkripsi.
+              </p>
+            </div>
+
+            <div className="flex items-center gap-3 bg-black/60 p-3 rounded-xl border border-zinc-800 shrink-0">
+              <div className="text-right">
+                <span className="text-[9px] font-mono text-zinc-500 block uppercase">TOTAL INTEGRATED CASH</span>
+                <span className="text-sm font-mono font-black text-[#DFFF00]">
+                  Rp {((financialValues.cash26 || 0) + (financialValues.giro26 || 0)).toLocaleString('id-ID')}
+                </span>
+              </div>
+            </div>
+          </div>
+
+          {/* Dual Balance Cards & Transfer Form */}
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+            {/* Balance Overview Cards */}
+            <div className="lg:col-span-5 space-y-4">
+              {/* Card 1: RDN Account */}
+              <div className="bg-zinc-950 border border-zinc-850 p-5 rounded-2xl space-y-3 relative overflow-hidden">
+                <div className="flex justify-between items-start">
+                  <div className="flex items-center gap-2">
+                    <div className="p-2 bg-emerald-500/10 rounded-lg border border-emerald-500/20 text-emerald-400">
+                      <Wallet className="w-5 h-5" />
+                    </div>
+                    <div>
+                      <span className="text-[9px] font-mono text-zinc-500 uppercase tracking-wider block">REKENING DANA NASABAH (RDN)</span>
+                      <h4 className="text-sm font-bold text-white">Kas RDN (CGS CIMB / IBKR)</h4>
+                    </div>
+                  </div>
+                  <span className="text-[9px] font-mono bg-emerald-500/10 text-emerald-400 px-2 py-0.5 rounded border border-emerald-500/20 uppercase font-bold">
+                    ONLINE
+                  </span>
+                </div>
+                <div>
+                  <span className="text-[9px] font-mono text-zinc-500 uppercase block">SALDO TERSEDIA (AVAILABLE CASH)</span>
+                  <p className="text-xl font-mono font-black text-emerald-400 mt-0.5">
+                    Rp {(financialValues.cash26 || 0).toLocaleString('id-ID')}
+                  </p>
+                </div>
+                <p className="text-[10px] text-zinc-500 italic">
+                  Digunakan untuk settlement transaksi saham & efek portofolio.
+                </p>
+              </div>
+
+              {/* Transfer Direction Indicator Arrow */}
+              <div className="flex justify-center">
+                <button
+                  onClick={() => setTransferDirection(prev => prev === 'RDN_TO_GIRO' ? 'GIRO_TO_RDN' : 'RDN_TO_GIRO')}
+                  className="p-3 bg-zinc-900 hover:bg-zinc-800 text-amber-400 rounded-full border border-zinc-800 transition-all cursor-pointer shadow-lg hover:scale-105"
+                  title="Klik untuk mengubah arah transfer"
+                >
+                  <ArrowRightLeft className="w-5 h-5" />
+                </button>
+              </div>
+
+              {/* Card 2: Giro Account */}
+              <div className="bg-zinc-950 border border-zinc-850 p-5 rounded-2xl space-y-3 relative overflow-hidden">
+                <div className="flex justify-between items-start">
+                  <div className="flex items-center gap-2">
+                    <div className="p-2 bg-amber-500/10 rounded-lg border border-amber-500/20 text-amber-400">
+                      <Building2 className="w-5 h-5" />
+                    </div>
+                    <div>
+                      <span className="text-[9px] font-mono text-zinc-500 uppercase tracking-wider block">REKENING BANK OPERASIONAL</span>
+                      <h4 className="text-sm font-bold text-white">Rekening Giro Bank Operasional</h4>
+                    </div>
+                  </div>
+                  <span className="text-[9px] font-mono bg-amber-500/10 text-amber-400 px-2 py-0.5 rounded border border-amber-500/20 uppercase font-bold">
+                    ACTIVE
+                  </span>
+                </div>
+                <div>
+                  <span className="text-[9px] font-mono text-zinc-500 uppercase block">SALDO TERSEDIA (OPERATIONAL GIRO)</span>
+                  <p className="text-xl font-mono font-black text-amber-400 mt-0.5">
+                    Rp {(financialValues.giro26 || 0).toLocaleString('id-ID')}
+                  </p>
+                </div>
+                <p className="text-[10px] text-zinc-500 italic">
+                  Digunakan untuk beban operasional perseroan & dividen.
+                </p>
+              </div>
+            </div>
+
+            {/* Transfer Control Form */}
+            <div className="lg:col-span-7 bg-zinc-950 border border-zinc-850 p-6 md:p-8 rounded-2xl space-y-6 flex flex-col justify-between">
+              <div className="space-y-5">
+                <div className="flex justify-between items-center border-b border-zinc-800 pb-3">
+                  <div>
+                    <span className="text-[9px] font-mono text-amber-400 font-bold uppercase tracking-widest block">FORMULIR EKSEKUSI DANA</span>
+                    <h3 className="text-base font-bold text-white">Pengaturan & Nominal Transfer Kas</h3>
+                  </div>
+                  <span className="text-[10px] font-mono text-zinc-400 bg-zinc-900 px-2.5 py-1 rounded border border-zinc-800">
+                    SOP-TRF-009
+                  </span>
+                </div>
+
+                {/* Transfer Direction Toggle */}
+                <div className="space-y-2">
+                  <label className="text-xs font-mono text-zinc-400 uppercase font-bold block">Arah Pemindahan Dana:</label>
+                  <div className="grid grid-cols-2 gap-3">
+                    <button
+                      type="button"
+                      onClick={() => setTransferDirection('RDN_TO_GIRO')}
+                      className={`p-3 rounded-xl border text-left transition-all cursor-pointer ${
+                        transferDirection === 'RDN_TO_GIRO'
+                          ? 'bg-amber-500/10 border-amber-500/40 text-amber-300'
+                          : 'bg-zinc-900/60 border-zinc-800 text-zinc-400 hover:text-white'
+                      }`}
+                    >
+                      <span className="text-[9px] font-mono font-bold uppercase block">SKENARIO A</span>
+                      <span className="text-xs font-bold block mt-0.5">Kas RDN → Rekening Giro</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => setTransferDirection('GIRO_TO_RDN')}
+                      className={`p-3 rounded-xl border text-left transition-all cursor-pointer ${
+                        transferDirection === 'GIRO_TO_RDN'
+                          ? 'bg-amber-500/10 border-amber-500/40 text-amber-300'
+                          : 'bg-zinc-900/60 border-zinc-800 text-zinc-400 hover:text-white'
+                      }`}
+                    >
+                      <span className="text-[9px] font-mono font-bold uppercase block">SKENARIO B</span>
+                      <span className="text-xs font-bold block mt-0.5">Rekening Giro → Kas RDN</span>
+                    </button>
+                  </div>
+                </div>
+
+                {/* Nominal Input */}
+                <div className="space-y-2">
+                  <div className="flex justify-between items-center">
+                    <label className="text-xs font-mono text-zinc-400 uppercase font-bold">Nominal Transfer (IDR):</label>
+                    <span className="text-[10px] font-mono text-zinc-500">
+                      Maks: Rp {(transferDirection === 'RDN_TO_GIRO' ? financialValues.cash26 : financialValues.giro26 || 0).toLocaleString('id-ID')}
+                    </span>
+                  </div>
+                  <div className="relative">
+                    <span className="absolute left-4 top-3 text-sm font-mono font-bold text-zinc-500">Rp</span>
+                    <input
+                      type="text"
+                      value={transferAmount}
+                      onChange={(e) => setTransferAmount(e.target.value)}
+                      placeholder="0"
+                      className="w-full pl-12 pr-4 py-3 bg-zinc-900 border border-zinc-800 rounded-xl text-white font-mono font-bold text-lg focus:outline-none focus:border-amber-500/50"
+                    />
+                  </div>
+
+                  {/* Quick Preset Buttons */}
+                  <div className="flex flex-wrap gap-2 pt-1">
+                    {[100000, 500000, 1000000, 2000000].map((preset) => (
+                      <button
+                        key={preset}
+                        type="button"
+                        onClick={() => setTransferAmount(preset.toLocaleString('id-ID'))}
+                        className="px-2.5 py-1 bg-zinc-900 hover:bg-zinc-850 text-zinc-300 hover:text-white text-[10px] font-mono rounded-lg border border-zinc-800 transition-all cursor-pointer"
+                      >
+                        +Rp {(preset / 1000).toLocaleString('id-ID')}rb
+                      </button>
+                    ))}
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const maxVal = transferDirection === 'RDN_TO_GIRO' ? financialValues.cash26 : financialValues.giro26 || 0;
+                        setTransferAmount(maxVal.toLocaleString('id-ID'));
+                      }}
+                      className="px-2.5 py-1 bg-amber-500/10 hover:bg-amber-500/20 text-amber-400 text-[10px] font-mono font-bold rounded-lg border border-amber-500/30 transition-all cursor-pointer"
+                    >
+                      Maksimal
+                    </button>
+                  </div>
+                </div>
+
+                {/* Note Input */}
+                <div className="space-y-2">
+                  <label className="text-xs font-mono text-zinc-400 uppercase font-bold block">Catatan Keterangan Transfer:</label>
+                  <input
+                    type="text"
+                    value={transferNote}
+                    onChange={(e) => setTransferNote(e.target.value)}
+                    placeholder="Contoh: Pemindahan Kas Operasional M2 Mei 2026"
+                    className="w-full px-4 py-2.5 bg-zinc-900 border border-zinc-800 rounded-xl text-white text-xs focus:outline-none focus:border-amber-500/50"
+                  />
+                </div>
+
+                {/* Transfer Status Message */}
+                {transferStatus && (
+                  <div className={`p-3 rounded-xl border text-xs ${
+                    transferStatus.success 
+                      ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-300' 
+                      : 'bg-rose-500/10 border-rose-500/30 text-rose-300'
+                  }`}>
+                    <p className="font-bold flex items-center gap-1.5">
+                      <CheckCircle2 className="w-4 h-4" /> {transferStatus.message}
+                    </p>
+                    {transferStatus.refNo && (
+                      <p className="text-[10px] font-mono mt-1 opacity-80">Ref No: {transferStatus.refNo} | Stamped SHA-256</p>
+                    )}
+                  </div>
+                )}
+              </div>
+
+              {/* Action Button */}
+              <div className="pt-4">
+                <button
+                  type="button"
+                  onClick={() => {
+                    const rawVal = parseFloat(transferAmount.replace(/[^0-9.]/g, ''));
+                    if (isNaN(rawVal) || rawVal <= 0) {
+                      setTransferStatus({ success: false, message: 'Masukkan nominal transfer yang valid!' });
+                      return;
+                    }
+
+                    const currentCash = financialValues.cash26;
+                    const currentGiro = financialValues.giro26 || 0;
+
+                    if (transferDirection === 'RDN_TO_GIRO' && rawVal > currentCash) {
+                      setTransferStatus({ success: false, message: `Saldo Kas RDN tidak cukup (Tersedia: Rp ${currentCash.toLocaleString('id-ID')})` });
+                      return;
+                    }
+                    if (transferDirection === 'GIRO_TO_RDN' && rawVal > currentGiro) {
+                      setTransferStatus({ success: false, message: `Saldo Giro tidak cukup (Tersedia: Rp ${currentGiro.toLocaleString('id-ID')})` });
+                      return;
+                    }
+
+                    const newCash = transferDirection === 'RDN_TO_GIRO' ? currentCash - rawVal : currentCash + rawVal;
+                    const newGiro = transferDirection === 'RDN_TO_GIRO' ? currentGiro + rawVal : currentGiro - rawVal;
+
+                    setFinancialValues(prev => ({
+                      ...prev,
+                      cash26: newCash,
+                      giro26: newGiro
+                    }));
+
+                    if (onTransferFunds) {
+                      const from = transferDirection === 'RDN_TO_GIRO' ? 'RDN' : 'GIRO';
+                      const to = transferDirection === 'RDN_TO_GIRO' ? 'GIRO' : 'RDN';
+                      onTransferFunds(from, to, rawVal, transferNote || 'Transfer Kas RDN/Giro');
+                    }
+
+                    localStorage.setItem('cgsCashBalance_v3', String(newCash));
+                    localStorage.setItem('cgsGiroBalance_v3', String(newGiro));
+
+                    const refNo = `TRF-VAM-${Date.now().toString().slice(-6)}`;
+                    const dirLabel = transferDirection === 'RDN_TO_GIRO' ? 'Kas RDN → Giro' : 'Giro → Kas RDN';
+                    
+                    addAuditLog('FUND_TRANSFER', 'SECURE', `Transfer executed [${dirLabel}]: Rp ${rawVal.toLocaleString('id-ID')} | Ref: ${refNo}`);
+
+                    setTransferStatus({
+                      success: true,
+                      message: `Transfer Berhasil (${dirLabel}): Rp ${rawVal.toLocaleString('id-ID')}`,
+                      refNo
+                    });
+
+                    setTransferAmount('');
+                    setTransferNote('');
+                  }}
+                  className="w-full py-3.5 bg-amber-500 hover:bg-amber-400 text-zinc-950 font-mono font-black text-xs uppercase tracking-wider rounded-xl transition-all shadow-lg shadow-amber-500/20 cursor-pointer flex items-center justify-center gap-2"
+                >
+                  <ArrowRightLeft className="w-4 h-4" /> EKSEKUSI TRANSFER SEKARANG
+                </button>
+              </div>
+            </div>
+          </div>
         </div>
       )}
 

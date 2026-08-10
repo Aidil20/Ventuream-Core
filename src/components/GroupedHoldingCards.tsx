@@ -81,6 +81,7 @@ export const getAssetCategory = (asset: PortfolioAsset): string => {
     'LAND': 'Property & Real Estate',
     'EMTK': 'Technology & Electronics',
     'CTTH': 'Basic Materials',
+    'JGLE': 'Consumer Cyclicals / Property & Tourism',
     'PIPA': 'Industrials & Infrastructure',
     'ACES': 'Consumer Goods',
     'MNCN': 'Media & Entertainment',

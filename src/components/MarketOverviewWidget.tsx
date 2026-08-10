@@ -161,7 +161,7 @@ function MarketOverviewWidget({ news = EMPTY_NEWS, onRefreshNews, isLoadingNews 
             "title": "Indeks",
             "symbols": [
               { "s": "IDX:COMPOSITE", "d": "IHSG" },
-              { "s": "STI", "d": "Straits Times" },
+              { "s": "FTSE:STI", "d": "Straits Times (SGX)" },
               { "s": "OANDA:XAUUSD", "d": "Gold" },
               { "s": "FOREXCOM:SPX500", "d": "S&P 500" },
               { "s": "NASDAQ:IXIC", "d": "Nasdaq" },

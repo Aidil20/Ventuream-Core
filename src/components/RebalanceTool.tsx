@@ -58,6 +58,7 @@ const TICKER_TO_SECTOR: Record<string, string> = {
   'DSSA.JK': 'Energy',
   'KOTA.JK': 'Service',
   'CTTH.JK': 'Basic Materials',
+  'JGLE.JK': 'Consumer',
   'LAND.JK': 'Property',
   'LPKR.JK': 'Property',
   'PIPA.JK': 'Service',

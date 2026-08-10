@@ -21,6 +21,7 @@ import {
 import Sparkline from './Sparkline';
 import TradingViewWidget from './TradingViewWidget';
 import AdvanceChartModal from './AdvanceChartModal';
+import { getTradingViewSymbol, formatStockPrice, getStockInfo } from '../lib/stockUtils';
 
 interface PriceData {
   symbol: string;
@@ -73,6 +74,7 @@ const MARKET_SYMBOLS: Record<string, Record<string, string>> = {
     "DSSA": "PT Dian Swastatika Sentosa Tbk.",
     "BUMI": "PT Bumi Resources Tbk.",
     "CTTH": "PT Citatah Tbk.",
+    "JGLE": "PT Graha Andrasentra Propertindo Tbk.",
     "UNTR": "PT United Tractors Tbk.",
     "ACES": "PT Aspirasi Hidup Indonesia Tbk.",
     "EMTK": "PT Elang Mahkota Teknologi Tbk.",
@@ -109,18 +111,18 @@ const MARKET_SYMBOLS: Record<string, Record<string, string>> = {
     "NICE": "PT Adhi Kartiko Pratama Tbk.",
     "ALII": "PT Ancara Logistics Indonesia Tbk.",
     "MSJA": "PT Multisrana Agrindo Tbk.",
-    "MHYI": "PT Mobility Technology Indonesia Tbk.",
     "LIVE": "PT Homeco Victoria Makmur Tbk.",
     "NEST": "PT Era Media Sejahtera Tbk.",
     "GOLF": "PT Intra GolfLink Resorts Tbk.",
     "SOLA": "PT Xolare Ropa Energy Tbk.",
     "BATR": "PT Benteng Anugrah Sejahtera Tbk.",
     "DATA": "PT Remala Abadi Tbk.",
-    "MKLH": "PT Multikarya Asia Pasifik Raya Tbk.",
-    "TCHE": "PT Sinar Eka Selaras Tbk.",
+    "MKAP": "PT Multikarya Asia Pasifik Raya Tbk.",
+    "MHKI": "PT Multi Hanna Kreasindo Tbk.",
+    "ERAL": "PT Sinar Eka Selaras Tbk.",
     "HUMI": "PT Humpuss Maritim Internasional Tbk.",
     "WIFI": "PT Solusi Sinergi Digital Tbk.",
-    "SUNT": "PT Sunindo Pratama Tbk.",
+    "SUNI": "PT Sunindo Pratama Tbk.",
     "FWCT": "PT Wijaya Cahaya Timber Tbk.",
     "VKTR": "PT VKTR Teknologi Mobilitas Tbk.",
     "NANO": "PT Nanotech Indonesia Global Tbk.",
@@ -137,13 +139,13 @@ const MARKET_SYMBOLS: Record<string, Record<string, string>> = {
   SGX: {
     "DBS": "DBS Group Holdings Ltd",
     "UOB": "United Overseas Bank Ltd",
-    "OCBC": "Overseas-Chinese Banking Corp",
-    "Singtel": "Singapore Telecommunications",
-    "Keppel": "Keppel Ltd",
-    "CapitaLand": "CapitaLand Investment",
-    "Wilmar": "Wilmar International Ltd",
+    "OCBC": "Overseas-Chinese Banking Corp Ltd",
+    "SINGTEL": "Singapore Telecommunications Ltd",
+    "KEPPEL": "Keppel Ltd",
+    "CAPITALAND": "CapitaLand Investment Ltd",
+    "WILMAR": "Wilmar International Ltd",
     "SIA": "Singapore Airlines Ltd",
-    "ComfortDelGro": "ComfortDelGro Corp Ltd",
+    "COMFORTDELGRO": "ComfortDelGro Corp Ltd",
     "SATS": "SATS Ltd",
     "Y92": "Thai Beverage PCL"
   },
@@ -260,12 +262,12 @@ export const IdxPriceList = () => {
 
   const pendingUpdatesRef = useRef<Record<string, PriceData>>({});
   
-  // Custom states for TradingView and Google Finance Integration
-  const [feedSource, setFeedSourceState] = useState<'tradingview' | 'googlefinance' | 'hybrid'>(() => {
+  // Custom states for TradingView, Google Finance, and BEI (idx.co.id) Integration
+  const [feedSource, setFeedSourceState] = useState<'idx_official' | 'tradingview' | 'googlefinance' | 'hybrid'>(() => {
     const existing = localStorage.getItem('vam-feed-source');
     if (!existing) {
-      localStorage.setItem('vam-feed-source', 'googlefinance');
-      return 'googlefinance';
+      localStorage.setItem('vam-feed-source', 'idx_official');
+      return 'idx_official';
     }
     return existing as any;
   });
@@ -273,7 +275,7 @@ export const IdxPriceList = () => {
   const [advanceChartSymbol, setAdvanceChartSymbol] = useState<string | null>(null);
   const [feedStatusText, setFeedStatusText] = useState<string>("SYSTEM CORRELATION ACTIVE");
 
-  const setFeedSource = (source: 'tradingview' | 'googlefinance' | 'hybrid') => {
+  const setFeedSource = (source: 'idx_official' | 'tradingview' | 'googlefinance' | 'hybrid') => {
     localStorage.setItem('vam-feed-source', source);
     setFeedSourceState(source);
     window.dispatchEvent(new CustomEvent('vam-feed-source-changed', { detail: source }));
@@ -513,15 +515,7 @@ export const IdxPriceList = () => {
   };
 
   const getTradingViewWidgetSymbol = (symbol: string, market: string): string => {
-    if (market === 'IDX') return `IDX:${symbol}`;
-    if (market === 'SGX') return `SGX:${symbol}`;
-    if (market === 'US') return `NASDAQ:${symbol}`;
-    if (symbol === 'S&P 500 INDEX') return 'SP:SPX';
-    if (symbol === 'NASDAQ COMP') return 'NASDAQ:IXIC';
-    if (symbol === 'DOW JONES') return 'DJ:DJI';
-    if (symbol === 'IHSG COMPOSITE') return 'IDX:COMPOSITE';
-    if (symbol === 'STI INDEX') return 'SGX:STI';
-    return symbol;
+    return getTradingViewSymbol(symbol);
   };
 
   const marketHours = getMarketOperatingHours(selectedMarket);
@@ -533,6 +527,7 @@ export const IdxPriceList = () => {
   ] as const;
 
   const getSourceTag = () => {
+    if (feedSource === 'idx_official') return { text: "BEI DIRECT (idx.co.id)", color: "text-emerald-400 bg-emerald-500/10 border-emerald-500/30" };
     if (feedSource === 'tradingview') return { text: "TV-RT (LIVE)", color: "text-sky-400 bg-sky-500/10 border-sky-500/20" };
     if (feedSource === 'googlefinance') return { text: "GF-RT (SYNC)", color: "text-[#deff9a] bg-[#deff9a]/10 border-[#deff9a]/20" };
     if (selectedMarket === 'IDX') {
@@ -582,6 +577,17 @@ export const IdxPriceList = () => {
           </div>
           
           <div className="flex gap-1 bg-zinc-950 p-0.5 rounded-lg border border-zinc-800/80">
+            <button
+              onClick={() => setFeedSource('idx_official')}
+              title="Connect pricing with Bursa Efek Indonesia Official Feed (https://www.idx.co.id/id)"
+              className={`p-1 text-[8.5px] font-bold uppercase tracking-wider rounded-md transition-all px-2 ${
+                feedSource === 'idx_official'
+                  ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 font-black'
+                  : 'text-zinc-500 hover:text-zinc-300'
+              }`}
+            >
+              BEI (idx.co.id)
+            </button>
             <button
               onClick={() => setFeedSource('tradingview')}
               title="Connect pricing with TradingView DataBridge WebSockets"

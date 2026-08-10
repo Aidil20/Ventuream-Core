@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Search as SearchIcon, X, FileText, Newspaper, TrendingUp, ArrowRight, Loader2, Command, Activity } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
-import { searchAsset, AssetSearchInfo } from '../services/marketService';
+import { searchAsset, AssetSearchInfo, formatCurrencyByMarket } from '../services/marketService';
 import { fetchMarketNewsSummary, MarketNewsItem } from '../services/geminiService';
 
 interface SearchResult {
@@ -44,7 +44,7 @@ export const GlobalSearch = () => {
 
   useEffect(() => {
     if (!query.trim()) {
-      setResults([]);
+      setResults(prev => prev.length === 0 ? prev : []);
       return;
     }
 
@@ -200,11 +200,30 @@ export const GlobalSearch = () => {
                             <span className="text-[8px] font-black uppercase px-1 py-0.5 rounded bg-zinc-800 text-zinc-500 tracking-tighter">
                               {result.type}
                             </span>
+                            {result.type === 'asset' && result.metadata?.market && (
+                              <span className="text-[7px] font-black uppercase px-1 py-0.5 rounded bg-[#deff9a]/10 text-[#deff9a] tracking-tighter">
+                                {result.metadata.market}
+                              </span>
+                            )}
                           </div>
                           <p className="text-[10px] font-bold text-zinc-500 line-clamp-1">{result.subtitle}</p>
                         </div>
                       </div>
-                      <ArrowRight className="w-4 h-4 text-zinc-800 group-hover:text-[#deff9a] group-hover:translate-x-1 transition-all" />
+                      <div className="flex items-center gap-3">
+                        {result.type === 'asset' && result.metadata && (
+                          <div className="text-right">
+                            <p className="text-xs font-black text-white">
+                              {formatCurrencyByMarket(result.metadata.price, result.metadata.symbol, result.metadata.market, result.metadata.currency)}
+                            </p>
+                            {typeof result.metadata.changePercent === 'number' && (
+                              <p className={`text-[10px] font-bold ${result.metadata.changePercent >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
+                                {result.metadata.changePercent > 0 ? '+' : ''}{result.metadata.changePercent}%
+                              </p>
+                            )}
+                          </div>
+                        )}
+                        <ArrowRight className="w-4 h-4 text-zinc-800 group-hover:text-[#deff9a] group-hover:translate-x-1 transition-all" />
+                      </div>
                     </button>
                   ))}
                 </div>
