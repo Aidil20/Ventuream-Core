@@ -2992,7 +2992,7 @@ export async function generateAuditorOpinionPDF(): Promise<jsPDF> {
   doc.setFontSize(8.5);
   doc.setTextColor(15, 23, 42);
   doc.text("SATUAN PENGAWAS INTERN (SPI)", 14, currentY);
-  doc.text("DIVISI AKUNTANSI & PELAPORAN KORPORASI", pw - 85, currentY);
+  doc.text("KOMITE AUDIT & DEWAN PENGAWAS", pw - 85, currentY);
 
   currentY += 4;
   doc.setFont("Helvetica", "normal");
@@ -3012,14 +3012,14 @@ export async function generateAuditorOpinionPDF(): Promise<jsPDF> {
   doc.setFont("Helvetica", "bold");
   doc.setFontSize(8);
   doc.setTextColor(15, 23, 42);
-  doc.text("Handoko, SE., Ak., CA., CIA", 14, currentY);
-  doc.text("Aidil Syahdan Al Fitrah", pw - 85, currentY);
+  doc.text("DIVISI AKUNTANSI & PELAPORAN KORPORASI", 14, currentY);
+  doc.text("Aidil Syahdan Al fitrah", pw - 85, currentY);
 
   currentY += 3.5;
   doc.setFont("Helvetica", "normal");
   doc.setFontSize(7);
   doc.setTextColor(100, 116, 139);
-  doc.text("Kepala Satuan Pengawas Intern (Internal Audit)", 14, currentY);
+  doc.text("Satuan Pengawas Intern (Internal Audit)", 14, currentY);
   doc.text("President Director", pw - 85, currentY);
 
   currentY += 12;

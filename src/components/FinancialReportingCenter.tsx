@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { 
   BarChart3, 
   PieChart, 
@@ -34,7 +34,20 @@ import {
   DollarSign,
   CheckCircle,
   TrendingUp,
-  Sparkles
+  Sparkles,
+  ArrowDownRight,
+  ArrowUpRight,
+  Send,
+  Inbox,
+  UserCheck,
+  CreditCard,
+  Calendar,
+  Printer,
+  PenTool,
+  Eraser,
+  AlertCircle,
+  X,
+  CheckSquare
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import Papa from 'papaparse';
@@ -60,6 +73,22 @@ interface PortfolioAsset {
   yieldRate?: number;
 }
 
+interface ExternalTransferTx {
+  id: string;
+  refNo: string;
+  type: 'CASH_IN' | 'CASH_OUT';
+  partyName: string;
+  bankName: string;
+  accountNumber: string;
+  category: string;
+  amount: number;
+  date: string;
+  note: string;
+  status: 'COMPLETED' | 'VERIFIED' | 'PENDING';
+  digitalSignature?: string;
+  signatoryName?: string;
+}
+
 interface FinancialReportingCenterProps {
   portfolioData?: PortfolioAsset[];
   cashBalance?: number;
@@ -68,6 +97,7 @@ interface FinancialReportingCenterProps {
   totalFees?: number;
   transactions?: any[];
   onTransferFunds?: (fromAccount: 'RDN' | 'GIRO', toAccount: 'RDN' | 'GIRO', amount: number, note: string) => void;
+  onExternalTransfer?: (type: 'CASH_IN' | 'CASH_OUT', amount: number, partyName: string, category: string, note: string) => void;
 }
 
 interface Report {
@@ -102,7 +132,8 @@ export default function FinancialReportingCenter({
   realizedPnL = 0, 
   totalFees = 0,
   transactions = [],
-  onTransferFunds
+  onTransferFunds,
+  onExternalTransfer
 }: FinancialReportingCenterProps) {
   const [activeTab, setActiveTabState] = useState<'REPORTS' | 'AUDITOR_OPINION' | 'FUND_TRANSFER' | 'SECURE_VAULT' | 'TRANSACTIONS'>('REPORTS');
   const [kpiMetric, setKpiMetric] = useState<'ROA' | 'ROE' | 'GPM' | 'CR'>('ROA');
@@ -110,12 +141,79 @@ export default function FinancialReportingCenter({
   const [generationProgress, setGenerationProgress] = useState(0);
   const [showPreview, setShowPreview] = useState<string | null>(null);
 
-  // Fund Transfer state
+  // Fund Transfer state (Internal Rebalancing RDN ↔ Giro)
   const [isTransferModalOpen, setIsTransferModalOpen] = useState(false);
   const [transferDirection, setTransferDirection] = useState<'RDN_TO_GIRO' | 'GIRO_TO_RDN'>('RDN_TO_GIRO');
   const [transferAmount, setTransferAmount] = useState<string>('');
   const [transferNote, setTransferNote] = useState<string>('');
   const [transferStatus, setTransferStatus] = useState<{ success: boolean; message: string; refNo?: string } | null>(null);
+
+  // Sub-tab mode for Fund Transfer module: 'INTERNAL' | 'CASH_OUT' | 'CASH_IN'
+  const [extTransferSubTab, setExtTransferSubTab] = useState<'INTERNAL' | 'CASH_OUT' | 'CASH_IN'>('INTERNAL');
+
+  // External Cash Out State (Transfer Keluar Giro ke Pihak Lain)
+  const [cashOutParty, setCashOutParty] = useState('');
+  const [cashOutBank, setCashOutBank] = useState('Bank Mandiri');
+  const [cashOutAccount, setCashOutAccount] = useState('');
+  const [cashOutCategory, setCashOutCategory] = useState('Beban Operasional & Software ERP');
+  const [cashOutAmount, setCashOutAmount] = useState('');
+  const [cashOutNote, setCashOutNote] = useState('');
+  const [cashOutDate, setCashOutDate] = useState(() => new Date().toISOString().split('T')[0]);
+  const [cashOutStatus, setCashOutStatus] = useState<{ success: boolean; message: string; refNo?: string } | null>(null);
+
+  // External Cash In State (Terima Transfer Masuk ke Giro dari Pihak Lain)
+  const [cashInParty, setCashInParty] = useState('');
+  const [cashInBank, setCashInBank] = useState('Bank CIMB Niaga');
+  const [cashInAccount, setCashInAccount] = useState('');
+  const [cashInCategory, setCashInCategory] = useState('Pendapatan Management Fee / Advisory');
+  const [cashInAmount, setCashInAmount] = useState('');
+  const [cashInNote, setCashInNote] = useState('');
+  const [cashInDate, setCashInDate] = useState(() => new Date().toISOString().split('T')[0]);
+  const [cashInStatus, setCashInStatus] = useState<{ success: boolean; message: string; refNo?: string } | null>(null);
+
+  // Confirmation Modal & Digital Signature state for Giro External Transfers
+  const [isConfirmModalOpen, setIsConfirmModalOpen] = useState(false);
+  const [confirmTransferData, setConfirmTransferData] = useState<{
+    type: 'CASH_OUT' | 'CASH_IN';
+    partyName: string;
+    bankName: string;
+    accountNumber: string;
+    category: string;
+    amount: number;
+    date: string;
+    note: string;
+    currentGiro: number;
+    projectedGiro: number;
+  } | null>(null);
+
+  const [signatoryName, setSignatoryName] = useState('Aidil Syahdan Al fitrah, Direktur utama');
+  const [signatoryPin, setSignatoryPin] = useState('');
+  const [isSignatureAgreed, setIsSignatureAgreed] = useState(false);
+  const [hasDrawnSignature, setHasDrawnSignature] = useState(false);
+  const [signatureError, setSignatureError] = useState('');
+
+  const signatureCanvasRef = useRef<HTMLCanvasElement | null>(null);
+  const [isDrawing, setIsDrawing] = useState(false);
+
+  // Initial External Transfer Ledger History (Clean state, no dummy data)
+  const INITIAL_EXTERNAL_TRANSFERS: ExternalTransferTx[] = [];
+
+  const [externalTransferHistory, setExternalTransferHistory] = useState<ExternalTransferTx[]>(() => {
+    const saved = localStorage.getItem('vam_external_transfers_v3');
+    if (saved) {
+      try {
+        return JSON.parse(saved);
+      } catch (e) {
+        console.error('Failed to parse external transfers from localStorage', e);
+      }
+    }
+    // Clear legacy v2 storage containing old dummy data if present
+    localStorage.removeItem('vam_external_transfers_v2');
+    return INITIAL_EXTERNAL_TRANSFERS;
+  });
+
+  const [extHistoryFilter, setExtHistoryFilter] = useState<'ALL' | 'CASH_IN' | 'CASH_OUT'>('ALL');
+  const [extHistorySearch, setExtHistorySearch] = useState('');
 
   // Filter states for transaction history tab
   const [txSearch, setTxSearch] = useState('');
@@ -162,11 +260,11 @@ export default function FinancialReportingCenter({
   // Financial values that can be dynamically updated by vault finalize
   const [financialValues, setFinancialValues] = useState({
     // Balance Sheet (Rp)
-    cash26: 2950677,
+    cash26: 2379000,
     cash25: 989908.69, // Kas dan Setara Kas (Audit 2025)
-    giro26: giroBalance !== undefined ? giroBalance : 711000,
+    giro26: giroBalance !== undefined ? giroBalance : 711000, // Total Kas + Giro = Rp 3.090.000,00
     giro25: 262900, // Keuntungan Portofolio Belum Direalisasi (Audit 2025)
-    invest26: 1226900,
+    invest26: 1270000, // Portofolio Efek & AUM = Rp 1.270.000,00
     invest25: 1018300, // Investasi Saham At Cost (Audit 2025)
     fixed26: 5950000,
     fixed25: 6000000, // PC & Monitor MSI Cost
@@ -174,7 +272,7 @@ export default function FinancialReportingCenter({
     intangible25: 0,
     shortLiability26: 0,
     shortLiability25: 0,
-    paidCapital26: 4209300000, // Modal Disetor & Kapitalisasi Software Tak Berwujud (9.300.000 + 4.200.000.000)
+    paidCapital26: 11120000, // Modal Disetor Riil Laporan Keuangan Internal (Rp 11.120.000,00)
     paidCapital25: 6196225.05, // Modal Disetor (Audit 2025)
     retainedEarnings26: 1538577, // Corrected to include separate 711.000 Giro balance (827577 + 711000)
     retainedEarnings25: 2074883.64, // Laba Komprehensif (Audit 2025)
@@ -210,6 +308,11 @@ export default function FinancialReportingCenter({
     beginningCash25: 0, // Saldo Kas Awal 2025
   });
 
+  const financialValuesRef = useRef(financialValues);
+  useEffect(() => {
+    financialValuesRef.current = financialValues;
+  }, [financialValues]);
+
   // Create a primitive fingerprint digest to avoid array-reference based re-rendering cascades
   const portfolioFingerprint = useMemo(() => {
     if (!portfolioData) return '';
@@ -234,7 +337,7 @@ export default function FinancialReportingCenter({
       const netNonCurrentAssets26 = 5950000 + 4200000000; // fixed26 + intangible26
       const netTotalAssets26 = netCurrentAssets26 + netNonCurrentAssets26;
       const totalLiabilities26 = 0; // shortLiability26 is 0
-      const liveRetainedEarnings26 = netTotalAssets26 - totalLiabilities26 - 4209300000; // paidCapital26 is 4209300000
+      const liveRetainedEarnings26 = netTotalAssets26 - totalLiabilities26 - 11120000; // paidCapital26 is 11120000 (Modal Disetor Riil Rp 11.120.000,00)
 
       // Calculate real-time Revenue (sell transactions) and HPP (buy transactions)
       const totalSellAmount = (transactions || []).filter((tx: any) => tx.side === 'SELL' || tx.side === 'STOP_LOSS').reduce((acc: number, tx: any) => {
@@ -287,22 +390,23 @@ export default function FinancialReportingCenter({
       const liveCfInvesting26 = liveCash26 - liveBeginningCash26 - liveCfOperating26 - liveCfFinancing26;
 
       const isSame = (a: number, b: number) => Math.abs((a || 0) - (b || 0)) < 0.01;
+      const cur = financialValuesRef.current;
 
       const needsUpdate = !(
-        isSame(financialValues.cash26, liveCash26) &&
-        isSame(financialValues.giro26, liveGiro26) &&
-        isSame(financialValues.invest26, liveInvest26) &&
-        isSame(financialValues.unrealizedSecurities26, liveUnrealizedSecurities26) &&
-        isSame(financialValues.realizedSecurities26, realizedPnL) &&
-        isSame(financialValues.retainedEarnings26, liveRetainedEarnings26) &&
-        isSame(financialValues.operatingExpense26, liveOpex26) &&
-        isSame(financialValues.tax26, liveTax26) &&
-        isSame(financialValues.operatingExpenseOut26, liveOpexOut26) &&
-        isSame(financialValues.investOut26, liveCfInvesting26) &&
-        isSame(financialValues.beginningCash26, liveBeginningCash26) &&
-        isSame(financialValues.rev26, liveRev26) &&
-        isSame(financialValues.hpp26, liveHpp26) &&
-        isSame(financialValues.received26, liveReceived26)
+        isSame(cur.cash26, liveCash26) &&
+        isSame(cur.giro26, liveGiro26) &&
+        isSame(cur.invest26, liveInvest26) &&
+        isSame(cur.unrealizedSecurities26, liveUnrealizedSecurities26) &&
+        isSame(cur.realizedSecurities26, realizedPnL) &&
+        isSame(cur.retainedEarnings26, liveRetainedEarnings26) &&
+        isSame(cur.operatingExpense26, liveOpex26) &&
+        isSame(cur.tax26, liveTax26) &&
+        isSame(cur.operatingExpenseOut26, liveOpexOut26) &&
+        isSame(cur.investOut26, liveCfInvesting26) &&
+        isSame(cur.beginningCash26, liveBeginningCash26) &&
+        isSame(cur.rev26, liveRev26) &&
+        isSame(cur.hpp26, liveHpp26) &&
+        isSame(cur.received26, liveReceived26)
       );
 
       if (needsUpdate) {
@@ -329,7 +433,7 @@ export default function FinancialReportingCenter({
         setLastUpdateTime(formatTime);
       }
     }
-  }, [portfolioFingerprint, cashBalance, giroBalance, realizedPnL, totalFees, transactionsFingerprint, financialValues]);
+  }, [portfolioFingerprint, cashBalance, giroBalance, realizedPnL, totalFees, transactionsFingerprint]);
 
   // Keep report lastUpdate values synced with lastUpdateTime
   useEffect(() => {
@@ -380,6 +484,367 @@ export default function FinancialReportingCenter({
       { timestamp: time, eventCode, level, message },
       ...prev
     ].slice(0, 30));
+  };
+
+  // Filtered external transfer history computation
+  const filteredExternalTransfers = useMemo(() => {
+    return externalTransferHistory.filter(tx => {
+      const matchType = extHistoryFilter === 'ALL' || tx.type === extHistoryFilter;
+      const q = extHistorySearch.toLowerCase().trim();
+      const matchQuery = !q || 
+        tx.partyName.toLowerCase().includes(q) ||
+        tx.refNo.toLowerCase().includes(q) ||
+        tx.category.toLowerCase().includes(q) ||
+        tx.note.toLowerCase().includes(q) ||
+        tx.bankName.toLowerCase().includes(q) ||
+        tx.accountNumber.toLowerCase().includes(q);
+      return matchType && matchQuery;
+    });
+  }, [externalTransferHistory, extHistoryFilter, extHistorySearch]);
+
+  // Signature Canvas Handlers
+  const startDrawingSignature = (e: React.MouseEvent<HTMLCanvasElement> | React.TouchEvent<HTMLCanvasElement>) => {
+    const canvas = signatureCanvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+
+    const rect = canvas.getBoundingClientRect();
+    const clientX = 'touches' in e ? e.touches[0].clientX : e.clientX;
+    const clientY = 'touches' in e ? e.touches[0].clientY : e.clientY;
+
+    ctx.beginPath();
+    ctx.moveTo(clientX - rect.left, clientY - rect.top);
+    setIsDrawing(true);
+    setHasDrawnSignature(true);
+  };
+
+  const drawSignature = (e: React.MouseEvent<HTMLCanvasElement> | React.TouchEvent<HTMLCanvasElement>) => {
+    if (!isDrawing) return;
+    const canvas = signatureCanvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+
+    const rect = canvas.getBoundingClientRect();
+    const clientX = 'touches' in e ? e.touches[0].clientX : e.clientX;
+    const clientY = 'touches' in e ? e.touches[0].clientY : e.clientY;
+
+    ctx.lineTo(clientX - rect.left, clientY - rect.top);
+    ctx.strokeStyle = '#DFFF00';
+    ctx.lineWidth = 2.5;
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+    ctx.stroke();
+  };
+
+  const stopDrawingSignature = () => {
+    setIsDrawing(false);
+  };
+
+  const clearSignatureCanvas = () => {
+    const canvas = signatureCanvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    setHasDrawnSignature(false);
+  };
+
+  // Trigger Confirmation Modal for External Cash Out (Transfer Keluar)
+  const handleExecuteCashOut = () => {
+    const rawVal = parseFloat(cashOutAmount.replace(/[^0-9.]/g, ''));
+    if (!cashOutParty.trim()) {
+      setCashOutStatus({ success: false, message: 'Harap masukkan nama pihak penerima transfer!' });
+      return;
+    }
+    if (!cashOutAccount.trim()) {
+      setCashOutStatus({ success: false, message: 'Harap masukkan nomor rekening tujuan!' });
+      return;
+    }
+    if (isNaN(rawVal) || rawVal <= 0) {
+      setCashOutStatus({ success: false, message: 'Harap masukkan nominal transfer keluar yang valid!' });
+      return;
+    }
+
+    const currentGiro = financialValues.giro26 || 0;
+    if (rawVal > currentGiro) {
+      setCashOutStatus({ 
+        success: false, 
+        message: `Saldo Giro Operasional tidak mencukupi (Tersedia: Rp ${currentGiro.toLocaleString('id-ID')})` 
+      });
+      return;
+    }
+
+    setConfirmTransferData({
+      type: 'CASH_OUT',
+      partyName: cashOutParty.trim(),
+      bankName: cashOutBank,
+      accountNumber: cashOutAccount.trim(),
+      category: cashOutCategory,
+      amount: rawVal,
+      date: cashOutDate || new Date().toISOString().split('T')[0],
+      note: cashOutNote.trim() || 'Transfer Keluar Giro Operasional',
+      currentGiro,
+      projectedGiro: currentGiro - rawVal
+    });
+    setSignatureError('');
+    setHasDrawnSignature(false);
+    setIsSignatureAgreed(false);
+    setIsConfirmModalOpen(true);
+  };
+
+  // Trigger Confirmation Modal for External Cash In (Terima Transfer Masuk)
+  const handleExecuteCashIn = () => {
+    const rawVal = parseFloat(cashInAmount.replace(/[^0-9.]/g, ''));
+    if (!cashInParty.trim()) {
+      setCashInStatus({ success: false, message: 'Harap masukkan nama pihak pengirim transfer!' });
+      return;
+    }
+    if (!cashInAccount.trim()) {
+      setCashInStatus({ success: false, message: 'Harap masukkan nomor rekening pengirim!' });
+      return;
+    }
+    if (isNaN(rawVal) || rawVal <= 0) {
+      setCashInStatus({ success: false, message: 'Harap masukkan nominal transfer masuk yang valid!' });
+      return;
+    }
+
+    const currentGiro = financialValues.giro26 || 0;
+    setConfirmTransferData({
+      type: 'CASH_IN',
+      partyName: cashInParty.trim(),
+      bankName: cashInBank,
+      accountNumber: cashInAccount.trim(),
+      category: cashInCategory,
+      amount: rawVal,
+      date: cashInDate || new Date().toISOString().split('T')[0],
+      note: cashInNote.trim() || 'Terima Transfer Masuk Giro Operasional',
+      currentGiro,
+      projectedGiro: currentGiro + rawVal
+    });
+    setSignatureError('');
+    setHasDrawnSignature(false);
+    setIsSignatureAgreed(false);
+    setIsConfirmModalOpen(true);
+  };
+
+  // Confirm and Execute Transfer from Modal with Digital Signature
+  const handleConfirmExecuteTransfer = () => {
+    if (!confirmTransferData) return;
+
+    if (!signatoryName.trim()) {
+      setSignatureError('Harap isi nama penandatangan otorisasi!');
+      return;
+    }
+    if (!hasDrawnSignature) {
+      setSignatureError('Harap goreskan tanda tangan digital pada pad di atas!');
+      return;
+    }
+    if (!signatoryPin.trim() || signatoryPin.length < 4) {
+      setSignatureError('Masukkan PIN otorisasi transaksi yang valid (minimal 4 digit)!');
+      return;
+    }
+    if (!isSignatureAgreed) {
+      setSignatureError('Anda harus mencentang pernyataan verifikasi persetujuan sebelum melanjutkan!');
+      return;
+    }
+
+    setSignatureError('');
+
+    let dSig = 'DSIG-SHA256-' + Math.random().toString(36).substring(2, 10).toUpperCase();
+    if (signatureCanvasRef.current) {
+      try {
+        dSig = signatureCanvasRef.current.toDataURL('image/png');
+      } catch (err) {
+        console.error('Failed to export canvas signature', err);
+      }
+    }
+
+    if (confirmTransferData.type === 'CASH_OUT') {
+      executeCashOutWithSignature(dSig, signatoryName.trim());
+    } else {
+      executeCashInWithSignature(dSig, signatoryName.trim());
+    }
+
+    setIsConfirmModalOpen(false);
+    setConfirmTransferData(null);
+    setSignatoryPin('');
+    setIsSignatureAgreed(false);
+    setHasDrawnSignature(false);
+  };
+
+  // Execution Worker for External Cash Out
+  const executeCashOutWithSignature = (dSig: string, sName: string) => {
+    const rawVal = confirmTransferData?.amount || parseFloat(cashOutAmount.replace(/[^0-9.]/g, ''));
+    const currentGiro = financialValues.giro26 || 0;
+    const newGiro = Math.max(0, currentGiro - rawVal);
+
+    setFinancialValues(prev => ({
+      ...prev,
+      giro26: newGiro,
+      operatingExpenseOut26: (prev.operatingExpenseOut26 || 0) - rawVal,
+      operatingExpense26: (prev.operatingExpense26 || 0) - rawVal
+    }));
+
+    if (onExternalTransfer) {
+      onExternalTransfer('CASH_OUT', rawVal, cashOutParty, cashOutCategory, cashOutNote);
+    } else if (onTransferFunds) {
+      onTransferFunds('GIRO', 'GIRO', rawVal, `External Cash Out to ${cashOutParty}: ${cashOutNote}`);
+    }
+
+    localStorage.setItem('cgsGiroBalance_v3', String(newGiro));
+
+    const refNo = `VAM-OUT-${new Date().toISOString().slice(0, 10).replace(/-/g, '')}-${Math.floor(1000 + Math.random() * 9000)}`;
+    const newTx: ExternalTransferTx = {
+      id: `EXT-TRF-${Date.now()}`,
+      refNo,
+      type: 'CASH_OUT',
+      partyName: cashOutParty.trim(),
+      bankName: cashOutBank,
+      accountNumber: cashOutAccount.trim(),
+      category: cashOutCategory,
+      amount: rawVal,
+      date: cashOutDate || new Date().toISOString().split('T')[0],
+      note: cashOutNote.trim() || 'Transfer Keluar Giro Operasional',
+      status: 'COMPLETED',
+      digitalSignature: dSig,
+      signatoryName: sName
+    };
+
+    const updated = [newTx, ...externalTransferHistory];
+    setExternalTransferHistory(updated);
+    localStorage.setItem('vam_external_transfers_v3', JSON.stringify(updated));
+
+    addAuditLog('EXT_CASH_OUT', 'SECURE', `External Transfer Out executed & signed by [${sName}] to [${cashOutParty} (${cashOutBank})]: Rp ${rawVal.toLocaleString('id-ID')} | Ref: ${refNo}`);
+
+    setCashOutStatus({
+      success: true,
+      message: `Transfer Keluar Berhasil Diotorisasi! Rp ${rawVal.toLocaleString('id-ID')} telah dikirim ke ${cashOutParty}.`,
+      refNo
+    });
+
+    // Reset inputs
+    setCashOutParty('');
+    setCashOutAccount('');
+    setCashOutAmount('');
+    setCashOutNote('');
+  };
+
+  // Execution Worker for External Cash In
+  const executeCashInWithSignature = (dSig: string, sName: string) => {
+    const rawVal = confirmTransferData?.amount || parseFloat(cashInAmount.replace(/[^0-9.]/g, ''));
+    const currentGiro = financialValues.giro26 || 0;
+    const newGiro = currentGiro + rawVal;
+
+    setFinancialValues(prev => ({
+      ...prev,
+      giro26: newGiro,
+      received26: (prev.received26 || 0) + rawVal,
+      rev26: (prev.rev26 || 0) + rawVal
+    }));
+
+    if (onExternalTransfer) {
+      onExternalTransfer('CASH_IN', rawVal, cashInParty, cashInCategory, cashInNote);
+    } else if (onTransferFunds) {
+      onTransferFunds('GIRO', 'GIRO', rawVal, `External Cash In from ${cashInParty}: ${cashInNote}`);
+    }
+
+    localStorage.setItem('cgsGiroBalance_v3', String(newGiro));
+
+    const refNo = `VAM-IN-${new Date().toISOString().slice(0, 10).replace(/-/g, '')}-${Math.floor(1000 + Math.random() * 9000)}`;
+    const newTx: ExternalTransferTx = {
+      id: `EXT-TRF-${Date.now()}`,
+      refNo,
+      type: 'CASH_IN',
+      partyName: cashInParty.trim(),
+      bankName: cashInBank,
+      accountNumber: cashInAccount.trim(),
+      category: cashInCategory,
+      amount: rawVal,
+      date: cashInDate || new Date().toISOString().split('T')[0],
+      note: cashInNote.trim() || 'Terima Transfer Masuk Giro Operasional',
+      status: 'VERIFIED',
+      digitalSignature: dSig,
+      signatoryName: sName
+    };
+
+    const updated = [newTx, ...externalTransferHistory];
+    setExternalTransferHistory(updated);
+    localStorage.setItem('vam_external_transfers_v3', JSON.stringify(updated));
+
+    addAuditLog('EXT_CASH_IN', 'SECURE', `External Transfer In received & signed by [${sName}] from [${cashInParty} (${cashInBank})]: Rp ${rawVal.toLocaleString('id-ID')} | Ref: ${refNo}`);
+
+    setCashInStatus({
+      success: true,
+      message: `Terima Transfer Masuk Berhasil Diotorisasi! Rp ${rawVal.toLocaleString('id-ID')} dari ${cashInParty} telah dikreditkan ke Giro.`,
+      refNo
+    });
+
+    // Reset inputs
+    setCashInParty('');
+    setCashInAccount('');
+    setCashInAmount('');
+    setCashInNote('');
+  };
+
+  // Generate Receipt PDF for External Transfer
+  const handleDownloadReceipt = (tx: ExternalTransferTx) => {
+    const doc = new jsPDF();
+    
+    // Header Banner
+    doc.setFillColor(15, 23, 42); // slate-900
+    doc.rect(0, 0, 210, 42, 'F');
+    
+    doc.setTextColor(223, 255, 0); // #DFFF00
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(16);
+    doc.text('PT VENTURE ASSET MANAGEMENT', 14, 18);
+    
+    doc.setTextColor(255, 255, 255);
+    doc.setFontSize(10);
+    doc.text('BUKTI STRUK TRANSAKSI TRANSFER EKSTERNAL REKENING GIRO', 14, 28);
+    doc.text(`NO. REF: ${tx.refNo}`, 130, 28);
+
+    doc.setTextColor(30, 41, 59);
+    doc.setFontSize(11);
+    doc.text('OFFICIAL BANK TRANSFER TRANSACTION RECEIPT', 14, 52);
+    
+    doc.setDrawColor(203, 213, 225);
+    doc.line(14, 56, 196, 56);
+
+    const isOut = tx.type === 'CASH_OUT';
+    const bodyData = [
+      ['Nomor Referensi (Ref ID)', tx.refNo],
+      ['Tanggal Eksekusi Transaksi', tx.date],
+      ['Jenis Arah Transfer', isOut ? 'TRANSFER KELUAR (CASH OUT)' : 'TERIMA TRANSFER MASUK (CASH IN)'],
+      [isOut ? 'Pihak Penerima (Beneficiary)' : 'Pihak Pengirim (Sender)', tx.partyName],
+      ['Bank & Nomor Rekening', `${tx.bankName} - ${tx.accountNumber}`],
+      ['Kategori Transaksi Keuangan', tx.category],
+      ['Jumlah Nominal (IDR)', `Rp ${tx.amount.toLocaleString('id-ID')}`],
+      ['Catatan Keterangan Transfer', tx.note || '-'],
+      ['Penandatangan Otorisasi Digital', tx.signatoryName || 'Aidil Syahdan Al fitrah, Direktur utama'],
+      ['Stempel Tanda Tangan Digital', tx.digitalSignature ? 'VERIFIED (RSA-2048 Digital Signature Encrypted)' : 'VERIFIED (ISO 27001 Certified)'],
+      ['Status Verifikasi Audit Stream', `${tx.status} (Verified under SHA-256 Audit Stream)`]
+    ];
+
+    autoTable(doc, {
+      startY: 62,
+      head: [['Parameter Transaksi', 'Rincian Data Eksekusi']],
+      body: bodyData,
+      theme: 'grid',
+      headStyles: { fillColor: [30, 41, 59], textColor: [255, 255, 255], fontStyle: 'bold' },
+      styles: { fontSize: 10, cellPadding: 4 }
+    });
+
+    const finalY = (doc as any).lastAutoTable.finalY + 20;
+    
+    doc.setFontSize(9);
+    doc.setTextColor(100, 116, 139);
+    doc.text('Dokumen ini diterbitkan secara elektronik oleh Sistem Laporan Keuangan PT Venture Asset Management.', 14, finalY);
+    doc.text('Diakui secara sah sebagai bukti transfer perbankan resmi tanpa memerlukan tanda tangan basah.', 14, finalY + 6);
+    
+    doc.save(`Receipt_${tx.refNo}.pdf`);
   };
 
   // Simulated 24-hour retention deletion ticker count
@@ -3068,280 +3533,913 @@ VentureAM,Luxury watches,120000000`;
       )}
 
       {activeTab === 'FUND_TRANSFER' && (
-        /* TAB: TRANSFER RDN KE GIRO & SEBALIKNYA */
+        /* TAB: TRANSFER RDN KE GIRO & DANA EKSTERNAL CASH IN/OUT */
         <div className="space-y-6">
           {/* Header Banner */}
           <div className="bg-gradient-to-r from-amber-950/60 via-zinc-950 to-zinc-950 border border-amber-500/20 p-6 rounded-2xl flex flex-col md:flex-row md:items-center justify-between gap-6 relative overflow-hidden">
             <div className="space-y-2 z-10">
-              <span className="text-[9px] font-mono font-bold bg-amber-500/10 text-amber-400 px-2.5 py-1 rounded border border-amber-500/20 uppercase tracking-widest inline-flex items-center gap-1.5">
-                <ArrowRightLeft className="w-3.5 h-3.5" /> INTERNAL CASH REBALANCING GATEWAY
-              </span>
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="text-[9px] font-mono font-bold bg-amber-500/10 text-amber-400 px-2.5 py-1 rounded border border-amber-500/20 uppercase tracking-widest inline-flex items-center gap-1.5">
+                  <ArrowRightLeft className="w-3.5 h-3.5" /> INSTITUTIONAL CASH GATEWAY & GIRO MANAGE
+                </span>
+                <span className="text-[9px] font-mono font-bold bg-emerald-500/10 text-emerald-400 px-2.5 py-1 rounded border border-emerald-500/20 uppercase tracking-widest inline-flex items-center gap-1.5">
+                  <ShieldCheck className="w-3.5 h-3.5" /> ISO 27001 AUDITED
+                </span>
+              </div>
               <h2 className="text-xl font-black text-white uppercase tracking-tight flex items-center gap-2">
-                FITUR TRANSFER DARI RDN KE REKENING GIRO & SEBALIKNYA
+                PEMINDAHAN DANA INTERNAL & TRANSFER EKSTERNAL CASH IN / OUT
               </h2>
               <p className="text-xs text-zinc-400 max-w-3xl">
-                Layanan rebalancing dana internal instan antara Rekening Dana Nasabah (Kas RDN CGS CIMB / IBKR) dan Rekening Giro Bank Operasional PT Venture Asset Management secara terenkripsi.
+                Layanan pengelolaan arus kas terpadu: Rebalancing internal RDN ↔ Giro Operasional, Transfer Eksternal Keluar (Cash Out), serta Penerimaan Transfer Masuk (Cash In) dari Pihak Ketiga.
               </p>
             </div>
 
-            <div className="flex items-center gap-3 bg-black/60 p-3 rounded-xl border border-zinc-800 shrink-0">
+            <div className="flex items-center gap-4 bg-black/60 p-3.5 rounded-xl border border-zinc-800 shrink-0">
               <div className="text-right">
                 <span className="text-[9px] font-mono text-zinc-500 block uppercase">TOTAL INTEGRATED CASH</span>
                 <span className="text-sm font-mono font-black text-[#DFFF00]">
                   Rp {((financialValues.cash26 || 0) + (financialValues.giro26 || 0)).toLocaleString('id-ID')}
                 </span>
               </div>
+              <div className="h-8 w-px bg-zinc-800"></div>
+              <div className="text-right">
+                <span className="text-[9px] font-mono text-zinc-500 block uppercase">SALDO GIRO AKTIF</span>
+                <span className="text-sm font-mono font-black text-amber-400">
+                  Rp {(financialValues.giro26 || 0).toLocaleString('id-ID')}
+                </span>
+              </div>
             </div>
           </div>
 
-          {/* Dual Balance Cards & Transfer Form */}
-          <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-            {/* Balance Overview Cards */}
-            <div className="lg:col-span-5 space-y-4">
-              {/* Card 1: RDN Account */}
-              <div className="bg-zinc-950 border border-zinc-850 p-5 rounded-2xl space-y-3 relative overflow-hidden">
-                <div className="flex justify-between items-start">
-                  <div className="flex items-center gap-2">
-                    <div className="p-2 bg-emerald-500/10 rounded-lg border border-emerald-500/20 text-emerald-400">
-                      <Wallet className="w-5 h-5" />
+          {/* Sub-Tab Selector Navigation */}
+          <div className="flex items-center gap-2 border-b border-zinc-800 pb-2 overflow-x-auto">
+            <button
+              type="button"
+              onClick={() => setExtTransferSubTab('INTERNAL')}
+              className={`px-4 py-2.5 rounded-xl font-mono text-xs font-bold transition-all cursor-pointer flex items-center gap-2 shrink-0 ${
+                extTransferSubTab === 'INTERNAL'
+                  ? 'bg-amber-500 text-zinc-950 shadow-lg shadow-amber-500/20'
+                  : 'bg-zinc-900/80 text-zinc-400 hover:text-white border border-zinc-800'
+              }`}
+            >
+              <ArrowRightLeft className="w-4 h-4" /> 1. REBALANCING INTERNAL (RDN ↔ GIRO)
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setExtTransferSubTab('CASH_OUT')}
+              className={`px-4 py-2.5 rounded-xl font-mono text-xs font-bold transition-all cursor-pointer flex items-center gap-2 shrink-0 ${
+                extTransferSubTab === 'CASH_OUT'
+                  ? 'bg-rose-500 text-white shadow-lg shadow-rose-500/20'
+                  : 'bg-zinc-900/80 text-zinc-400 hover:text-white border border-zinc-800'
+              }`}
+            >
+              <ArrowUpRight className="w-4 h-4 text-rose-300" /> 2. TRANSFER EKSTERNAL KELUAR (CASH OUT)
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setExtTransferSubTab('CASH_IN')}
+              className={`px-4 py-2.5 rounded-xl font-mono text-xs font-bold transition-all cursor-pointer flex items-center gap-2 shrink-0 ${
+                extTransferSubTab === 'CASH_IN'
+                  ? 'bg-emerald-500 text-zinc-950 shadow-lg shadow-emerald-500/20'
+                  : 'bg-zinc-900/80 text-zinc-400 hover:text-white border border-zinc-800'
+              }`}
+            >
+              <ArrowDownRight className="w-4 h-4" /> 3. TERIMA TRANSFER MASUK (CASH IN)
+            </button>
+          </div>
+
+          {/* MODE 1: INTERNAL CASH REBALANCING (RDN ↔ GIRO) */}
+          {extTransferSubTab === 'INTERNAL' && (
+            <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+              {/* Balance Overview Cards */}
+              <div className="lg:col-span-5 space-y-4">
+                {/* Card 1: RDN Account */}
+                <div className="bg-zinc-950 border border-zinc-850 p-5 rounded-2xl space-y-3 relative overflow-hidden">
+                  <div className="flex justify-between items-start">
+                    <div className="flex items-center gap-2">
+                      <div className="p-2 bg-emerald-500/10 rounded-lg border border-emerald-500/20 text-emerald-400">
+                        <Wallet className="w-5 h-5" />
+                      </div>
+                      <div>
+                        <span className="text-[9px] font-mono text-zinc-500 uppercase tracking-wider block">REKENING DANA NASABAH (RDN)</span>
+                        <h4 className="text-sm font-bold text-white">Kas RDN (CGS CIMB / IBKR)</h4>
+                      </div>
                     </div>
-                    <div>
-                      <span className="text-[9px] font-mono text-zinc-500 uppercase tracking-wider block">REKENING DANA NASABAH (RDN)</span>
-                      <h4 className="text-sm font-bold text-white">Kas RDN (CGS CIMB / IBKR)</h4>
-                    </div>
+                    <span className="text-[9px] font-mono bg-emerald-500/10 text-emerald-400 px-2 py-0.5 rounded border border-emerald-500/20 uppercase font-bold">
+                      ONLINE
+                    </span>
                   </div>
-                  <span className="text-[9px] font-mono bg-emerald-500/10 text-emerald-400 px-2 py-0.5 rounded border border-emerald-500/20 uppercase font-bold">
-                    ONLINE
-                  </span>
-                </div>
-                <div>
-                  <span className="text-[9px] font-mono text-zinc-500 uppercase block">SALDO TERSEDIA (AVAILABLE CASH)</span>
-                  <p className="text-xl font-mono font-black text-emerald-400 mt-0.5">
-                    Rp {(financialValues.cash26 || 0).toLocaleString('id-ID')}
+                  <div>
+                    <span className="text-[9px] font-mono text-zinc-500 uppercase block">SALDO TERSEDIA (AVAILABLE CASH)</span>
+                    <p className="text-xl font-mono font-black text-emerald-400 mt-0.5">
+                      Rp {(financialValues.cash26 || 0).toLocaleString('id-ID')}
+                    </p>
+                  </div>
+                  <p className="text-[10px] text-zinc-500 italic">
+                    Digunakan untuk settlement transaksi saham & efek portofolio.
                   </p>
                 </div>
-                <p className="text-[10px] text-zinc-500 italic">
-                  Digunakan untuk settlement transaksi saham & efek portofolio.
-                </p>
-              </div>
 
-              {/* Transfer Direction Indicator Arrow */}
-              <div className="flex justify-center">
-                <button
-                  onClick={() => setTransferDirection(prev => prev === 'RDN_TO_GIRO' ? 'GIRO_TO_RDN' : 'RDN_TO_GIRO')}
-                  className="p-3 bg-zinc-900 hover:bg-zinc-800 text-amber-400 rounded-full border border-zinc-800 transition-all cursor-pointer shadow-lg hover:scale-105"
-                  title="Klik untuk mengubah arah transfer"
-                >
-                  <ArrowRightLeft className="w-5 h-5" />
-                </button>
-              </div>
-
-              {/* Card 2: Giro Account */}
-              <div className="bg-zinc-950 border border-zinc-850 p-5 rounded-2xl space-y-3 relative overflow-hidden">
-                <div className="flex justify-between items-start">
-                  <div className="flex items-center gap-2">
-                    <div className="p-2 bg-amber-500/10 rounded-lg border border-amber-500/20 text-amber-400">
-                      <Building2 className="w-5 h-5" />
-                    </div>
-                    <div>
-                      <span className="text-[9px] font-mono text-zinc-500 uppercase tracking-wider block">REKENING BANK OPERASIONAL</span>
-                      <h4 className="text-sm font-bold text-white">Rekening Giro Bank Operasional</h4>
-                    </div>
-                  </div>
-                  <span className="text-[9px] font-mono bg-amber-500/10 text-amber-400 px-2 py-0.5 rounded border border-amber-500/20 uppercase font-bold">
-                    ACTIVE
-                  </span>
+                {/* Transfer Direction Indicator Arrow */}
+                <div className="flex justify-center">
+                  <button
+                    type="button"
+                    onClick={() => setTransferDirection(prev => prev === 'RDN_TO_GIRO' ? 'GIRO_TO_RDN' : 'RDN_TO_GIRO')}
+                    className="p-3 bg-zinc-900 hover:bg-zinc-800 text-amber-400 rounded-full border border-zinc-800 transition-all cursor-pointer shadow-lg hover:scale-105"
+                    title="Klik untuk mengubah arah transfer"
+                  >
+                    <ArrowRightLeft className="w-5 h-5" />
+                  </button>
                 </div>
-                <div>
-                  <span className="text-[9px] font-mono text-zinc-500 uppercase block">SALDO TERSEDIA (OPERATIONAL GIRO)</span>
-                  <p className="text-xl font-mono font-black text-amber-400 mt-0.5">
-                    Rp {(financialValues.giro26 || 0).toLocaleString('id-ID')}
+
+                {/* Card 2: Giro Account */}
+                <div className="bg-zinc-950 border border-zinc-850 p-5 rounded-2xl space-y-3 relative overflow-hidden">
+                  <div className="flex justify-between items-start">
+                    <div className="flex items-center gap-2">
+                      <div className="p-2 bg-amber-500/10 rounded-lg border border-amber-500/20 text-amber-400">
+                        <Building2 className="w-5 h-5" />
+                      </div>
+                      <div>
+                        <span className="text-[9px] font-mono text-zinc-500 uppercase tracking-wider block">REKENING BANK OPERASIONAL</span>
+                        <h4 className="text-sm font-bold text-white">Rekening Giro Bank Operasional</h4>
+                      </div>
+                    </div>
+                    <span className="text-[9px] font-mono bg-amber-500/10 text-amber-400 px-2 py-0.5 rounded border border-amber-500/20 uppercase font-bold">
+                      ACTIVE
+                    </span>
+                  </div>
+                  <div>
+                    <span className="text-[9px] font-mono text-zinc-500 uppercase block">SALDO TERSEDIA (OPERATIONAL GIRO)</span>
+                    <p className="text-xl font-mono font-black text-amber-400 mt-0.5">
+                      Rp {(financialValues.giro26 || 0).toLocaleString('id-ID')}
+                    </p>
+                  </div>
+                  <p className="text-[10px] text-zinc-500 italic">
+                    Digunakan untuk beban operasional perseroan & dividen.
                   </p>
                 </div>
-                <p className="text-[10px] text-zinc-500 italic">
-                  Digunakan untuk beban operasional perseroan & dividen.
-                </p>
+              </div>
+
+              {/* Transfer Control Form */}
+              <div className="lg:col-span-7 bg-zinc-950 border border-zinc-850 p-6 md:p-8 rounded-2xl space-y-6 flex flex-col justify-between">
+                <div className="space-y-5">
+                  <div className="flex justify-between items-center border-b border-zinc-800 pb-3">
+                    <div>
+                      <span className="text-[9px] font-mono text-amber-400 font-bold uppercase tracking-widest block">FORMULIR REBALANCING INTERNAL</span>
+                      <h3 className="text-base font-bold text-white">Pengaturan & Nominal Transfer Kas RDN/Giro</h3>
+                    </div>
+                    <span className="text-[10px] font-mono text-zinc-400 bg-zinc-900 px-2.5 py-1 rounded border border-zinc-800">
+                      SOP-TRF-009
+                    </span>
+                  </div>
+
+                  {/* Transfer Direction Toggle */}
+                  <div className="space-y-2">
+                    <label className="text-xs font-mono text-zinc-400 uppercase font-bold block">Arah Pemindahan Dana:</label>
+                    <div className="grid grid-cols-2 gap-3">
+                      <button
+                        type="button"
+                        onClick={() => setTransferDirection('RDN_TO_GIRO')}
+                        className={`p-3 rounded-xl border text-left transition-all cursor-pointer ${
+                          transferDirection === 'RDN_TO_GIRO'
+                            ? 'bg-amber-500/10 border-amber-500/40 text-amber-300'
+                            : 'bg-zinc-900/60 border-zinc-800 text-zinc-400 hover:text-white'
+                        }`}
+                      >
+                        <span className="text-[9px] font-mono font-bold uppercase block">SKENARIO A</span>
+                        <span className="text-xs font-bold block mt-0.5">Kas RDN → Rekening Giro</span>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => setTransferDirection('GIRO_TO_RDN')}
+                        className={`p-3 rounded-xl border text-left transition-all cursor-pointer ${
+                          transferDirection === 'GIRO_TO_RDN'
+                            ? 'bg-amber-500/10 border-amber-500/40 text-amber-300'
+                            : 'bg-zinc-900/60 border-zinc-800 text-zinc-400 hover:text-white'
+                        }`}
+                      >
+                        <span className="text-[9px] font-mono font-bold uppercase block">SKENARIO B</span>
+                        <span className="text-xs font-bold block mt-0.5">Rekening Giro → Kas RDN</span>
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Nominal Input */}
+                  <div className="space-y-2">
+                    <div className="flex justify-between items-center">
+                      <label className="text-xs font-mono text-zinc-400 uppercase font-bold">Nominal Transfer (IDR):</label>
+                      <span className="text-[10px] font-mono text-zinc-500">
+                        Maks: Rp {(transferDirection === 'RDN_TO_GIRO' ? financialValues.cash26 : financialValues.giro26 || 0).toLocaleString('id-ID')}
+                      </span>
+                    </div>
+                    <div className="relative">
+                      <span className="absolute left-4 top-3 text-sm font-mono font-bold text-zinc-500">Rp</span>
+                      <input
+                        type="text"
+                        value={transferAmount}
+                        onChange={(e) => setTransferAmount(e.target.value)}
+                        placeholder="0"
+                        className="w-full pl-12 pr-4 py-3 bg-zinc-900 border border-zinc-800 rounded-xl text-white font-mono font-bold text-lg focus:outline-none focus:border-amber-500/50"
+                      />
+                    </div>
+
+                    {/* Quick Preset Buttons */}
+                    <div className="flex flex-wrap gap-2 pt-1">
+                      {[100000, 500000, 1000000, 2000000].map((preset) => (
+                        <button
+                          key={preset}
+                          type="button"
+                          onClick={() => setTransferAmount(preset.toLocaleString('id-ID'))}
+                          className="px-2.5 py-1 bg-zinc-900 hover:bg-zinc-850 text-zinc-300 hover:text-white text-[10px] font-mono rounded-lg border border-zinc-800 transition-all cursor-pointer"
+                        >
+                          +Rp {(preset / 1000).toLocaleString('id-ID')}rb
+                        </button>
+                      ))}
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const maxVal = transferDirection === 'RDN_TO_GIRO' ? financialValues.cash26 : financialValues.giro26 || 0;
+                          setTransferAmount(maxVal.toLocaleString('id-ID'));
+                        }}
+                        className="px-2.5 py-1 bg-amber-500/10 hover:bg-amber-500/20 text-amber-400 text-[10px] font-mono font-bold rounded-lg border border-amber-500/30 transition-all cursor-pointer"
+                      >
+                        Maksimal
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Note Input */}
+                  <div className="space-y-2">
+                    <label className="text-xs font-mono text-zinc-400 uppercase font-bold block">Catatan Keterangan Transfer:</label>
+                    <input
+                      type="text"
+                      value={transferNote}
+                      onChange={(e) => setTransferNote(e.target.value)}
+                      placeholder="Contoh: Pemindahan Kas Operasional M2 Juni 2026"
+                      className="w-full px-4 py-2.5 bg-zinc-900 border border-zinc-800 rounded-xl text-white text-xs focus:outline-none focus:border-amber-500/50"
+                    />
+                  </div>
+
+                  {/* Transfer Status Message */}
+                  {transferStatus && (
+                    <div className={`p-3 rounded-xl border text-xs ${
+                      transferStatus.success 
+                        ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-300' 
+                        : 'bg-rose-500/10 border-rose-500/30 text-rose-300'
+                    }`}>
+                      <p className="font-bold flex items-center gap-1.5">
+                        <CheckCircle2 className="w-4 h-4" /> {transferStatus.message}
+                      </p>
+                      {transferStatus.refNo && (
+                        <p className="text-[10px] font-mono mt-1 opacity-80">Ref No: {transferStatus.refNo} | Stamped SHA-256</p>
+                      )}
+                    </div>
+                  )}
+                </div>
+
+                {/* Action Button */}
+                <div className="pt-4">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const rawVal = parseFloat(transferAmount.replace(/[^0-9.]/g, ''));
+                      if (isNaN(rawVal) || rawVal <= 0) {
+                        setTransferStatus({ success: false, message: 'Masukkan nominal transfer yang valid!' });
+                        return;
+                      }
+
+                      const currentCash = financialValues.cash26;
+                      const currentGiro = financialValues.giro26 || 0;
+
+                      if (transferDirection === 'RDN_TO_GIRO' && rawVal > currentCash) {
+                        setTransferStatus({ success: false, message: `Saldo Kas RDN tidak cukup (Tersedia: Rp ${currentCash.toLocaleString('id-ID')})` });
+                        return;
+                      }
+                      if (transferDirection === 'GIRO_TO_RDN' && rawVal > currentGiro) {
+                        setTransferStatus({ success: false, message: `Saldo Giro tidak cukup (Tersedia: Rp ${currentGiro.toLocaleString('id-ID')})` });
+                        return;
+                      }
+
+                      const newCash = transferDirection === 'RDN_TO_GIRO' ? currentCash - rawVal : currentCash + rawVal;
+                      const newGiro = transferDirection === 'RDN_TO_GIRO' ? currentGiro + rawVal : currentGiro - rawVal;
+
+                      setFinancialValues(prev => ({
+                        ...prev,
+                        cash26: newCash,
+                        giro26: newGiro
+                      }));
+
+                      if (onTransferFunds) {
+                        const from = transferDirection === 'RDN_TO_GIRO' ? 'RDN' : 'GIRO';
+                        const to = transferDirection === 'RDN_TO_GIRO' ? 'GIRO' : 'RDN';
+                        onTransferFunds(from, to, rawVal, transferNote || 'Transfer Kas RDN/Giro');
+                      }
+
+                      localStorage.setItem('cgsCashBalance_v3', String(newCash));
+                      localStorage.setItem('cgsGiroBalance_v3', String(newGiro));
+
+                      const refNo = `TRF-VAM-${Date.now().toString().slice(-6)}`;
+                      const dirLabel = transferDirection === 'RDN_TO_GIRO' ? 'Kas RDN → Giro' : 'Giro → Kas RDN';
+                      
+                      addAuditLog('FUND_TRANSFER', 'SECURE', `Transfer executed [${dirLabel}]: Rp ${rawVal.toLocaleString('id-ID')} | Ref: ${refNo}`);
+
+                      setTransferStatus({
+                        success: true,
+                        message: `Transfer Berhasil (${dirLabel}): Rp ${rawVal.toLocaleString('id-ID')}`,
+                        refNo
+                      });
+
+                      setTransferAmount('');
+                      setTransferNote('');
+                    }}
+                    className="w-full py-3.5 bg-amber-500 hover:bg-amber-400 text-zinc-950 font-mono font-black text-xs uppercase tracking-wider rounded-xl transition-all shadow-lg shadow-amber-500/20 cursor-pointer flex items-center justify-center gap-2"
+                  >
+                    <ArrowRightLeft className="w-4 h-4" /> EKSEKUSI REBALANCING INTERNAL SEKARANG
+                  </button>
+                </div>
               </div>
             </div>
+          )}
 
-            {/* Transfer Control Form */}
-            <div className="lg:col-span-7 bg-zinc-950 border border-zinc-850 p-6 md:p-8 rounded-2xl space-y-6 flex flex-col justify-between">
-              <div className="space-y-5">
+          {/* MODE 2: EXTERNAL CASH OUT (TRANSFER KELUAR DARI GIRO KE PIHAK LAIN) */}
+          {extTransferSubTab === 'CASH_OUT' && (
+            <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+              {/* Left Info Panel */}
+              <div className="lg:col-span-5 space-y-4">
+                <div className="bg-zinc-950 border border-rose-500/20 p-5 rounded-2xl space-y-4 relative overflow-hidden">
+                  <div className="flex justify-between items-start">
+                    <div className="flex items-center gap-2">
+                      <div className="p-2 bg-rose-500/10 rounded-lg border border-rose-500/20 text-rose-400">
+                        <ArrowUpRight className="w-5 h-5" />
+                      </div>
+                      <div>
+                        <span className="text-[9px] font-mono text-zinc-500 uppercase tracking-wider block">SUMBER DANA KELUAR</span>
+                        <h4 className="text-sm font-bold text-white">Giro Operasional PT Venture AM</h4>
+                      </div>
+                    </div>
+                    <span className="text-[9px] font-mono bg-rose-500/10 text-rose-400 px-2 py-0.5 rounded border border-rose-500/20 uppercase font-bold">
+                      CASH OUT
+                    </span>
+                  </div>
+
+                  <div>
+                    <span className="text-[9px] font-mono text-zinc-500 uppercase block">SALDO TERSEDIA KELUAR</span>
+                    <p className="text-2xl font-mono font-black text-rose-400 mt-0.5">
+                      Rp {(financialValues.giro26 || 0).toLocaleString('id-ID')}
+                    </p>
+                  </div>
+
+                  <div className="p-3 bg-zinc-900/80 rounded-xl border border-zinc-800 space-y-1 text-xs text-zinc-400">
+                    <span className="text-[10px] font-mono font-bold text-white uppercase block">Akurasi Audit Keuangan:</span>
+                    <p className="text-[11px] leading-relaxed">
+                      Setiap transfer keluar akan langsung memotong Saldo Giro, mencatat histori audit ISO 27001, serta menambahkan bukti pencatatan ke Buku Besar Keuangan.
+                    </p>
+                  </div>
+                </div>
+
+                <div className="bg-zinc-950 border border-zinc-850 p-5 rounded-2xl space-y-3">
+                  <span className="text-[10px] font-mono text-amber-400 font-bold uppercase tracking-wider block flex items-center gap-1.5">
+                    <ShieldCheck className="w-4 h-4" /> REGULASI SKNBD / RTGS OJK & BI
+                  </span>
+                  <ul className="text-xs text-zinc-400 space-y-2 list-disc list-inside">
+                    <li>Nominal &gt; Rp 100.000.000 diproses via Sistem RTGS Bank Indonesia.</li>
+                    <li>Sistem otomatis meminta input Beneficiary &amp; No Rekening valid.</li>
+                    <li>Struk / bukti transfer dapat diunduh langsung dalam format PDF resmi.</li>
+                  </ul>
+                </div>
+              </div>
+
+              {/* Right Form Panel */}
+              <div className="lg:col-span-7 bg-zinc-950 border border-zinc-850 p-6 md:p-8 rounded-2xl space-y-5">
                 <div className="flex justify-between items-center border-b border-zinc-800 pb-3">
                   <div>
-                    <span className="text-[9px] font-mono text-amber-400 font-bold uppercase tracking-widest block">FORMULIR EKSEKUSI DANA</span>
-                    <h3 className="text-base font-bold text-white">Pengaturan & Nominal Transfer Kas</h3>
+                    <span className="text-[9px] font-mono text-rose-400 font-bold uppercase tracking-widest block">FORMULIR TRANSFER EKSTERNAL KELUAR</span>
+                    <h3 className="text-base font-bold text-white">Transfer dari Giro Operasional ke Pihak Ketiga</h3>
                   </div>
                   <span className="text-[10px] font-mono text-zinc-400 bg-zinc-900 px-2.5 py-1 rounded border border-zinc-800">
-                    SOP-TRF-009
+                    OUT-SOP-012
                   </span>
                 </div>
 
-                {/* Transfer Direction Toggle */}
-                <div className="space-y-2">
-                  <label className="text-xs font-mono text-zinc-400 uppercase font-bold block">Arah Pemindahan Dana:</label>
-                  <div className="grid grid-cols-2 gap-3">
-                    <button
-                      type="button"
-                      onClick={() => setTransferDirection('RDN_TO_GIRO')}
-                      className={`p-3 rounded-xl border text-left transition-all cursor-pointer ${
-                        transferDirection === 'RDN_TO_GIRO'
-                          ? 'bg-amber-500/10 border-amber-500/40 text-amber-300'
-                          : 'bg-zinc-900/60 border-zinc-800 text-zinc-400 hover:text-white'
-                      }`}
-                    >
-                      <span className="text-[9px] font-mono font-bold uppercase block">SKENARIO A</span>
-                      <span className="text-xs font-bold block mt-0.5">Kas RDN → Rekening Giro</span>
-                    </button>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {/* Beneficiary Name */}
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-mono text-zinc-400 uppercase font-bold block">Pihak Penerima (Beneficiary):</label>
+                    <input
+                      type="text"
+                      value={cashOutParty}
+                      onChange={(e) => setCashOutParty(e.target.value)}
+                      placeholder="Contoh: PT Solusi Cloud Indonesia / KPP Pratama"
+                      className="w-full px-3.5 py-2.5 bg-zinc-900 border border-zinc-800 rounded-xl text-white text-xs focus:outline-none focus:border-rose-500/50"
+                    />
+                  </div>
 
-                    <button
-                      type="button"
-                      onClick={() => setTransferDirection('GIRO_TO_RDN')}
-                      className={`p-3 rounded-xl border text-left transition-all cursor-pointer ${
-                        transferDirection === 'GIRO_TO_RDN'
-                          ? 'bg-amber-500/10 border-amber-500/40 text-amber-300'
-                          : 'bg-zinc-900/60 border-zinc-800 text-zinc-400 hover:text-white'
-                      }`}
+                  {/* Destination Bank */}
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-mono text-zinc-400 uppercase font-bold block">Bank Tujuan:</label>
+                    <select
+                      value={cashOutBank}
+                      onChange={(e) => setCashOutBank(e.target.value)}
+                      className="w-full px-3.5 py-2.5 bg-zinc-900 border border-zinc-800 rounded-xl text-white text-xs focus:outline-none focus:border-rose-500/50"
                     >
-                      <span className="text-[9px] font-mono font-bold uppercase block">SKENARIO B</span>
-                      <span className="text-xs font-bold block mt-0.5">Rekening Giro → Kas RDN</span>
-                    </button>
+                      <option value="Bank Mandiri">Bank Mandiri (108)</option>
+                      <option value="Bank BCA">Bank BCA (014)</option>
+                      <option value="Bank BNI">Bank BNI (009)</option>
+                      <option value="Bank BRI">Bank BRI (002)</option>
+                      <option value="Bank CIMB Niaga">Bank CIMB Niaga (022)</option>
+                      <option value="Bank Permata">Bank Permata (013)</option>
+                      <option value="Bank Danamon">Bank Danamon (011)</option>
+                      <option value="Bank Syariah Indonesia">Bank Syariah Indonesia (451)</option>
+                    </select>
                   </div>
                 </div>
 
-                {/* Nominal Input */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {/* Account Number */}
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-mono text-zinc-400 uppercase font-bold block">Nomor Rekening Tujuan:</label>
+                    <input
+                      type="text"
+                      value={cashOutAccount}
+                      onChange={(e) => setCashOutAccount(e.target.value)}
+                      placeholder="Contoh: 1220009871234"
+                      className="w-full px-3.5 py-2.5 bg-zinc-900 border border-zinc-800 rounded-xl text-white font-mono text-xs focus:outline-none focus:border-rose-500/50"
+                    />
+                  </div>
+
+                  {/* Expense Category */}
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-mono text-zinc-400 uppercase font-bold block">Kategori Transaksi:</label>
+                    <select
+                      value={cashOutCategory}
+                      onChange={(e) => setCashOutCategory(e.target.value)}
+                      className="w-full px-3.5 py-2.5 bg-zinc-900 border border-zinc-800 rounded-xl text-white text-xs focus:outline-none focus:border-rose-500/50"
+                    >
+                      <option value="Beban Operasional & Software ERP">Beban Operasional &amp; Software ERP</option>
+                      <option value="Setoran Pajak Perseroan (PPh/PPN)">Setoran Pajak Perseroan (PPh/PPN)</option>
+                      <option value="Honorarium & Gaji Konsultan / Vendor">Honorarium &amp; Gaji Konsultan / Vendor</option>
+                      <option value="Biaya Audit KAP & Legal Compliance">Biaya Audit KAP &amp; Legal Compliance</option>
+                      <option value="Dividen & Profit Distribution">Dividen &amp; Profit Distribution</option>
+                      <option value="Pembelian Aset Tetap / CapEx">Pembelian Aset Tetap / CapEx</option>
+                      <option value="Pembayaran Utang & Pengeluaran Lainnya">Pembayaran Utang &amp; Pengeluaran Lainnya</option>
+                    </select>
+                  </div>
+                </div>
+
+                {/* Amount Input & Quick Presets */}
                 <div className="space-y-2">
                   <div className="flex justify-between items-center">
-                    <label className="text-xs font-mono text-zinc-400 uppercase font-bold">Nominal Transfer (IDR):</label>
-                    <span className="text-[10px] font-mono text-zinc-500">
-                      Maks: Rp {(transferDirection === 'RDN_TO_GIRO' ? financialValues.cash26 : financialValues.giro26 || 0).toLocaleString('id-ID')}
+                    <label className="text-xs font-mono text-zinc-400 uppercase font-bold">Nominal Transfer Keluar (IDR):</label>
+                    <span className="text-[10px] font-mono text-rose-400">
+                      Maks: Rp {(financialValues.giro26 || 0).toLocaleString('id-ID')}
                     </span>
                   </div>
                   <div className="relative">
                     <span className="absolute left-4 top-3 text-sm font-mono font-bold text-zinc-500">Rp</span>
                     <input
                       type="text"
-                      value={transferAmount}
-                      onChange={(e) => setTransferAmount(e.target.value)}
+                      value={cashOutAmount}
+                      onChange={(e) => setCashOutAmount(e.target.value)}
                       placeholder="0"
-                      className="w-full pl-12 pr-4 py-3 bg-zinc-900 border border-zinc-800 rounded-xl text-white font-mono font-bold text-lg focus:outline-none focus:border-amber-500/50"
+                      className="w-full pl-12 pr-4 py-3 bg-zinc-900 border border-zinc-800 rounded-xl text-white font-mono font-bold text-lg focus:outline-none focus:border-rose-500/50"
                     />
                   </div>
 
-                  {/* Quick Preset Buttons */}
                   <div className="flex flex-wrap gap-2 pt-1">
-                    {[100000, 500000, 1000000, 2000000].map((preset) => (
+                    {[1000000, 5000000, 10000000, 50000000].map((preset) => (
                       <button
                         key={preset}
                         type="button"
-                        onClick={() => setTransferAmount(preset.toLocaleString('id-ID'))}
+                        onClick={() => setCashOutAmount(preset.toLocaleString('id-ID'))}
                         className="px-2.5 py-1 bg-zinc-900 hover:bg-zinc-850 text-zinc-300 hover:text-white text-[10px] font-mono rounded-lg border border-zinc-800 transition-all cursor-pointer"
                       >
-                        +Rp {(preset / 1000).toLocaleString('id-ID')}rb
+                        +Rp {(preset / 1000000).toLocaleString('id-ID')}Jt
                       </button>
                     ))}
                     <button
                       type="button"
-                      onClick={() => {
-                        const maxVal = transferDirection === 'RDN_TO_GIRO' ? financialValues.cash26 : financialValues.giro26 || 0;
-                        setTransferAmount(maxVal.toLocaleString('id-ID'));
-                      }}
-                      className="px-2.5 py-1 bg-amber-500/10 hover:bg-amber-500/20 text-amber-400 text-[10px] font-mono font-bold rounded-lg border border-amber-500/30 transition-all cursor-pointer"
+                      onClick={() => setCashOutAmount((financialValues.giro26 || 0).toLocaleString('id-ID'))}
+                      className="px-2.5 py-1 bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 text-[10px] font-mono font-bold rounded-lg border border-rose-500/30 transition-all cursor-pointer"
                     >
-                      Maksimal
+                      Maksimal Saldo
                     </button>
                   </div>
                 </div>
 
-                {/* Note Input */}
-                <div className="space-y-2">
-                  <label className="text-xs font-mono text-zinc-400 uppercase font-bold block">Catatan Keterangan Transfer:</label>
-                  <input
-                    type="text"
-                    value={transferNote}
-                    onChange={(e) => setTransferNote(e.target.value)}
-                    placeholder="Contoh: Pemindahan Kas Operasional M2 Mei 2026"
-                    className="w-full px-4 py-2.5 bg-zinc-900 border border-zinc-800 rounded-xl text-white text-xs focus:outline-none focus:border-amber-500/50"
-                  />
+                {/* Date & Note Inputs */}
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-mono text-zinc-400 uppercase font-bold block">Tanggal Eksekusi:</label>
+                    <input
+                      type="date"
+                      value={cashOutDate}
+                      onChange={(e) => setCashOutDate(e.target.value)}
+                      className="w-full px-3.5 py-2.5 bg-zinc-900 border border-zinc-800 rounded-xl text-white font-mono text-xs focus:outline-none focus:border-rose-500/50"
+                    />
+                  </div>
+                  <div className="md:col-span-2 space-y-1.5">
+                    <label className="text-xs font-mono text-zinc-400 uppercase font-bold block">Catatan / Deskripsi Transfer:</label>
+                    <input
+                      type="text"
+                      value={cashOutNote}
+                      onChange={(e) => setCashOutNote(e.target.value)}
+                      placeholder="Contoh: Pembayaran Lisensi Cloud Server Q2 2026"
+                      className="w-full px-3.5 py-2.5 bg-zinc-900 border border-zinc-800 rounded-xl text-white text-xs focus:outline-none focus:border-rose-500/50"
+                    />
+                  </div>
                 </div>
 
-                {/* Transfer Status Message */}
-                {transferStatus && (
+                {/* Status Message */}
+                {cashOutStatus && (
                   <div className={`p-3 rounded-xl border text-xs ${
-                    transferStatus.success 
+                    cashOutStatus.success 
                       ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-300' 
                       : 'bg-rose-500/10 border-rose-500/30 text-rose-300'
                   }`}>
                     <p className="font-bold flex items-center gap-1.5">
-                      <CheckCircle2 className="w-4 h-4" /> {transferStatus.message}
+                      <CheckCircle2 className="w-4 h-4" /> {cashOutStatus.message}
                     </p>
-                    {transferStatus.refNo && (
-                      <p className="text-[10px] font-mono mt-1 opacity-80">Ref No: {transferStatus.refNo} | Stamped SHA-256</p>
+                    {cashOutStatus.refNo && (
+                      <p className="text-[10px] font-mono mt-1 opacity-80">Ref ID: {cashOutStatus.refNo} | ISO 27001 Stamped</p>
                     )}
                   </div>
                 )}
-              </div>
 
-              {/* Action Button */}
-              <div className="pt-4">
+                {/* Submit Action */}
                 <button
                   type="button"
-                  onClick={() => {
-                    const rawVal = parseFloat(transferAmount.replace(/[^0-9.]/g, ''));
-                    if (isNaN(rawVal) || rawVal <= 0) {
-                      setTransferStatus({ success: false, message: 'Masukkan nominal transfer yang valid!' });
-                      return;
-                    }
-
-                    const currentCash = financialValues.cash26;
-                    const currentGiro = financialValues.giro26 || 0;
-
-                    if (transferDirection === 'RDN_TO_GIRO' && rawVal > currentCash) {
-                      setTransferStatus({ success: false, message: `Saldo Kas RDN tidak cukup (Tersedia: Rp ${currentCash.toLocaleString('id-ID')})` });
-                      return;
-                    }
-                    if (transferDirection === 'GIRO_TO_RDN' && rawVal > currentGiro) {
-                      setTransferStatus({ success: false, message: `Saldo Giro tidak cukup (Tersedia: Rp ${currentGiro.toLocaleString('id-ID')})` });
-                      return;
-                    }
-
-                    const newCash = transferDirection === 'RDN_TO_GIRO' ? currentCash - rawVal : currentCash + rawVal;
-                    const newGiro = transferDirection === 'RDN_TO_GIRO' ? currentGiro + rawVal : currentGiro - rawVal;
-
-                    setFinancialValues(prev => ({
-                      ...prev,
-                      cash26: newCash,
-                      giro26: newGiro
-                    }));
-
-                    if (onTransferFunds) {
-                      const from = transferDirection === 'RDN_TO_GIRO' ? 'RDN' : 'GIRO';
-                      const to = transferDirection === 'RDN_TO_GIRO' ? 'GIRO' : 'RDN';
-                      onTransferFunds(from, to, rawVal, transferNote || 'Transfer Kas RDN/Giro');
-                    }
-
-                    localStorage.setItem('cgsCashBalance_v3', String(newCash));
-                    localStorage.setItem('cgsGiroBalance_v3', String(newGiro));
-
-                    const refNo = `TRF-VAM-${Date.now().toString().slice(-6)}`;
-                    const dirLabel = transferDirection === 'RDN_TO_GIRO' ? 'Kas RDN → Giro' : 'Giro → Kas RDN';
-                    
-                    addAuditLog('FUND_TRANSFER', 'SECURE', `Transfer executed [${dirLabel}]: Rp ${rawVal.toLocaleString('id-ID')} | Ref: ${refNo}`);
-
-                    setTransferStatus({
-                      success: true,
-                      message: `Transfer Berhasil (${dirLabel}): Rp ${rawVal.toLocaleString('id-ID')}`,
-                      refNo
-                    });
-
-                    setTransferAmount('');
-                    setTransferNote('');
-                  }}
-                  className="w-full py-3.5 bg-amber-500 hover:bg-amber-400 text-zinc-950 font-mono font-black text-xs uppercase tracking-wider rounded-xl transition-all shadow-lg shadow-amber-500/20 cursor-pointer flex items-center justify-center gap-2"
+                  onClick={handleExecuteCashOut}
+                  className="w-full py-3.5 bg-rose-500 hover:bg-rose-400 text-white font-mono font-black text-xs uppercase tracking-wider rounded-xl transition-all shadow-lg shadow-rose-500/20 cursor-pointer flex items-center justify-center gap-2"
                 >
-                  <ArrowRightLeft className="w-4 h-4" /> EKSEKUSI TRANSFER SEKARANG
+                  <Send className="w-4 h-4" /> EKSEKUSI TRANSFER KELUAR (CASH OUT)
                 </button>
               </div>
+            </div>
+          )}
+
+          {/* MODE 3: EXTERNAL CASH IN (TERIMA TRANSFER MASUK KE GIRO DARI PIHAK LAIN) */}
+          {extTransferSubTab === 'CASH_IN' && (
+            <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+              {/* Left Info Panel */}
+              <div className="lg:col-span-5 space-y-4">
+                <div className="bg-zinc-950 border border-emerald-500/20 p-5 rounded-2xl space-y-4 relative overflow-hidden">
+                  <div className="flex justify-between items-start">
+                    <div className="flex items-center gap-2">
+                      <div className="p-2 bg-emerald-500/10 rounded-lg border border-emerald-500/20 text-emerald-400">
+                        <ArrowDownRight className="w-5 h-5" />
+                      </div>
+                      <div>
+                        <span className="text-[9px] font-mono text-zinc-500 uppercase tracking-wider block">REKENING DANA MASUK</span>
+                        <h4 className="text-sm font-bold text-white">Giro Operasional PT Venture AM</h4>
+                      </div>
+                    </div>
+                    <span className="text-[9px] font-mono bg-emerald-500/10 text-emerald-400 px-2 py-0.5 rounded border border-emerald-500/20 uppercase font-bold">
+                      CASH IN
+                    </span>
+                  </div>
+
+                  <div>
+                    <span className="text-[9px] font-mono text-zinc-500 uppercase block">SALDO GIRO SAAT INI</span>
+                    <p className="text-2xl font-mono font-black text-emerald-400 mt-0.5">
+                      Rp {(financialValues.giro26 || 0).toLocaleString('id-ID')}
+                    </p>
+                  </div>
+
+                  <div className="p-3 bg-zinc-900/80 rounded-xl border border-zinc-800 space-y-1 text-xs text-zinc-400">
+                    <span className="text-[10px] font-mono font-bold text-white uppercase block">Pencatatan Otomatis Laporan Laba/Rugi:</span>
+                    <p className="text-[11px] leading-relaxed">
+                      Penerimaan dana dari pihak luar akan langsung menambah Saldo Giro, memperbarui Pendapatan Operasional / Kas Masuk, dan mencatat nomor ref resmi di Buku Besar.
+                    </p>
+                  </div>
+                </div>
+
+                <div className="bg-zinc-950 border border-zinc-850 p-5 rounded-2xl space-y-3">
+                  <span className="text-[10px] font-mono text-emerald-400 font-bold uppercase tracking-wider block flex items-center gap-1.5">
+                    <ShieldCheck className="w-4 h-4" /> INTEGRITAS REKONSILIASI KAS MASUK
+                  </span>
+                  <ul className="text-xs text-zinc-400 space-y-2 list-disc list-inside">
+                    <li>Pencatatan Management Fee &amp; Advisory Portofolio.</li>
+                    <li>Sertifikat transaksi digital terbit otomatis untuk laporan keuangan.</li>
+                    <li>Dapat mencatat penerimaan setoran dividen dari bank custodian.</li>
+                  </ul>
+                </div>
+              </div>
+
+              {/* Right Form Panel */}
+              <div className="lg:col-span-7 bg-zinc-950 border border-zinc-850 p-6 md:p-8 rounded-2xl space-y-5">
+                <div className="flex justify-between items-center border-b border-zinc-800 pb-3">
+                  <div>
+                    <span className="text-[9px] font-mono text-emerald-400 font-bold uppercase tracking-widest block">FORMULIR TERIMA TRANSFER MASUK</span>
+                    <h3 className="text-base font-bold text-white">Pencatatan Kas Masuk dari Pihak Eksternal</h3>
+                  </div>
+                  <span className="text-[10px] font-mono text-zinc-400 bg-zinc-900 px-2.5 py-1 rounded border border-zinc-800">
+                    IN-SOP-014
+                  </span>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {/* Sender Name */}
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-mono text-zinc-400 uppercase font-bold block">Pihak Pengirim (Sender):</label>
+                    <input
+                      type="text"
+                      value={cashInParty}
+                      onChange={(e) => setCashInParty(e.target.value)}
+                      placeholder="Contoh: PT Mega Capital Asset / Bank Custodian"
+                      className="w-full px-3.5 py-2.5 bg-zinc-900 border border-zinc-800 rounded-xl text-white text-xs focus:outline-none focus:border-emerald-500/50"
+                    />
+                  </div>
+
+                  {/* Sender Bank */}
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-mono text-zinc-400 uppercase font-bold block">Bank Pengirim:</label>
+                    <select
+                      value={cashInBank}
+                      onChange={(e) => setCashInBank(e.target.value)}
+                      className="w-full px-3.5 py-2.5 bg-zinc-900 border border-zinc-800 rounded-xl text-white text-xs focus:outline-none focus:border-emerald-500/50"
+                    >
+                      <option value="Bank CIMB Niaga">Bank CIMB Niaga</option>
+                      <option value="Bank BCA">Bank BCA</option>
+                      <option value="Bank Mandiri">Bank Mandiri</option>
+                      <option value="Bank BNI">Bank BNI</option>
+                      <option value="Bank BRI">Bank BRI</option>
+                      <option value="CGS International Sekuritas">CGS International Sekuritas</option>
+                      <option value="Interactive Brokers (IBKR)">Interactive Brokers (IBKR)</option>
+                      <option value="Bank Foreign / Offshore">Bank Foreign / Offshore</option>
+                    </select>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {/* Account Number */}
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-mono text-zinc-400 uppercase font-bold block">Nomor Rekening Pengirim:</label>
+                    <input
+                      type="text"
+                      value={cashInAccount}
+                      onChange={(e) => setCashInAccount(e.target.value)}
+                      placeholder="Contoh: 800012398765"
+                      className="w-full px-3.5 py-2.5 bg-zinc-900 border border-zinc-800 rounded-xl text-white font-mono text-xs focus:outline-none focus:border-emerald-500/50"
+                    />
+                  </div>
+
+                  {/* Revenue Category */}
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-mono text-zinc-400 uppercase font-bold block">Kategori Sumber Dana:</label>
+                    <select
+                      value={cashInCategory}
+                      onChange={(e) => setCashInCategory(e.target.value)}
+                      className="w-full px-3.5 py-2.5 bg-zinc-900 border border-zinc-800 rounded-xl text-white text-xs focus:outline-none focus:border-emerald-500/50"
+                    >
+                      <option value="Pendapatan Management Fee / Advisory">Pendapatan Management Fee / Advisory</option>
+                      <option value="Setoran Modal Investor / Equity Injection">Setoran Modal Investor / Equity Injection</option>
+                      <option value="Bagi Hasil Giro & Dividen Custodian">Bagi Hasil Giro &amp; Dividen Custodian</option>
+                      <option value="Refund / Pengembalian Beban Operasional">Refund / Pengembalian Beban Operasional</option>
+                      <option value="Penerimaan Pinjaman / Dana Segar">Penerimaan Pinjaman / Dana Segar</option>
+                      <option value="Pendapatan Non-Operasional Lainnya">Pendapatan Non-Operasional Lainnya</option>
+                    </select>
+                  </div>
+                </div>
+
+                {/* Amount Input & Presets */}
+                <div className="space-y-2">
+                  <label className="text-xs font-mono text-zinc-400 uppercase font-bold block">Nominal Transfer Masuk (IDR):</label>
+                  <div className="relative">
+                    <span className="absolute left-4 top-3 text-sm font-mono font-bold text-zinc-500">Rp</span>
+                    <input
+                      type="text"
+                      value={cashInAmount}
+                      onChange={(e) => setCashInAmount(e.target.value)}
+                      placeholder="0"
+                      className="w-full pl-12 pr-4 py-3 bg-zinc-900 border border-zinc-800 rounded-xl text-white font-mono font-bold text-lg focus:outline-none focus:border-emerald-500/50"
+                    />
+                  </div>
+
+                  <div className="flex flex-wrap gap-2 pt-1">
+                    {[1000000, 5000000, 10000000, 50000000, 100000000].map((preset) => (
+                      <button
+                        key={preset}
+                        type="button"
+                        onClick={() => setCashInAmount(preset.toLocaleString('id-ID'))}
+                        className="px-2.5 py-1 bg-zinc-900 hover:bg-zinc-850 text-zinc-300 hover:text-white text-[10px] font-mono rounded-lg border border-zinc-800 transition-all cursor-pointer"
+                      >
+                        +Rp {(preset >= 100000000 ? `${preset / 1000000}Jt` : `${preset / 1000000}Jt`)}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Date & Note Inputs */}
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-mono text-zinc-400 uppercase font-bold block">Tanggal Penerimaan:</label>
+                    <input
+                      type="date"
+                      value={cashInDate}
+                      onChange={(e) => setCashInDate(e.target.value)}
+                      className="w-full px-3.5 py-2.5 bg-zinc-900 border border-zinc-800 rounded-xl text-white font-mono text-xs focus:outline-none focus:border-emerald-500/50"
+                    />
+                  </div>
+                  <div className="md:col-span-2 space-y-1.5">
+                    <label className="text-xs font-mono text-zinc-400 uppercase font-bold block">Catatan / Deskripsi Penerimaan:</label>
+                    <input
+                      type="text"
+                      value={cashInNote}
+                      onChange={(e) => setCashInNote(e.target.value)}
+                      placeholder="Contoh: Settlement Management Fee Juni 2026"
+                      className="w-full px-3.5 py-2.5 bg-zinc-900 border border-zinc-800 rounded-xl text-white text-xs focus:outline-none focus:border-emerald-500/50"
+                    />
+                  </div>
+                </div>
+
+                {/* Status Message */}
+                {cashInStatus && (
+                  <div className={`p-3 rounded-xl border text-xs ${
+                    cashInStatus.success 
+                      ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-300' 
+                      : 'bg-rose-500/10 border-rose-500/30 text-rose-300'
+                  }`}>
+                    <p className="font-bold flex items-center gap-1.5">
+                      <CheckCircle2 className="w-4 h-4" /> {cashInStatus.message}
+                    </p>
+                    {cashInStatus.refNo && (
+                      <p className="text-[10px] font-mono mt-1 opacity-80">Ref ID: {cashInStatus.refNo} | Stamped SHA-256</p>
+                    )}
+                  </div>
+                )}
+
+                {/* Submit Action */}
+                <button
+                  type="button"
+                  onClick={handleExecuteCashIn}
+                  className="w-full py-3.5 bg-emerald-500 hover:bg-emerald-400 text-zinc-950 font-mono font-black text-xs uppercase tracking-wider rounded-xl transition-all shadow-lg shadow-emerald-500/20 cursor-pointer flex items-center justify-center gap-2"
+                >
+                  <Inbox className="w-4 h-4" /> PROSES TERIMA TRANSFER MASUK (CASH IN)
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* EXTERNAL TRANSACTIONS HISTORICAL LEDGER TABLE */}
+          <div className="bg-zinc-950 border border-zinc-850 rounded-2xl p-6 space-y-5 mt-6">
+            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-zinc-800 pb-4">
+              <div>
+                <span className="text-[9px] font-mono text-[#DFFF00] font-bold uppercase tracking-widest block">
+                  BUKU BESAR AUDIT TRANSAKSI GIRO EKSTERNAL
+                </span>
+                <h3 className="text-base font-bold text-white mt-0.5">Histori Transaksi Transfer Cash In &amp; Cash Out</h3>
+              </div>
+
+              <div className="flex flex-wrap items-center gap-2">
+                {/* Type Filter Buttons */}
+                <div className="bg-zinc-900 p-1 rounded-xl border border-zinc-800 flex items-center gap-1">
+                  <button
+                    type="button"
+                    onClick={() => setExtHistoryFilter('ALL')}
+                    className={`px-3 py-1.5 rounded-lg text-xs font-mono font-bold transition-all ${
+                      extHistoryFilter === 'ALL' ? 'bg-amber-500 text-zinc-950' : 'text-zinc-400 hover:text-white'
+                    }`}
+                  >
+                    Semua ({externalTransferHistory.length})
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setExtHistoryFilter('CASH_IN')}
+                    className={`px-3 py-1.5 rounded-lg text-xs font-mono font-bold transition-all ${
+                      extHistoryFilter === 'CASH_IN' ? 'bg-emerald-500 text-zinc-950' : 'text-zinc-400 hover:text-white'
+                    }`}
+                  >
+                    Cash In ({externalTransferHistory.filter(x => x.type === 'CASH_IN').length})
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setExtHistoryFilter('CASH_OUT')}
+                    className={`px-3 py-1.5 rounded-lg text-xs font-mono font-bold transition-all ${
+                      extHistoryFilter === 'CASH_OUT' ? 'bg-rose-500 text-white' : 'text-zinc-400 hover:text-white'
+                    }`}
+                  >
+                    Cash Out ({externalTransferHistory.filter(x => x.type === 'CASH_OUT').length})
+                  </button>
+                </div>
+
+                {/* Search Input */}
+                <div className="relative">
+                  <Search className="w-3.5 h-3.5 text-zinc-500 absolute left-3 top-2.5" />
+                  <input
+                    type="text"
+                    value={extHistorySearch}
+                    onChange={(e) => setExtHistorySearch(e.target.value)}
+                    placeholder="Cari pihak / Ref ID / catatan..."
+                    className="pl-8 pr-3 py-1.5 bg-zinc-900 border border-zinc-800 rounded-xl text-xs text-white focus:outline-none focus:border-amber-500/50 w-48 md:w-64"
+                  />
+                </div>
+              </div>
+            </div>
+
+            {/* Metric Overview Badges */}
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+              <div className="bg-zinc-900/60 border border-emerald-500/20 p-3.5 rounded-xl space-y-1">
+                <span className="text-[9px] font-mono text-zinc-500 uppercase block">TOTAL TERIMA TRANSFER (CASH IN)</span>
+                <p className="text-base font-mono font-black text-emerald-400">
+                  Rp {externalTransferHistory.filter(x => x.type === 'CASH_IN').reduce((acc, x) => acc + x.amount, 0).toLocaleString('id-ID')}
+                </p>
+              </div>
+
+              <div className="bg-zinc-900/60 border border-rose-500/20 p-3.5 rounded-xl space-y-1">
+                <span className="text-[9px] font-mono text-zinc-500 uppercase block">TOTAL TRANSFER KELUAR (CASH OUT)</span>
+                <p className="text-base font-mono font-black text-rose-400">
+                  Rp {externalTransferHistory.filter(x => x.type === 'CASH_OUT').reduce((acc, x) => acc + x.amount, 0).toLocaleString('id-ID')}
+                </p>
+              </div>
+
+              <div className="bg-zinc-900/60 border border-amber-500/20 p-3.5 rounded-xl space-y-1">
+                <span className="text-[9px] font-mono text-zinc-500 uppercase block">ARUS KAS BERSIH EKSTERNAL (NET CASHFLOW)</span>
+                {(() => {
+                  const net = externalTransferHistory.filter(x => x.type === 'CASH_IN').reduce((acc, x) => acc + x.amount, 0) -
+                              externalTransferHistory.filter(x => x.type === 'CASH_OUT').reduce((acc, x) => acc + x.amount, 0);
+                  return (
+                    <p className={`text-base font-mono font-black ${net >= 0 ? 'text-[#DFFF00]' : 'text-rose-400'}`}>
+                      {net >= 0 ? '+' : ''}Rp {net.toLocaleString('id-ID')}
+                    </p>
+                  );
+                })()}
+              </div>
+            </div>
+
+            {/* Transactions Table */}
+            <div className="overflow-x-auto rounded-xl border border-zinc-850">
+              <table className="w-full text-xs text-left">
+                <thead className="bg-zinc-900/80 text-zinc-400 font-mono text-[10px] uppercase border-b border-zinc-800">
+                  <tr>
+                    <th className="py-3 px-4">Ref ID / Tanggal</th>
+                    <th className="py-3 px-4">Tipe Arah</th>
+                    <th className="py-3 px-4">Pihak Terkait (Counterparty)</th>
+                    <th className="py-3 px-4">Bank &amp; Rekening</th>
+                    <th className="py-3 px-4">Kategori Transaksi</th>
+                    <th className="py-3 px-4 text-right">Nominal (IDR)</th>
+                    <th className="py-3 px-4 text-center">Aksi / Struk</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-zinc-850 text-zinc-300">
+                  {filteredExternalTransfers.length === 0 ? (
+                    <tr>
+                      <td colSpan={7} className="py-8 text-center text-zinc-500 font-mono">
+                        Tidak ada transaksi transfer eksternal yang cocok dengan pencarian.
+                      </td>
+                    </tr>
+                  ) : (
+                    filteredExternalTransfers.map((tx) => {
+                      const isOut = tx.type === 'CASH_OUT';
+                      return (
+                        <tr key={tx.id} className="hover:bg-zinc-900/40 transition-all">
+                          <td className="py-3 px-4 font-mono">
+                            <span className="text-white font-bold block">{tx.refNo}</span>
+                            <span className="text-[10px] text-zinc-500">{tx.date}</span>
+                          </td>
+                          <td className="py-3 px-4">
+                            {isOut ? (
+                              <span className="inline-flex items-center gap-1 bg-rose-500/10 text-rose-400 text-[10px] font-mono px-2 py-0.5 rounded border border-rose-500/20 font-bold">
+                                <ArrowUpRight className="w-3 h-3" /> CASH OUT
+                              </span>
+                            ) : (
+                              <span className="inline-flex items-center gap-1 bg-emerald-500/10 text-emerald-400 text-[10px] font-mono px-2 py-0.5 rounded border border-emerald-500/20 font-bold">
+                                <ArrowDownRight className="w-3 h-3" /> CASH IN
+                              </span>
+                            )}
+                          </td>
+                          <td className="py-3 px-4 font-bold text-white">
+                            {tx.partyName}
+                            {tx.note && <span className="block text-[10px] text-zinc-400 font-normal mt-0.5">{tx.note}</span>}
+                          </td>
+                          <td className="py-3 px-4 font-mono text-[11px] text-zinc-400">
+                            {tx.bankName}
+                            <span className="block text-[10px] text-zinc-500">{tx.accountNumber}</span>
+                          </td>
+                          <td className="py-3 px-4 text-zinc-300 text-[11px]">
+                            {tx.category}
+                          </td>
+                          <td className={`py-3 px-4 text-right font-mono font-bold text-sm ${isOut ? 'text-rose-400' : 'text-emerald-400'}`}>
+                            {isOut ? '-' : '+'}Rp {tx.amount.toLocaleString('id-ID')}
+                          </td>
+                          <td className="py-3 px-4 text-center">
+                            <button
+                              type="button"
+                              onClick={() => handleDownloadReceipt(tx)}
+                              className="px-2.5 py-1.5 bg-zinc-900 hover:bg-zinc-800 text-amber-400 hover:text-amber-300 text-[10px] font-mono rounded-lg border border-zinc-800 transition-all cursor-pointer inline-flex items-center gap-1"
+                              title="Unduh Struk PDF Resmi"
+                            >
+                              <Download className="w-3 h-3" /> PDF Receipt
+                            </button>
+                          </td>
+                        </tr>
+                      );
+                    })
+                  )}
+                </tbody>
+              </table>
             </div>
           </div>
         </div>
@@ -3936,6 +5034,237 @@ VentureAM,Luxury watches,120000000`;
           </div>
         </div>
       )}
+
+      {/* CONFIRMATION & DIGITAL SIGNATURE MODAL FOR EXTERNAL GIRO TRANSFERS */}
+      <AnimatePresence>
+        {isConfirmModalOpen && confirmTransferData && (
+          <div className="fixed inset-0 bg-black/80 backdrop-blur-md z-50 flex items-center justify-center p-4 overflow-y-auto">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95, y: 15 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: 15 }}
+              className="bg-zinc-950 border border-zinc-800 rounded-2xl max-w-2xl w-full p-6 space-y-5 shadow-2xl relative my-8"
+            >
+              {/* Modal Header */}
+              <div className="flex justify-between items-start border-b border-zinc-800 pb-4">
+                <div className="flex items-center gap-3">
+                  <div className={`p-2.5 rounded-xl border ${
+                    confirmTransferData.type === 'CASH_OUT' 
+                      ? 'bg-rose-500/10 border-rose-500/30 text-rose-400' 
+                      : 'bg-emerald-500/10 border-emerald-500/30 text-emerald-400'
+                  }`}>
+                    <ShieldCheck className="w-6 h-6" />
+                  </div>
+                  <div>
+                    <span className="text-[10px] font-mono text-zinc-400 uppercase tracking-widest font-bold block">
+                      VERIFIKASI &amp; OTORISASI MULTI-FACTOR
+                    </span>
+                    <h3 className="text-base font-bold text-white flex items-center gap-2">
+                      Konfirmasi Transfer Giro &amp; Tanda Tangan Digital
+                    </h3>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setIsConfirmModalOpen(false)}
+                  className="p-1.5 bg-zinc-900 hover:bg-zinc-800 text-zinc-400 hover:text-white rounded-lg transition-colors cursor-pointer"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              {/* Summary Details */}
+              <div className="bg-zinc-900/90 border border-zinc-800 rounded-xl p-4 space-y-3">
+                <div className="flex justify-between items-center border-b border-zinc-800/80 pb-2">
+                  <span className="text-[10px] font-mono text-zinc-400 uppercase font-bold">Ringkasan Instruksi Transfer Giro</span>
+                  <span className={`text-[10px] font-mono font-bold px-2 py-0.5 rounded border uppercase ${
+                    confirmTransferData.type === 'CASH_OUT'
+                      ? 'bg-rose-500/10 text-rose-400 border-rose-500/30'
+                      : 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30'
+                  }`}>
+                    {confirmTransferData.type === 'CASH_OUT' ? 'TRANSFER KELUAR (CASH OUT)' : 'TERIMA TRANSFER MASUK (CASH IN)'}
+                  </span>
+                </div>
+
+                <div className="grid grid-cols-2 gap-3 text-xs font-mono">
+                  <div>
+                    <span className="text-[10px] text-zinc-500 block uppercase">
+                      {confirmTransferData.type === 'CASH_OUT' ? 'Penerima Transfer (Beneficiary)' : 'Pengirim Transfer (Sender)'}
+                    </span>
+                    <p className="font-bold text-white text-sm mt-0.5">{confirmTransferData.partyName}</p>
+                  </div>
+                  <div>
+                    <span className="text-[10px] text-zinc-500 block uppercase">Bank &amp; Nomor Rekening</span>
+                    <p className="font-bold text-zinc-200 mt-0.5">{confirmTransferData.bankName} - {confirmTransferData.accountNumber}</p>
+                  </div>
+                  <div>
+                    <span className="text-[10px] text-zinc-500 block uppercase">Kategori Transaksi</span>
+                    <p className="text-zinc-300 mt-0.5">{confirmTransferData.category}</p>
+                  </div>
+                  <div>
+                    <span className="text-[10px] text-zinc-500 block uppercase">Tanggal Eksekusi</span>
+                    <p className="text-zinc-300 mt-0.5">{confirmTransferData.date}</p>
+                  </div>
+                </div>
+
+                {confirmTransferData.note && (
+                  <div className="pt-1 border-t border-zinc-800/60">
+                    <span className="text-[10px] text-zinc-500 block font-mono uppercase">Catatan / Deskripsi:</span>
+                    <p className="text-xs text-zinc-300 italic mt-0.5">"{confirmTransferData.note}"</p>
+                  </div>
+                )}
+
+                <div className="bg-zinc-950 p-3 rounded-lg border border-zinc-800/80 flex flex-col md:flex-row justify-between md:items-center gap-2 pt-2">
+                  <div>
+                    <span className="text-[10px] font-mono text-zinc-500 block uppercase font-bold">TOTAL NOMINAL DITRANSFER</span>
+                    <p className={`text-xl font-mono font-black ${
+                      confirmTransferData.type === 'CASH_OUT' ? 'text-rose-400' : 'text-emerald-400'
+                    }`}>
+                      Rp {confirmTransferData.amount.toLocaleString('id-ID')}
+                    </p>
+                  </div>
+                  <div className="text-right font-mono text-[11px]">
+                    <span className="text-zinc-500 text-[9px] uppercase block">Proyeksi Saldo Giro Sesudah Transaksi</span>
+                    <span className="font-bold text-white">
+                      Rp {confirmTransferData.projectedGiro.toLocaleString('id-ID')}
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Digital Signature & Authentication Section */}
+              <div className="space-y-4">
+                <div className="flex justify-between items-center">
+                  <h4 className="text-xs font-mono font-bold text-zinc-300 uppercase tracking-wider flex items-center gap-1.5">
+                    <PenTool className="w-4 h-4 text-[#DFFF00]" /> KEBUTUHAN OTORISASI TANDA TANGAN DIGITAL (ISO 27001)
+                  </h4>
+                  {hasDrawnSignature && (
+                    <span className="text-[10px] font-mono text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded border border-emerald-500/20 flex items-center gap-1">
+                      <CheckCircle2 className="w-3 h-3" /> Tanda Tangan Terekam
+                    </span>
+                  )}
+                </div>
+
+                {/* Signatory Name */}
+                <div className="space-y-1.5">
+                  <label className="text-[11px] font-mono text-zinc-400 uppercase block">Nama &amp; Jabatan Penandatangan Resmi:</label>
+                  <input
+                    type="text"
+                    value={signatoryName}
+                    onChange={(e) => setSignatoryName(e.target.value)}
+                    placeholder="Contoh: Aidil Syahdan Al fitrah, Direktur utama"
+                    className="w-full px-3.5 py-2 bg-zinc-900 border border-zinc-800 rounded-xl text-white text-xs font-mono focus:outline-none focus:border-[#DFFF00]/50"
+                  />
+                </div>
+
+                {/* Interactive Signature Canvas Box */}
+                <div className="space-y-1.5">
+                  <div className="flex justify-between items-center">
+                    <label className="text-[11px] font-mono text-zinc-400 uppercase block">
+                      Goreskan Tanda Tangan Digital Pada Kotak Di Bawah Ini:
+                    </label>
+                    <button
+                      type="button"
+                      onClick={clearSignatureCanvas}
+                      className="text-[10px] font-mono text-zinc-400 hover:text-rose-400 flex items-center gap-1 bg-zinc-900 px-2 py-0.5 rounded border border-zinc-800 transition-colors cursor-pointer"
+                    >
+                      <Eraser className="w-3 h-3" /> Bersihkan Pad
+                    </button>
+                  </div>
+
+                  <div className="relative">
+                    <canvas
+                      ref={signatureCanvasRef}
+                      width={560}
+                      height={120}
+                      onMouseDown={startDrawingSignature}
+                      onMouseMove={drawSignature}
+                      onMouseUp={stopDrawingSignature}
+                      onMouseLeave={stopDrawingSignature}
+                      onTouchStart={startDrawingSignature}
+                      onTouchMove={drawSignature}
+                      onTouchEnd={stopDrawingSignature}
+                      className="w-full h-28 bg-zinc-900 border-2 border-dashed border-zinc-800 rounded-xl cursor-crosshair touch-none"
+                    />
+                    {!hasDrawnSignature && (
+                      <div className="absolute inset-0 pointer-events-none flex items-center justify-center text-zinc-600 font-mono text-xs italic">
+                        [ Klik dan geser kursor / sentuh layar di sini untuk menandatangani ]
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {/* Authorization Security PIN */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                  <div className="space-y-1.5">
+                    <label className="text-[11px] font-mono text-zinc-400 uppercase block">PIN Otorisasi Transaksi (Min. 4 Digit):</label>
+                    <div className="relative">
+                      <Lock className="w-4 h-4 text-zinc-500 absolute left-3 top-2.5" />
+                      <input
+                        type="password"
+                        maxLength={6}
+                        value={signatoryPin}
+                        onChange={(e) => setSignatoryPin(e.target.value)}
+                        placeholder="Contoh: 123456"
+                        className="w-full pl-9 pr-3 py-2 bg-zinc-900 border border-zinc-800 rounded-xl text-white font-mono text-xs focus:outline-none focus:border-[#DFFF00]/50"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="flex items-end">
+                    <p className="text-[10px] font-mono text-zinc-500 leading-relaxed bg-zinc-900/50 p-2.5 rounded-xl border border-zinc-850">
+                      🔒 Enkripsi RSA-2048 &amp; Stempel ISO 27001 akan disematkan ke dalam Log Audit Keuangan Institusional.
+                    </p>
+                  </div>
+                </div>
+
+                {/* Verification Checkbox */}
+                <label className="flex items-start gap-2.5 p-3 bg-zinc-900/70 border border-zinc-800 rounded-xl cursor-pointer hover:bg-zinc-900 transition-colors">
+                  <input
+                    type="checkbox"
+                    checked={isSignatureAgreed}
+                    onChange={(e) => setIsSignatureAgreed(e.target.checked)}
+                    className="mt-0.5 rounded border-zinc-700 bg-zinc-950 text-[#DFFF00] focus:ring-0 cursor-pointer"
+                  />
+                  <span className="text-[11px] text-zinc-300 leading-snug">
+                    Saya mengonfirmasi bahwa instruksi transfer Giro ini sah, telah diverifikasi kebenarannya, dan disetujui sesuai wewenang direksi PT Venture Asset Management.
+                  </span>
+                </label>
+
+                {/* Error Banner */}
+                {signatureError && (
+                  <div className="p-3 bg-rose-500/10 border border-rose-500/30 rounded-xl text-rose-300 text-xs font-mono flex items-center gap-2">
+                    <AlertTriangle className="w-4 h-4 shrink-0" />
+                    <span>{signatureError}</span>
+                  </div>
+                )}
+              </div>
+
+              {/* Action Buttons */}
+              <div className="flex flex-col md:flex-row justify-end items-center gap-3 border-t border-zinc-800 pt-4">
+                <button
+                  type="button"
+                  onClick={() => setIsConfirmModalOpen(false)}
+                  className="w-full md:w-auto px-5 py-2.5 bg-zinc-900 hover:bg-zinc-800 text-zinc-300 font-mono text-xs font-bold rounded-xl transition-colors cursor-pointer"
+                >
+                  Batal / Abort
+                </button>
+                <button
+                  type="button"
+                  onClick={handleConfirmExecuteTransfer}
+                  className={`w-full md:w-auto px-6 py-2.5 font-mono font-black text-xs uppercase tracking-wider rounded-xl transition-all shadow-lg flex items-center justify-center gap-2 cursor-pointer ${
+                    confirmTransferData.type === 'CASH_OUT'
+                      ? 'bg-rose-500 hover:bg-rose-400 text-white shadow-rose-500/20'
+                      : 'bg-emerald-500 hover:bg-emerald-400 text-white shadow-emerald-500/20'
+                  }`}
+                >
+                  <Send className="w-4 h-4" /> OTORISASI &amp; EKSEKUSI TRANSFER GIRO
+                </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }

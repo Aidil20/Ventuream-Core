@@ -33,7 +33,11 @@ interface UploadedFile {
   uploadedAt: string;
 }
 
-export default function RegulatoryReport() {
+interface RegulatoryReportProps {
+  onNavigate?: (tab: string) => void;
+}
+
+export default function RegulatoryReport({ onNavigate }: RegulatoryReportProps = {}) {
   // Tab state
   const [activeSubTab, setActiveSubTab] = useState<'domestic' | 'global' | 'integrity'>('domestic');
   const [saveSuccess, setSaveSuccess] = useState(false);
@@ -171,13 +175,9 @@ export default function RegulatoryReport() {
       doc.text('Nilai Kapitalisasi (IDR)', 150, 77.5);
 
       const items = [
-        { no: '1', name: 'Core Architecture & Institutional UI/UX System', cost: 'Rp 175.000.000' },
-        { no: '2', name: 'Portfolio Management & Execution Engine', cost: 'Rp 285.000.000' },
-        { no: '3', name: 'Analisis Teknikal & Custom PineScript Screener', cost: 'Rp 220.000.000' },
-        { no: '4', name: 'Analisis Fundamental & Chart of Accounts (CoA) Auto-Mapping', cost: 'Rp 260.000.000' },
-        { no: '5', name: 'Risk Analytics, Compliance & Beneficial Ownership GNN', cost: 'Rp 240.000.000' },
-        { no: '6', name: 'Server Gateway & Multi-Market Sync Engine', cost: 'Rp 195.000.000' },
-        { no: '7', name: 'Quality Assurance (QA) & Cross-Market Data Audit', cost: 'Rp 125.000.000' },
+        { no: '1', name: 'Pengembangan Langsung (1.950 Jam Developer Senior @ Rp 800rb)', cost: 'Rp 1.560.000.000' },
+        { no: '2', name: 'Arsitektur Container, Security Vault & Integrasi WSS Proxy', cost: 'Rp 1.140.000.000' },
+        { no: '3', name: 'Audit Keamanan, Vulnerability Hardening & Deployment Certification', cost: 'Rp 1.500.000.000' },
       ];
 
       let rowY = 81;
@@ -206,7 +206,7 @@ export default function RegulatoryReport() {
       doc.setFontSize(9);
       doc.setTextColor(15, 23, 42);
       doc.text('TOTAL NILAI PEROLEHAN ASET TAK BERWUJUD (CapEx)', 28, rowY + 2);
-      doc.text('Rp 1.500.000.000,-', 150, rowY + 2);
+      doc.text('Rp 4.200.000.000,-', 150, rowY + 2);
 
       // Section 2: Fair Market Valuation & OpEx Estimates
       const sec2Y = rowY + 12;
@@ -660,6 +660,14 @@ export default function RegulatoryReport() {
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-3">
+          {onNavigate && (
+            <button
+              onClick={() => onNavigate('reconciliation')}
+              className="px-4 py-2 bg-[#DFFF00]/10 hover:bg-[#DFFF00]/20 border border-[#DFFF00]/40 text-[#DFFF00] transition-all font-bold text-[10px] uppercase tracking-wider rounded-xl flex items-center gap-2 active:scale-95 cursor-pointer shadow-lg shadow-[#DFFF00]/5"
+            >
+              <Scale className="w-3.5 h-3.5 text-[#DFFF00]" /> REKONSILIASI AUM 360°
+            </button>
+          )}
           <button
             onClick={handleGenerateIntangibleAssetPDF}
             className="px-4 py-2 bg-amber-500/10 hover:bg-amber-500/20 border border-amber-500/40 hover:border-amber-500/80 text-amber-300 transition-all font-bold text-[10px] uppercase tracking-wider rounded-xl flex items-center gap-2 active:scale-95 cursor-pointer shadow-lg shadow-amber-500/5"
@@ -715,7 +723,7 @@ export default function RegulatoryReport() {
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
           <div className="p-3 bg-slate-950/80 rounded-xl border border-slate-800">
             <span className="text-[9px] font-black text-zinc-500 uppercase tracking-widest block">Nilai Perolehan ERP</span>
-            <span className="text-sm font-black text-amber-400 font-mono mt-1 block">Rp 7.000.000.000,-</span>
+            <span className="text-sm font-black text-amber-400 font-mono mt-1 block">Rp 4.200.000.000,-</span>
             <span className="text-[8px] text-zinc-400 mt-1 block">Total Kapitalisasi Development</span>
           </div>
 
@@ -727,13 +735,13 @@ export default function RegulatoryReport() {
 
           <div className="p-3 bg-slate-950/80 rounded-xl border border-slate-800">
             <span className="text-[9px] font-black text-zinc-500 uppercase tracking-widest block">Beban Amortisasi / Tahun</span>
-            <span className="text-sm font-black text-emerald-400 font-mono mt-1 block">Rp 350.000.000,-</span>
+            <span className="text-sm font-black text-emerald-400 font-mono mt-1 block">Rp 210.000.000,-</span>
             <span className="text-[8px] text-emerald-500/80 mt-1 block">Pengurangan Nilai Buku Per Tahun</span>
           </div>
 
           <div className="p-3 bg-slate-950/80 rounded-xl border border-slate-800">
             <span className="text-[9px] font-black text-zinc-500 uppercase tracking-widest block">Beban Amortisasi / Bulan</span>
-            <span className="text-sm font-black text-[#deff9a] font-mono mt-1 block">Rp 29.166.667,-</span>
+            <span className="text-sm font-black text-[#deff9a] font-mono mt-1 block">Rp 17.500.000,-</span>
             <span className="text-[8px] text-zinc-400 mt-1 block">Beban Operasional Bulanan</span>
           </div>
         </div>

@@ -408,7 +408,7 @@ function VamSmartScanner() {
     const interval = setInterval(() => {
       setSecondsToNextFeedRefresh(prev => {
         if (prev <= 1) {
-          fetchMaLiveIssues(true);
+          setTimeout(() => fetchMaLiveIssues(true), 0);
           return 12;
         }
         return prev - 1;

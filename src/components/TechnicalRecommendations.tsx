@@ -625,57 +625,57 @@ export const TechnicalRecommendations: React.FC = () => {
   // Auto-refresh simulations to make dashboard look responsive and alive, matching live TradingView stream spikes
   useEffect(() => {
     const timer = setInterval(() => {
-      // Infuse very slight variations in elements to feel real time
+      if (document.hidden) return; // Skip background processing when tab is inactive to prevent lag
+      
       setRecommendations(prev => {
-        const next = { ...prev };
-        Object.keys(next).forEach(marketKey => {
-          const key = marketKey as 'IDX' | 'SGX' | 'US' | 'GLOBAL';
-          next[key] = next[key].map(item => {
-            // 60% chance to update each interval ticker to simulate hot real-time TV web socket stream activity
-            if (Math.random() > 0.6) {
-              return item;
-            }
+        const currentActiveMarket = activeMarket;
+        if (!prev[currentActiveMarket]) return prev;
 
-            const pctDelta = (Math.random() - 0.5) * 0.18;
-            const priceNumber = parseFloat(item.price.replace(/[^\d.]/g, ''));
-            
-            if (isNaN(priceNumber)) return item;
-            
-            const nextPriceVal = priceNumber * (1 + pctDelta / 100);
-            const prefix = item.price.startsWith('IDR') ? 'IDR ' : item.price.startsWith('SGD') ? 'SGD ' : item.price.startsWith('USD') ? 'USD ' : '';
-            
-            let formattedPrice = '';
-            if (prefix === 'IDR ') {
-              formattedPrice = `${prefix}${Math.round(nextPriceVal).toLocaleString('id-ID')}`;
-            } else if (prefix === 'SGD ' || prefix === 'USD ') {
-              formattedPrice = `${prefix}${nextPriceVal.toFixed(2)}`;
-            } else {
-              formattedPrice = nextPriceVal.toFixed(4);
-            }
+        const updatedMarketItems = prev[currentActiveMarket].map(item => {
+          if (Math.random() > 0.5) return item;
 
-            const nextChangePercent = item.changePercent + pctDelta;
-            const formattedChange = `${nextChangePercent >= 0 ? '+' : ''}${nextChangePercent.toFixed(2)}%`;
+          const pctDelta = (Math.random() - 0.5) * 0.18;
+          const priceNumber = parseFloat(item.price.replace(/[^\d.]/g, ''));
+          
+          if (isNaN(priceNumber)) return item;
+          
+          const nextPriceVal = priceNumber * (1 + pctDelta / 100);
+          const prefix = item.price.startsWith('IDR') ? 'IDR ' : item.price.startsWith('SGD') ? 'SGD ' : item.price.startsWith('USD') ? 'USD ' : '';
+          
+          let formattedPrice = '';
+          if (prefix === 'IDR ') {
+            formattedPrice = `${prefix}${Math.round(nextPriceVal).toLocaleString('id-ID')}`;
+          } else if (prefix === 'SGD ' || prefix === 'USD ') {
+            formattedPrice = `${prefix}${nextPriceVal.toFixed(2)}`;
+          } else {
+            formattedPrice = nextPriceVal.toFixed(4);
+          }
 
-            // Adjust sparkline
-            const nextSparkline = [...item.sparkline.slice(1), item.sparkline[item.sparkline.length - 1] * (1 + (Math.random() - 0.5) * 0.05)];
+          const nextChangePercent = item.changePercent + pctDelta;
+          const formattedChange = `${nextChangePercent >= 0 ? '+' : ''}${nextChangePercent.toFixed(2)}%`;
 
-            return {
-              ...item,
-              price: formattedPrice,
-              change: formattedChange,
-              changePercent: nextChangePercent,
-              sparkline: nextSparkline,
-              lastTick: pctDelta > 0 ? 'up' : pctDelta < 0 ? 'down' : null,
-              lastTickTime: Date.now()
-            };
-          });
+          const nextSparkline = [...item.sparkline.slice(1), item.sparkline[item.sparkline.length - 1] * (1 + (Math.random() - 0.5) * 0.05)];
+
+          return {
+            ...item,
+            price: formattedPrice,
+            change: formattedChange,
+            changePercent: nextChangePercent,
+            sparkline: nextSparkline,
+            lastTick: pctDelta > 0 ? 'up' : pctDelta < 0 ? 'down' : null,
+            lastTickTime: Date.now()
+          };
         });
-        return next;
+
+        return {
+          ...prev,
+          [currentActiveMarket]: updatedMarketItems
+        };
       });
-    }, 2000); // slightly faster update ticks for hot simulation
+    }, 6000); // Efficient 6-second cadence for silky smooth UI response
 
     return () => clearInterval(timer);
-  }, []);
+  }, [activeMarket]);
 
   const handleRefresh = () => {
     setIsRefreshing(true);

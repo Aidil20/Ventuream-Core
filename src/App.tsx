@@ -34,6 +34,7 @@ import {
   ExternalLink,
   Plus,
   BarChart3,
+  BarChart2,
   Globe,
   Gavel,
   Droplets,
@@ -59,8 +60,10 @@ import {
   Presentation,
   BookOpen,
   Download,
-  Terminal
+  Terminal,
+  ArrowLeftRight
 } from 'lucide-react';
+import FinancialReconciliationView from './components/FinancialReconciliationView';
 import { motion, AnimatePresence } from 'motion/react';
 import { Decimal } from 'decimal.js';
 import * as XLSX from 'xlsx';
@@ -222,6 +225,7 @@ const SIDEBAR_MENU = [
   { id: 10, label: "Permintaan Dokumen", icon: PenTool, path: "legal", color: "#deff9a" },
   { id: 104, label: "Pusat Ekspor Dokumen", icon: Download, path: "export-center", color: "#a855f7" },
   { id: 5, label: "Laporan Keuangan", icon: Calculator, path: "financial", color: "orange-400" },
+  { id: 107, label: "Reconciliation Dashboard", icon: BarChart2, path: "reconciliation-dashboard", color: "#DFFF00" },
   { id: 11, label: "Arsip & Audit Trail", icon: Database, path: "archive", color: "blue-400" },
   { id: 101, label: "Audit Sync", icon: ShieldCheck, path: "audit-sync", color: "#DFFF00" },
   { id: 105, label: "Pusat Diagnostik Web Socket Panel", icon: Terminal, path: "websocket-diagnostic", color: "#10b981" },
@@ -1725,11 +1729,11 @@ export default function App() {
   useEffect(() => {
     if (notifications.length > 0) {
       const timer = setTimeout(() => {
-        setNotifications(prev => prev.slice(0, prev.length - 1));
+        setNotifications(prev => prev.slice(0, Math.max(0, prev.length - 1)));
       }, 8000);
       return () => clearTimeout(timer);
     }
-  }, [notifications]);
+  }, [notifications.length]);
 
   // Alert Actions
   const addAlert = useCallback((alert: Omit<PriceAlert, 'id' | 'createdAt' | 'active'>) => {
@@ -4435,6 +4439,21 @@ export default function App() {
               realizedPnL={cgsRealizedPnL} 
               totalFees={cgsTotalFees} 
               transactions={history}
+              onExternalTransfer={(type, amount) => {
+                if (type === 'CASH_OUT') {
+                  setCgsGiroBalance(prev => {
+                    const next = Math.max(0, prev - amount);
+                    localStorage.setItem('cgsGiroBalance_v3', String(next));
+                    return next;
+                  });
+                } else if (type === 'CASH_IN') {
+                  setCgsGiroBalance(prev => {
+                    const next = prev + amount;
+                    localStorage.setItem('cgsGiroBalance_v3', String(next));
+                    return next;
+                  });
+                }
+              }}
               onTransferFunds={(fromAccount, toAccount, amount) => {
                 if (fromAccount === 'RDN' && toAccount === 'GIRO') {
                   setCgsCashBalance(prev => {
@@ -4462,6 +4481,19 @@ export default function App() {
               }} 
             />
           </div>
+        );
+      case 'reconciliation':
+      case 'reconciliation-dashboard':
+        return (
+          <FinancialReconciliationView 
+            portfolioData={portfolioData}
+            cashBalance={cgsCashBalance}
+            giroBalance={cgsGiroBalance}
+            realizedPnL={cgsRealizedPnL}
+            totalFees={cgsTotalFees}
+            transactions={history}
+            onNavigate={(tab) => setActiveTab(tab)}
+          />
         );
       case 'archive':
         return (
@@ -4592,7 +4624,7 @@ export default function App() {
             </div>
             
             {isUnlocked ? (
-              <RegulatoryReport />
+              <RegulatoryReport onNavigate={(tab) => setActiveTab(tab)} />
             ) : (
               <div className="bg-slate-900/50 p-10 rounded-[2.5rem] border border-slate-800 flex flex-col items-center text-center">
                 <div className="p-4 bg-red-500/10 rounded-full border border-red-500/20 mb-6">
