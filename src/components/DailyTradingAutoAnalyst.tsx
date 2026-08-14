@@ -39,14 +39,16 @@ indicator("VAM Institutional - Day Trading & Potensi ARA Screener", overlay=true
 // ==========================================
 // PARAMETER SCANNER DAY TRADING & POTENSI ARA (BEI RULES)
 // ==========================================
-emaLength      = input.int(20, "EMA Length")
+emaFastLength  = input.int(10, "EMA-10 Length (Fast Day Trading Momentum)")
+emaSlowLength  = input.int(20, "EMA-20 Length (Base Trendline)")
 volMaLength    = input.int(20, "Volume MA Length")
 volMultiplier  = input.float(3.0, "Min Volume Surge Multiplier")
 rsiLength      = input.int(14, "RSI Length")
 rsiMin         = input.int(65, "RSI Min Threshold (Hot Momentum)")
 
 // Indikator Teknikal TradingView
-ema20          = ta.ema(close, emaLength)
+ema10          = ta.ema(close, emaFastLength)
+ema20          = ta.ema(close, emaSlowLength)
 volMa          = ta.sma(volume, volMaLength)
 rsiVal         = ta.rsi(close, rsiLength)
 
@@ -54,9 +56,10 @@ rsiVal         = ta.rsi(close, rsiLength)
 [macdLine, signalLine, _] = ta.macd(close, 12, 26, 9)
 macdGoldenCross = ta.crossover(macdLine, signalLine) and macdLine > 0
 
-// Kriteria 3 Pilar
+// Kriteria 3 Pilar Day Trading
 volumeSurge    = volume >= (volMa * volMultiplier)
-priceAboveEma  = close > ema20
+priceAboveEma10 = close > ema10
+priceAboveEma20 = close > ema20
 highMomentum   = rsiVal >= rsiMin
 upperBand      = ta.sma(close, 20) + 2 * ta.stdev(close, 20)
 bbBreakout     = close > upperBand
@@ -72,11 +75,12 @@ else
 
 araPriceLimit = math.floor(close * (1 + araPct))
 
-// Kondisi Sinyal Screener Matched
-isAraCandidate = volumeSurge and priceAboveEma and (highMomentum or bbBreakout) and macdGoldenCross
+// Kondisi Sinyal Screener Matched (Day Trading Fast Trendline & ARA)
+isAraCandidate = volumeSurge and priceAboveEma10 and priceAboveEma20 and (highMomentum or bbBreakout) and macdGoldenCross
 
 // Visualisasi Plot Pada Chart TradingView
-plot(ema20, "EMA 20", color=color.rgb(56, 189, 248), linewidth=2)
+plot(ema10, "EMA 10 (Fast Day Trading)", color=color.rgb(250, 204, 21), linewidth=2)
+plot(ema20, "EMA 20 (Base Trend)", color=color.rgb(56, 189, 248), linewidth=2)
 plot(upperBand, "Bollinger Upper", color=color.rgb(168, 85, 247, 50))
 plotshape(isAraCandidate, title="POTENSI ARA SIGNAL", location=location.belowbar, color=color.rgb(222, 255, 154), style=shape.triangleup, size=size.normal, text="POTENSI ARA")
 
@@ -125,8 +129,10 @@ export interface DailyTradingStock {
     ipoOversubscription?: string; // e.g. "Oversubscribed 98.4x (Free Float 15%)"
   };
 
-  // TradingView Screener Technical Indicators (Price > EMA20, EPS growth YoY < 10%)
+  // TradingView Screener Technical Indicators (Price > EMA10, Price > EMA20, EPS growth YoY < 10%)
   tradingViewScreener: {
+    priceAboveEma10?: boolean;
+    ema10Value?: string;
     priceAboveEma20: boolean;
     ema20Value: string;
     epsGrowthYoY: string;
@@ -1824,7 +1830,8 @@ export const DailyTradingAutoAnalyst: React.FC<DailyTradingAutoAnalystProps> = (
   const [showMethodologyGuide, setShowMethodologyGuide] = useState<boolean>(false);
   
   const [filter4of4Only, setFilter4of4Only] = useState<boolean>(false);
-  const [activeIndicatorFilter, setActiveIndicatorFilter] = useState<'ALL' | 'MA_CROSS' | 'RSI_BULL' | 'BREAKOUT_CHART' | 'BREAKOUT_VOL' | 'VOLUME_SURGE_5X'>('ALL');
+  const [filterEma10Only, setFilterEma10Only] = useState<boolean>(false);
+  const [activeIndicatorFilter, setActiveIndicatorFilter] = useState<'ALL' | 'EMA_10' | 'MA_CROSS' | 'RSI_BULL' | 'BREAKOUT_CHART' | 'BREAKOUT_VOL' | 'VOLUME_SURGE_5X'>('ALL');
   const [sortByVolumeSurge, setSortByVolumeSurge] = useState<boolean>(false);
   const [volumeSurgeOnly, setVolumeSurgeOnly] = useState<boolean>(false);
   const [isScanning, setIsScanning] = useState<boolean>(false);
@@ -2010,6 +2017,12 @@ ${araInfo ? `• Potensi ARA Limit (BEI): Rp ${araInfo.limitPrice} (+${araInfo.p
         if (!passesAll) return false;
       }
 
+      if (filterEma10Only) {
+        const priceAboveEma10 = stock.priceNum >= (stock.maEmaCross?.ema10 || 0);
+        if (!priceAboveEma10) return false;
+      }
+
+      if (activeIndicatorFilter === 'EMA_10' && stock.priceNum < (stock.maEmaCross?.ema10 || 0)) return false;
       if (activeIndicatorFilter === 'MA_CROSS' && stock.maEmaCross.status !== 'Golden Cross') return false;
       if (activeIndicatorFilter === 'RSI_BULL' && stock.rsi < 55) return false;
       if (activeIndicatorFilter === 'BREAKOUT_CHART' && !stock.chartBreakout.isBreakout) return false;
@@ -2026,7 +2039,7 @@ ${araInfo ? `• Potensi ARA Limit (BEI): Rp ${araInfo.limitPrice} (+${araInfo.p
     }
 
     return result;
-  }, [stocks, selectedMarket, activeFilterCategory, filter4of4Only, activeIndicatorFilter, sortByVolumeSurge, volumeSurgeOnly]);
+  }, [stocks, selectedMarket, activeFilterCategory, filter4of4Only, filterEma10Only, activeIndicatorFilter, sortByVolumeSurge, volumeSurgeOnly]);
 
   const handleRunAutoScan = () => {
     setIsScanning(true);
@@ -2536,6 +2549,25 @@ ${araInfo ? `• Potensi ARA Limit (BEI): Rp ${araInfo.limitPrice} (+${araInfo.p
             </span>
           </button>
 
+          {/* EMA-10 Day Trading Trendline Filter Toggle */}
+          <button
+            onClick={() => setFilterEma10Only(!filterEma10Only)}
+            className={`flex items-center gap-1.5 px-3 py-1 rounded-xl text-[9px] font-mono font-bold uppercase transition-all cursor-pointer border ${
+              filterEma10Only
+                ? 'bg-yellow-400 text-slate-950 border-yellow-300 font-black shadow-[0_0_12px_rgba(250,204,21,0.35)]'
+                : 'bg-yellow-500/10 text-yellow-400 border-yellow-500/25 hover:bg-yellow-500/20'
+            }`}
+            title="Filter saham Day Trading dengan harga di atas garis EMA-10 Trendline (Fast Momentum)"
+          >
+            <TrendingUp className="w-3 h-3 text-yellow-400" />
+            <span>EMA-10 Trendline</span>
+            <span className={`px-1.5 py-0.2 rounded text-[8px] font-black ${
+              filterEma10Only ? 'bg-slate-950 text-yellow-300' : 'bg-yellow-500/20 text-yellow-200'
+            }`}>
+              {filterEma10Only ? `${stocks.filter(s => s.priceNum >= (s.maEmaCross?.ema10 || 0)).length} AKTIF` : 'ALL'}
+            </span>
+          </button>
+
           {/* Volume Surge 5x Filter Toggle Button */}
           <button
             onClick={() => setVolumeSurgeOnly(!volumeSurgeOnly)}
@@ -2751,14 +2783,23 @@ ${araInfo ? `• Potensi ARA Limit (BEI): Rp ${araInfo.limitPrice} (+${araInfo.p
                               <BarChart3 className="w-3 h-3 text-sky-400" />
                               <span>TradingView Screener</span>
                             </span>
-                            <span className="px-1.5 py-0.2 bg-sky-500/20 text-sky-200 rounded font-bold text-[7.5px]">
-                              {stock.tradingViewScreener.priceAboveEma20 ? 'PRICE > EMA20' : 'EMA20'}
-                            </span>
+                            <div className="flex items-center gap-1">
+                              <span className={`px-1.5 py-0.2 rounded font-black text-[7.5px] ${
+                                stock.priceNum >= (stock.maEmaCross?.ema10 || 0)
+                                  ? 'bg-yellow-400/25 text-yellow-300 border border-yellow-400/40'
+                                  : 'bg-zinc-800 text-zinc-400'
+                              }`}>
+                                {stock.priceNum >= (stock.maEmaCross?.ema10 || 0) ? 'PRICE > EMA10' : 'EMA10'}
+                              </span>
+                              <span className="px-1.5 py-0.2 bg-sky-500/20 text-sky-200 rounded font-bold text-[7.5px]">
+                                {stock.tradingViewScreener.priceAboveEma20 ? 'PRICE > EMA20' : 'EMA20'}
+                              </span>
+                            </div>
                           </div>
                           <div className="text-[8.5px] font-mono text-zinc-300 space-y-0.5">
                             <div className="flex justify-between">
+                              <span className="text-zinc-500">EMA10: <strong className="text-yellow-300">{stock.market === 'IDX' ? `Rp ${stock.maEmaCross?.ema10?.toLocaleString('id-ID')}` : `$${stock.maEmaCross?.ema10}`}</strong></span>
                               <span className="text-zinc-500">EMA20: <strong className="text-sky-200">{stock.tradingViewScreener.ema20Value}</strong></span>
-                              <span className="text-zinc-500">EPS YoY: <strong className="text-emerald-400">{stock.tradingViewScreener.epsGrowthYoY}</strong></span>
                             </div>
                             <div className="text-[8px] text-sky-300/80 truncate italic">
                               {stock.tradingViewScreener.screenerMatch}
@@ -2942,8 +2983,8 @@ ${araInfo ? `• Potensi ARA Limit (BEI): Rp ${araInfo.limitPrice} (+${araInfo.p
                 <ol className="list-decimal list-inside space-y-1 text-zinc-300 font-mono text-[10.5px]">
                   <li>Buka TradingView (www.tradingview.com) & masuk ke tab <strong>Pine Editor</strong> di bagian bawah chart.</li>
                   <li>Salin seluruh kode Pine Script (v5) di bawah ini lalu tempel (paste) ke Pine Editor.</li>
-                  <li>Klik <strong>Add to Chart</strong> untuk menampilkan indikator & sinyal visual "POTENSI ARA" secara realtime.</li>
-                  <li>Atau gunakan kriteria filter di <strong>TradingView Stock Screener</strong>: Exchange: <code>IDX</code>, Price &gt; <code>EMA 20</code>, Volume &ge; <code>3x Volume MA20</code>, RSI(14) &gt; <code>65</code>, MACD Line &gt; <code>Signal</code>.</li>
+                  <li>Klik <strong>Add to Chart</strong> untuk menampilkan indikator & sinyal visual "POTENSI ARA" beserta garis <strong>EMA-10 (Gold Fast Trendline)</strong> & <strong>EMA-20 (Cyan Base Trendline)</strong> secara realtime.</li>
+                  <li>Atau gunakan kriteria filter di <strong>TradingView Stock Screener</strong>: Exchange: <code>IDX</code>, Price &gt; <code>EMA 10</code>, Price &gt; <code>EMA 20</code>, Volume &ge; <code>3x Volume MA20</code>, RSI(14) &gt; <code>65</code>, MACD Line &gt; <code>Signal</code>.</li>
                 </ol>
               </div>
 

@@ -115,7 +115,7 @@ import DocumentExportCenter from './components/DocumentExportCenter';
 import { fetchMarketNews } from './services/marketService';
 import { StockExplorer } from './components/StockExplorer';
 import { FundamentalAnalyst } from './components/FundamentalAnalyst';
-import { initAuth, googleSignIn, logout as googleLogout, db } from './lib/auth';
+import { initAuth, googleSignIn, logout as googleLogout, db, auth } from './lib/auth';
 import { WorkspaceHub } from './components/WorkspaceHub';
 import EconomicCalendarWidget from './components/EconomicCalendarWidget';
 import { User } from 'firebase/auth';
@@ -659,8 +659,7 @@ export default function App() {
   const [activeScannerMarket, setActiveScannerMarket] = useState<'IDX' | 'GLOBAL' | null>(null);
   const [activeScannerModule, setActiveScannerModule] = useState<string | null>(null);
   const [expandedMarket, setExpandedMarket] = useState<string | null>(null);
-  const [portfolioData, setPortfolioData] = useState<PortfolioAsset[]>([]);
-  const [cgsAssets, setCgsAssets] = useState(() => {
+  const [cgsAssets, setCgsAssets] = useState<PortfolioAsset[]>(() => {
     try {
       const saved = localStorage.getItem('cgsAssets_v3');
       if (saved) {
@@ -702,6 +701,36 @@ export default function App() {
       { ticker: "PRDL.JK", lots: 10, averagePrice: 980, marketPrice: 1050 },
       { ticker: "RANS.JK", lots: 10, averagePrice: 380, marketPrice: 410 }
     ];
+  });
+
+  const [portfolioData, setPortfolioData] = useState<PortfolioAsset[]>(() => {
+    return cgsAssets.map(asset => {
+      const currentPrice = asset.marketPrice || asset.averagePrice || 0;
+      const lots = new Decimal(asset.lots || 0);
+      const avgPrice = new Decimal(asset.averagePrice || 0);
+      const multiplier = new Decimal(100);
+
+      const totalCost = avgPrice.times(lots).times(multiplier);
+      const marketValue = new Decimal(currentPrice).times(lots).times(multiplier);
+      const unrealized = marketValue.minus(totalCost);
+      const change = avgPrice.isZero() ? new Decimal(0) : new Decimal(currentPrice).minus(avgPrice).div(avgPrice).times(multiplier);
+
+      return {
+        ticker: asset.ticker,
+        lots: asset.lots,
+        averagePrice: asset.averagePrice,
+        marketPrice: currentPrice,
+        currentPrice: currentPrice,
+        change: change.toNumber(),
+        marketValue: marketValue.toNumber(),
+        unrealized: unrealized.toNumber(),
+        dailyChange: asset.dailyChange || 0,
+        isCustomInvestment: asset.isCustomInvestment,
+        customCategory: asset.customCategory,
+        customName: asset.customName,
+        yieldRate: asset.yieldRate
+      };
+    });
   });
   const [cgsCashBalance, setCgsCashBalance] = useState(() => {
     try {
@@ -1560,22 +1589,28 @@ export default function App() {
               unsubProfile = null;
             }
 
-            // Real-time listener on user profile
-            const docRef = doc(db, 'users', user.uid);
-            unsubProfile = onSnapshot(docRef, (docSnap) => {
-              if (docSnap.exists()) {
-                const data = docSnap.data() as UserProfile;
-                const emailLower = (data?.email || '').toLowerCase();
-                if (data && (emailLower === 'aidilsyahdan2000@gmail.com' || emailLower === 'pt.ventuream@gmail.com')) {
-                  data.role = 'President_Director';
-                }
-                setUserProfile(data);
+            // Real-time listener on user profile (only when genuine Firebase Auth user is present)
+            if (auth.currentUser && user.uid && user.uid !== 'user_institutional_gateway_01') {
+              try {
+                const docRef = doc(db, 'users', user.uid);
+                unsubProfile = onSnapshot(docRef, (docSnap) => {
+                  if (docSnap.exists()) {
+                    const data = docSnap.data() as UserProfile;
+                    const emailLower = (data?.email || '').toLowerCase();
+                    if (data && (emailLower === 'aidilsyahdan2000@gmail.com' || emailLower === 'pt.ventuream@gmail.com')) {
+                      data.role = 'President_Director';
+                    }
+                    setUserProfile(data);
+                  }
+                }, (err) => {
+                  console.warn('Real-time profile listener offline/network notice:', err?.message || err);
+                });
+              } catch (e) {
+                console.warn('Silent notice: Firestore snapshot listener skipped in offline mode:', e);
               }
-            }, (err) => {
-              console.error('Real-time profile listener error:', err);
-            });
+            }
           } catch (err) {
-            console.error('Error ensuring profile:', err);
+            console.warn('Silent notice ensuring profile:', err);
           }
         }
       },
@@ -1635,11 +1670,13 @@ export default function App() {
 
   // Sync a Ref to avoid alertThresholds trigger loop in the price monitor
   const alertThresholdsRef = React.useRef(alertThresholds);
-  useEffect(() => {
-    alertThresholdsRef.current = alertThresholds;
-  }, [alertThresholds]);
+  alertThresholdsRef.current = alertThresholds;
 
-  // Monitor portfolio prices and trigger alerts dynamically
+  // Monitor portfolio prices and trigger alerts dynamically with price fingerprint
+  const portfolioPricesFingerprint = useMemo(() => {
+    return portfolioData.map(p => `${p.ticker}:${p.currentPrice || p.marketPrice || 0}`).join('|');
+  }, [portfolioData]);
+
   useEffect(() => {
     if (!globalAlertsEnabled || portfolioData.length === 0) return;
 
@@ -1723,7 +1760,7 @@ export default function App() {
         console.warn("Audio chime block or not allowed:", err);
       }
     }
-  }, [portfolioData, globalAlertsEnabled]);
+  }, [portfolioPricesFingerprint, globalAlertsEnabled]);
 
   // Auto-dismiss notifications after 8 seconds
   useEffect(() => {
@@ -2240,59 +2277,91 @@ export default function App() {
       setLivePrices(prev => ({ ...prev, ...initialPrices }));
 
       // Update Portfolio Data with initial state
-      setPortfolioData(prev => prev.map(asset => {
-        const cleanTicker = asset.ticker.replace('.JK', '');
-        const match = data[cleanTicker] || data[asset.ticker];
-        if (match) {
-          const currentPrice = match.price;
-          const lots = asset.lots;
-          const avgPrice = asset.averagePrice;
-          const multiplier = 100;
+      setPortfolioData(prev => {
+        let changed = false;
+        const next = prev.map(asset => {
+          const cleanTicker = asset.ticker.replace('.JK', '');
+          const match = data[cleanTicker] || data[asset.ticker];
+          if (match) {
+            const currentPrice = match.price;
+            const lots = asset.lots;
+            const avgPrice = asset.averagePrice;
+            const multiplier = 100;
 
-          const marketValue = currentPrice * lots * multiplier;
-          const unrealized = marketValue - (avgPrice * lots * multiplier);
-          const change = ((currentPrice - avgPrice) / avgPrice) * 100;
+            const marketValue = currentPrice * lots * multiplier;
+            const unrealized = marketValue - (avgPrice * lots * multiplier);
+            const change = avgPrice > 0 ? ((currentPrice - avgPrice) / avgPrice) * 100 : 0;
+            const dailyChange = typeof match.changePercent === 'number' ? match.changePercent : 0;
 
-          return { 
-            ...asset, 
-            marketPrice: currentPrice,
-            currentPrice: currentPrice,
-            change: change,
-            marketValue: marketValue,
-            unrealized: unrealized,
-            dailyChange: typeof match.changePercent === 'number' ? match.changePercent : 0
-          };
-        }
-        return asset;
-      }));
+            if (
+              asset.currentPrice !== currentPrice ||
+              asset.marketValue !== marketValue ||
+              asset.unrealized !== unrealized ||
+              asset.dailyChange !== dailyChange
+            ) {
+              changed = true;
+              return { 
+                ...asset, 
+                marketPrice: currentPrice,
+                currentPrice: currentPrice,
+                change: change,
+                marketValue: marketValue,
+                unrealized: unrealized,
+                dailyChange: dailyChange
+              };
+            }
+          }
+          return asset;
+        });
+        return changed ? next : prev;
+      });
 
       // Update Assets Data with initial state
-      setAssetsData(prev => prev.map(asset => {
-        const match = data[asset.symbol];
-        if (match) {
-          return {
-            ...asset,
-            value: `Rp ${(typeof match.price === 'number' ? match.price / 1000 : 0).toFixed(1)}k`,
-            percentage: (typeof match.changePercent === 'number' ? (match.changePercent >= 0 ? '+' : '') + match.changePercent.toFixed(1) : '0.0') + '%',
-            status: match.changePercent > 0.5 ? 'Bullish' : match.changePercent < -0.5 ? 'Bearish' : 'Stable'
-          };
-        }
-        return asset;
-      }));
+      setAssetsData(prev => {
+        let changed = false;
+        const next = prev.map(asset => {
+          const match = data[asset.symbol];
+          if (match) {
+            const valStr = `Rp ${(typeof match.price === 'number' ? match.price / 1000 : 0).toFixed(1)}k`;
+            const pctStr = (typeof match.changePercent === 'number' ? (match.changePercent >= 0 ? '+' : '') + match.changePercent.toFixed(1) : '0.0') + '%';
+            const statusStr = match.changePercent > 0.5 ? 'Bullish' : match.changePercent < -0.5 ? 'Bearish' : 'Stable';
+            if (asset.value !== valStr || asset.percentage !== pctStr || asset.status !== statusStr) {
+              changed = true;
+              return {
+                ...asset,
+                value: valStr,
+                percentage: pctStr,
+                status: statusStr
+              };
+            }
+          }
+          return asset;
+        });
+        return changed ? next : prev;
+      });
 
       // Update Stocks Data with initial state
-      setStocks(prev => prev.map(stock => {
-        const match = data[stock.symbol];
-        if (match) {
-          return {
-            ...stock,
-            price: match.price.toLocaleString('id-ID'),
-            currentPrice: match.price,
-            change: (typeof match.changePercent === 'number' ? (match.changePercent >= 0 ? '+' : '') + match.changePercent.toFixed(2) : '0.00') + '%'
-          };
-        }
-        return stock;
-      }));
+      setStocks(prev => {
+        let changed = false;
+        const next = prev.map(stock => {
+          const match = data[stock.symbol];
+          if (match) {
+            const pStr = match.price.toLocaleString('id-ID');
+            const chgStr = (typeof match.changePercent === 'number' ? (match.changePercent >= 0 ? '+' : '') + match.changePercent.toFixed(2) : '0.00') + '%';
+            if (stock.price !== pStr || stock.currentPrice !== match.price || stock.change !== chgStr) {
+              changed = true;
+              return {
+                ...stock,
+                price: pStr,
+                currentPrice: match.price,
+                change: chgStr
+              };
+            }
+          }
+          return stock;
+        });
+        return changed ? next : prev;
+      });
     });
 
     socket.on('market-update', (data: { 
@@ -2309,62 +2378,96 @@ export default function App() {
       const { symbol, price, changePercent } = data;
 
       // Update the livePrices state mapping symbol to price
-      setLivePrices(prev => ({
-        ...prev,
-        [symbol]: price
-      }));
+      setLivePrices(prev => {
+        if (prev[symbol] === price) return prev;
+        return {
+          ...prev,
+          [symbol]: price
+        };
+      });
 
       // Update Assets Data (State)
-      setAssetsData(prev => prev.map(asset => {
-        if (asset.symbol === symbol) {
-          return {
-            ...asset,
-            value: `Rp ${(typeof price === 'number' ? price / 1000 : 0).toFixed(1)}k`,
-            percentage: (typeof changePercent === 'number' ? (changePercent >= 0 ? '+' : '') + changePercent.toFixed(1) : '0.0') + '%',
-            status: changePercent > 0.5 ? 'Bullish' : changePercent < -0.5 ? 'Bearish' : 'Stable'
-          };
-        }
-        return asset;
-      }));
+      setAssetsData(prev => {
+        let changed = false;
+        const next = prev.map(asset => {
+          if (asset.symbol === symbol) {
+            const valStr = `Rp ${(typeof price === 'number' ? price / 1000 : 0).toFixed(1)}k`;
+            const pctStr = (typeof changePercent === 'number' ? (changePercent >= 0 ? '+' : '') + changePercent.toFixed(1) : '0.0') + '%';
+            const statusStr = changePercent > 0.5 ? 'Bullish' : changePercent < -0.5 ? 'Bearish' : 'Stable';
+            if (asset.value !== valStr || asset.percentage !== pctStr || asset.status !== statusStr) {
+              changed = true;
+              return {
+                ...asset,
+                value: valStr,
+                percentage: pctStr,
+                status: statusStr
+              };
+            }
+          }
+          return asset;
+        });
+        return changed ? next : prev;
+      });
 
       // Update Stocks List (State)
-      setStocks(prev => prev.map(stock => {
-        if (stock.symbol === symbol) {
-          return {
-            ...stock,
-            price: typeof price === 'number' ? price.toLocaleString('id-ID') : (price || 'N/A'),
-            currentPrice: price,
-            change: (typeof changePercent === 'number' ? (changePercent >= 0 ? '+' : '') + changePercent.toFixed(2) : '0.00') + '%'
-          };
-        }
-        return stock;
-      }));
+      setStocks(prev => {
+        let changed = false;
+        const next = prev.map(stock => {
+          if (stock.symbol === symbol) {
+            const pStr = typeof price === 'number' ? price.toLocaleString('id-ID') : (price || 'N/A');
+            const chgStr = (typeof changePercent === 'number' ? (changePercent >= 0 ? '+' : '') + changePercent.toFixed(2) : '0.00') + '%';
+            if (stock.price !== pStr || stock.currentPrice !== price || stock.change !== chgStr) {
+              changed = true;
+              return {
+                ...stock,
+                price: pStr,
+                currentPrice: price,
+                change: chgStr
+              };
+            }
+          }
+          return stock;
+        });
+        return changed ? next : prev;
+      });
 
       // Update Portfolio (State)
-      setPortfolioData(prev => prev.map(asset => {
-        const cleanTicker = asset.ticker.replace('.JK', '');
-        if (cleanTicker === symbol || asset.ticker === symbol) {
-          const currentPrice = price;
-          const lots = asset.lots;
-          const avgPrice = asset.averagePrice;
-          const multiplier = 100; // IDX standard 1 lot = 100 shares
+      setPortfolioData(prev => {
+        let changed = false;
+        const next = prev.map(asset => {
+          const cleanTicker = asset.ticker.replace('.JK', '');
+          if (cleanTicker === symbol || asset.ticker === symbol) {
+            const currentPrice = price;
+            const lots = asset.lots;
+            const avgPrice = asset.averagePrice;
+            const multiplier = 100; // IDX standard 1 lot = 100 shares
 
-          const marketValue = currentPrice * lots * multiplier;
-          const unrealized = marketValue - (avgPrice * lots * multiplier);
-          const change = ((currentPrice - avgPrice) / avgPrice) * 100;
+            const marketValue = currentPrice * lots * multiplier;
+            const unrealized = marketValue - (avgPrice * lots * multiplier);
+            const change = avgPrice > 0 ? ((currentPrice - avgPrice) / avgPrice) * 100 : 0;
 
-          return { 
-            ...asset, 
-            marketPrice: currentPrice,
-            currentPrice: currentPrice,
-            change: change,
-            marketValue: marketValue,
-            unrealized: unrealized,
-            dailyChange: changePercent
-          };
-        }
-        return asset;
-      }));
+            if (
+              asset.currentPrice !== currentPrice ||
+              asset.marketValue !== marketValue ||
+              asset.unrealized !== unrealized ||
+              asset.dailyChange !== changePercent
+            ) {
+              changed = true;
+              return { 
+                ...asset, 
+                marketPrice: currentPrice,
+                currentPrice: currentPrice,
+                change: change,
+                marketValue: marketValue,
+                unrealized: unrealized,
+                dailyChange: changePercent
+              };
+            }
+          }
+          return asset;
+        });
+        return changed ? next : prev;
+      });
 
       // Dispatch custom event for child components like IntradayScanner
       window.dispatchEvent(new CustomEvent('vam-market-update', { detail: data }));

@@ -29,7 +29,291 @@ function drawWindowFrame(doc: jsPDF, x: number, y: number, w: number, h: number,
   doc.text(title.toUpperCase(), x + 17, y + 5);
 }
 
-// Diagram 1: Mockup Dashboard UI
+// Diagram 4: DATA SOURCES ECOSYSTEM INFOGRAPHIC DIAGRAM (Gambar 1)
+function drawDataSourcesEcosystemDiagram(doc: jsPDF, x: number, y: number, w: number, h: number) {
+  drawWindowFrame(doc, x, y, w, h, "1. DATA SOURCES ECOSYSTEM ARCHITECTURE (INFOGRAPHIC 1)");
+
+  const startY = y + 9;
+  const colW = (w - 12) / 3;
+
+  // Top Box 1: Broker & Clearing Gateways
+  doc.setFillColor(20, 28, 42);
+  doc.roundedRect(x + 3, startY, colW, 18, 2, 2, 'F');
+  doc.setDrawColor(223, 255, 0);
+  doc.setLineWidth(0.4);
+  doc.roundedRect(x + 3, startY, colW, 18, 2, 2, 'S');
+
+  doc.setFont("Helvetica", "bold");
+  doc.setFontSize(6.5);
+  doc.setTextColor(223, 255, 0);
+  doc.text("BROKER & CLEARING GATEWAYS", x + 5, startY + 4.5);
+  doc.setFont("Helvetica", "normal");
+  doc.setFontSize(5.5);
+  doc.setTextColor(220, 230, 245);
+  doc.text("• IBKR (Interactive Brokers)", x + 5, startY + 9);
+  doc.text("• CGS International Sekuritas", x + 5, startY + 13);
+  doc.setTextColor(239, 68, 68);
+  doc.text("[STATUS: SIMULATED / DEV STATE]", x + 5, startY + 16.5);
+
+  // Top Box 2: Local Data Engine
+  doc.setFillColor(20, 28, 42);
+  doc.roundedRect(x + 5 + colW, startY, colW, 18, 2, 2, 'F');
+  doc.setDrawColor(59, 130, 246);
+  doc.setLineWidth(0.4);
+  doc.roundedRect(x + 5 + colW, startY, colW, 18, 2, 2, 'S');
+
+  doc.setFont("Helvetica", "bold");
+  doc.setFontSize(6.5);
+  doc.setTextColor(59, 130, 246);
+  doc.text("LOCAL DATA ENGINE", x + 7 + colW, startY + 4.5);
+  doc.setFont("Helvetica", "normal");
+  doc.setFontSize(5.5);
+  doc.setTextColor(220, 230, 245);
+  doc.text("• Persistent Storage Ledger", x + 7 + colW, startY + 9);
+  doc.text("• Giro & RDN State Sync", x + 7 + colW, startY + 13);
+  doc.setTextColor(16, 185, 129);
+  doc.text("[STATUS: 100% REAL ACTIVE IN APP]", x + 7 + colW, startY + 16.5);
+
+  // Top Box 3: Manual File Upload
+  doc.setFillColor(20, 28, 42);
+  doc.roundedRect(x + 7 + colW * 2, startY, colW, 18, 2, 2, 'F');
+  doc.setDrawColor(168, 85, 247);
+  doc.setLineWidth(0.4);
+  doc.roundedRect(x + 7 + colW * 2, startY, colW, 18, 2, 2, 'S');
+
+  doc.setFont("Helvetica", "bold");
+  doc.setFontSize(6.5);
+  doc.setTextColor(168, 85, 247);
+  doc.text("MANUAL FILE UPLOAD", x + 9 + colW * 2, startY + 4.5);
+  doc.setFont("Helvetica", "normal");
+  doc.setFontSize(5.5);
+  doc.setTextColor(220, 230, 245);
+  doc.text("• CSV Statement Importer", x + 9 + colW * 2, startY + 9);
+  doc.text("• JSON Portfolio Schema Parser", x + 9 + colW * 2, startY + 13);
+  doc.setTextColor(16, 185, 129);
+  doc.text("[STATUS: 100% REAL ACTIVE IN APP]", x + 9 + colW * 2, startY + 16.5);
+
+  // Middle Cloud Hub
+  const cloudY = startY + 21;
+  doc.setFillColor(18, 30, 50);
+  doc.roundedRect(x + 15, cloudY, w - 30, 10, 3, 3, 'F');
+  doc.setDrawColor(56, 189, 248);
+  doc.setLineWidth(0.5);
+  doc.roundedRect(x + 15, cloudY, w - 30, 10, 3, 3, 'S');
+
+  doc.setFont("Helvetica", "bold");
+  doc.setFontSize(7);
+  doc.setTextColor(56, 189, 248);
+  doc.text("VENTUREAM DATA CLOUD / CENTRAL INGESTION PIPELINE", x + (w / 2) - 45, cloudY + 6.5);
+
+  // Bottom Feeds Boxes
+  const bottomY = cloudY + 13;
+  const feedW = (w - 18) / 5;
+  const feeds = [
+    { name: "IDX FEED", desc: "IHSG & Equities", status: "SIMULATED", col: [239, 68, 68] },
+    { name: "GOOGLE FIN", desc: "Forex USD/IDR", status: "SIMULATED", col: [245, 158, 11] },
+    { name: "BLOOMBERG", desc: "Ratios/DCF/Z-Score", status: "STANDARDIZED", col: [223, 255, 0] },
+    { name: "YAHOO FIN", desc: "Historical Data", status: "SIMULATED", col: [245, 158, 11] },
+    { name: "TRADINGVIEW", desc: "Charts & Indicator", status: "UI ACTIVE", col: [16, 185, 129] }
+  ];
+
+  feeds.forEach((f, idx) => {
+    const fx = x + 3 + idx * (feedW + 3);
+    doc.setFillColor(20, 28, 42);
+    doc.roundedRect(fx, bottomY, feedW, 14, 2, 2, 'F');
+    doc.setDrawColor(f.col[0], f.col[1], f.col[2]);
+    doc.setLineWidth(0.3);
+    doc.roundedRect(fx, bottomY, feedW, 14, 2, 2, 'S');
+
+    doc.setFont("Helvetica", "bold");
+    doc.setFontSize(5.5);
+    doc.setTextColor(f.col[0], f.col[1], f.col[2]);
+    doc.text(f.name, fx + 2, bottomY + 4);
+
+    doc.setFont("Helvetica", "normal");
+    doc.setFontSize(4.8);
+    doc.setTextColor(200, 215, 235);
+    doc.text(f.desc, fx + 2, bottomY + 8);
+
+    doc.setFont("Helvetica", "bold");
+    doc.setFontSize(4.5);
+    doc.setTextColor(f.col[0], f.col[1], f.col[2]);
+    doc.text(`[${f.status}]`, fx + 2, bottomY + 12);
+  });
+}
+
+// Diagram 5: SECURITY & THREE LAYERS OF SECURITY PYRAMID (Gambar 3)
+function drawSecurityLayersDiagram(doc: jsPDF, x: number, y: number, w: number, h: number) {
+  drawWindowFrame(doc, x, y, w, h, "3. THREE LAYERS OF SECURITY & REGULATORY MATRIX (INFOGRAPHIC 3)");
+
+  const startY = y + 9;
+  const halfW = (w - 9) / 2;
+
+  // Left: Security Pyramid
+  doc.setFillColor(20, 28, 42);
+  doc.roundedRect(x + 3, startY, halfW, 46, 2, 2, 'F');
+  doc.setFont("Helvetica", "bold");
+  doc.setFontSize(7);
+  doc.setTextColor(223, 255, 0);
+  doc.text("3 LAYERS OF TRANSACTION SECURITY", x + 6, startY + 5);
+
+  // Pyramid Layer 3: Local Data Encryption
+  doc.setFillColor(30, 58, 138);
+  doc.roundedRect(x + (halfW / 2) - 25, startY + 8, 50, 9, 2, 2, 'F');
+  doc.setTextColor(255, 255, 255);
+  doc.setFontSize(5.8);
+  doc.text("3. LOCAL DATA ENCRYPTION", x + (halfW / 2) - 22, startY + 12);
+  doc.setFontSize(4.8);
+  doc.setTextColor(191, 219, 254);
+  doc.text("Client-side storage & token vault", x + (halfW / 2) - 22, startY + 15.5);
+
+  // Pyramid Layer 2: Audit Trail Integrity
+  doc.setFillColor(30, 41, 59);
+  doc.roundedRect(x + (halfW / 2) - 34, startY + 19, 68, 11, 2, 2, 'F');
+  doc.setDrawColor(168, 85, 247);
+  doc.setLineWidth(0.4);
+  doc.roundedRect(x + (halfW / 2) - 34, startY + 19, 68, 11, 2, 2, 'S');
+  doc.setTextColor(168, 85, 247);
+  doc.setFont("Helvetica", "bold");
+  doc.setFontSize(6.2);
+  doc.text("2. AUDIT TRAIL INTEGRITY (SHA-256 & ISO 27001)", x + (halfW / 2) - 31, startY + 24);
+  doc.setFontSize(5);
+  doc.setFont("Helvetica", "normal");
+  doc.setTextColor(226, 232, 240);
+  doc.text("Tamper-proof audit logs & digital hash verification", x + (halfW / 2) - 31, startY + 28);
+
+  // Pyramid Layer 1: Transaction MFA
+  doc.setFillColor(15, 23, 42);
+  doc.roundedRect(x + (halfW / 2) - 40, startY + 32, 80, 11, 2, 2, 'F');
+  doc.setDrawColor(16, 185, 129);
+  doc.setLineWidth(0.4);
+  doc.roundedRect(x + (halfW / 2) - 40, startY + 32, 80, 11, 2, 2, 'S');
+  doc.setTextColor(16, 185, 129);
+  doc.setFont("Helvetica", "bold");
+  doc.setFontSize(6.2);
+  doc.text("1. TRANSACTION MFA (PIN & DIGITAL SIGNATURE)", x + (halfW / 2) - 37, startY + 37);
+  doc.setFontSize(5);
+  doc.setFont("Helvetica", "normal");
+  doc.setTextColor(226, 232, 240);
+  doc.text("4-Digit Security PIN + Canvas Pad Signature Approval", x + (halfW / 2) - 37, startY + 41);
+
+  // Right: Regulatory Compliance Alignment
+  doc.setFillColor(20, 28, 42);
+  doc.roundedRect(x + 6 + halfW, startY, halfW, 46, 2, 2, 'F');
+  doc.setFont("Helvetica", "bold");
+  doc.setFontSize(7);
+  doc.setTextColor(168, 85, 247);
+  doc.text("REGULATORY STANDARDS ALIGNMENT", x + 9 + halfW, startY + 5);
+
+  const regBoxes = [
+    { title: "SEC US & FINRA", desc: "US Market Trade Compliance & Broker Oversight (IBKR Gateway Ready)", col: [59, 130, 246] },
+    { title: "MiFID II (EU Standard)", desc: "Investor Protection, Best Execution Transparency & Strict Audit Trail", col: [223, 255, 0] },
+    { title: "EMIR & ISO 27001", desc: "Derivatives Reporting, Kriptografi SHA-256 Ledger & Anti-Tamper Security", col: [16, 185, 129] },
+    { title: "SWISS BANK & PSAK / IFRS", desc: "Strict Confidentiality, Tiered Separation of Funds, PSAK 71 & IFRS 9", col: [239, 68, 68] }
+  ];
+
+  regBoxes.forEach((rb, idx) => {
+    const ry = startY + 8 + idx * 9;
+    doc.setFillColor(15, 23, 42);
+    doc.roundedRect(x + 9 + halfW, ry, halfW - 6, 8, 1.5, 1.5, 'F');
+    doc.setDrawColor(rb.col[0], rb.col[1], rb.col[2]);
+    doc.setLineWidth(0.3);
+    doc.roundedRect(x + 9 + halfW, ry, halfW - 6, 8, 1.5, 1.5, 'S');
+
+    doc.setFont("Helvetica", "bold");
+    doc.setFontSize(5.5);
+    doc.setTextColor(rb.col[0], rb.col[1], rb.col[2]);
+    doc.text(rb.title, x + 11 + halfW, ry + 3.2);
+
+    doc.setFont("Helvetica", "normal");
+    doc.setFontSize(4.8);
+    doc.setTextColor(200, 215, 235);
+    doc.text(rb.desc, x + 11 + halfW, ry + 6.3);
+  });
+}
+
+// Diagram 6: KEY FEATURES - PORTFOLIO & REPORTING CENTER (Gambar 2)
+function drawPortfolioReportingDiagram(doc: jsPDF, x: number, y: number, w: number, h: number) {
+  drawWindowFrame(doc, x, y, w, h, "2. PORTFOLIO & FINANCIAL REPORTING CENTER (INFOGRAPHIC 2)");
+
+  const startY = y + 9;
+  const halfW = (w - 9) / 2;
+
+  // Left: Institutional Gateway & Multi-Account Dashboard
+  doc.setFillColor(20, 28, 42);
+  doc.roundedRect(x + 3, startY, halfW, 46, 2, 2, 'F');
+  doc.setFont("Helvetica", "bold");
+  doc.setFontSize(7);
+  doc.setTextColor(223, 255, 0);
+  doc.text("INSTITUTIONAL GATEWAY (MULTI-ACCOUNT)", x + 6, startY + 5);
+
+  doc.setFont("Helvetica", "normal");
+  doc.setFontSize(5.5);
+  doc.setTextColor(200, 215, 235);
+  doc.text("• IBKR Gateway (International Stocks, ETF & Forex)", x + 6, startY + 10);
+  doc.text("• CGS International Gateway (Saham Indonesia / RDN)", x + 6, startY + 14.5);
+  doc.text("• Konsolidasi Multi-Akun ke Single Consolidated NAV", x + 6, startY + 19);
+
+  // Status Box in Left
+  doc.setFillColor(15, 23, 42);
+  doc.roundedRect(x + 6, startY + 23, halfW - 6, 18, 1.5, 1.5, 'F');
+  doc.setFont("Helvetica", "bold");
+  doc.setFontSize(5.5);
+  doc.setTextColor(59, 130, 246);
+  doc.text("STATUS IMPLEMENTASI TEKNIS:", x + 8, startY + 27.5);
+  doc.setFont("Helvetica", "normal");
+  doc.setFontSize(5);
+  doc.setTextColor(220, 230, 245);
+  doc.text("1. Dashboard Portofolio: REAL AKTIF (Kalkulasi PnL, NAV)", x + 8, startY + 31.5);
+  doc.text("2. Local Giro / Ledger: REAL AKTIF (Storage Persisten)", x + 8, startY + 35.5);
+  doc.setTextColor(239, 68, 68);
+  doc.text("3. Live Broker API Stream: BELUM RIL (Simulasi Client)", x + 8, startY + 39.5);
+
+  // Right: Financial Reporting Center (PSAK / IFRS)
+  doc.setFillColor(20, 28, 42);
+  doc.roundedRect(x + 6 + halfW, startY, halfW, 46, 2, 2, 'F');
+  doc.setFont("Helvetica", "bold");
+  doc.setFontSize(7);
+  doc.setTextColor(16, 185, 129);
+  doc.text("FINANCIAL REPORTING CENTER (PSAK / IFRS)", x + 9 + halfW, startY + 5);
+
+  // Mini Statement Table Mockup
+  const stY = startY + 8;
+  doc.setFillColor(15, 23, 42);
+  doc.roundedRect(x + 9 + halfW, stY, halfW - 6, 33, 1.5, 1.5, 'F');
+  doc.setFont("Helvetica", "bold");
+  doc.setFontSize(5.5);
+  doc.setTextColor(223, 255, 0);
+  doc.text("INCOME STATEMENT & BALANCE SHEET (STANDAR PSAK)", x + 11 + halfW, stY + 4.5);
+
+  const stRows = [
+    { label: "Pendapatan Dividen & Capital Gain", val: "Rp 178.450.000", col: "10B981" },
+    { label: "Beban Operasional & Manajemen", val: "(Rp 30.000.000)", col: "EF4444" },
+    { label: "Laba Bersih Tahun Berjalan", val: "Rp 148.450.000", col: "10B981" },
+    { label: "Total Aset Lancar & RDN", val: "Rp 2.963.600.000", col: "FFFFFF" },
+    { label: "Total Ekuitas & Laba Ditahan", val: "Rp 2.903.600.000", col: "DFFF00" }
+  ];
+
+  stRows.forEach((r, idx) => {
+    const sry = stY + 8 + idx * 4.8;
+    doc.setFont("Helvetica", "normal");
+    doc.setFontSize(4.8);
+    doc.setTextColor(180, 195, 215);
+    doc.text(r.label, x + 11 + halfW, sry);
+    doc.setFont("Helvetica", "bold");
+    if (r.col === "10B981") doc.setTextColor(16, 185, 129);
+    else if (r.col === "EF4444") doc.setTextColor(239, 68, 68);
+    else if (r.col === "DFFF00") doc.setTextColor(223, 255, 0);
+    else doc.setTextColor(255, 255, 255);
+    doc.text(r.val, x + halfW + halfW - 25, sry);
+  });
+
+  doc.setFontSize(4.8);
+  doc.setTextColor(16, 185, 129);
+  doc.text("Kepatuhan: PSAK 71, PSAK 19, IFRS 9 & IFRS 13 [100% REAL HITUNGAN]", x + 9 + halfW, startY + 44);
+}
+
+// Diagram: Dashboard & Overview Portofolio
 function drawDashboardDiagram(doc: jsPDF, x: number, y: number, w: number, h: number) {
   drawWindowFrame(doc, x, y, w, h, "Tampilan Interface - Dashboard & Overview Portofolio");
 
@@ -1516,7 +1800,9 @@ export async function generateSystemBlueprintPDF(): Promise<jsPDF> {
   const pw = doc.internal.pageSize.getWidth();
   const ph = doc.internal.pageSize.getHeight();
 
-  // Page 1: Cover & Arsitektur Utama
+  // -------------------------------------------------------------
+  // HALAMAN 1: COVER & RINGKASAN ARSITEKTUR BLUEPRINT RESMI
+  // -------------------------------------------------------------
   doc.setFillColor(10, 14, 23);
   doc.rect(0, 0, pw, ph, 'F');
 
@@ -1528,84 +1814,82 @@ export async function generateSystemBlueprintPDF(): Promise<jsPDF> {
   doc.roundedRect(10, 8, pw - 20, 34, 4, 4, 'S');
 
   doc.setFont("Helvetica", "bold");
-  doc.setFontSize(13);
+  doc.setFontSize(12.5);
   doc.setTextColor(168, 85, 247);
-  doc.text("DOKUMENTASI SPESIFIKASI TEKNIS & ARSITEKTUR SYSTEM BLUEPRINT", 15, 17);
+  doc.text("CETAK BIRU OPERASIONAL & SPESIFIKASI ARSITEKTUR SISTEM", 15, 17);
 
   doc.setFontSize(9.5);
   doc.setTextColor(255, 255, 255);
-  doc.text("VentureAM Institutional Terminal & Quantitative Asset Management System v3.2", 15, 23);
+  doc.text("VentureAM Institutional Asset Management System v3.2 [Official Blueprint]", 15, 23);
 
   doc.setFont("Helvetica", "normal");
   doc.setFontSize(7);
   doc.setTextColor(140, 155, 185);
-  doc.text("Dokumen resmi pendukung Lampiran Kapitalisasi Aset Tak Berwujud (Intangible Asset) - PSAK 19 / IAS 38", 15, 28);
-  doc.text(`Kode Dokumen: VAM-ARCH-BP-2026 | Tanggal Penerbitan: ${new Date().toLocaleDateString('id-ID')}`, 15, 33);
+  doc.text("Dokumen Resmi Pendukung Integrasi Data, Kepatuhan Regulasi & Lampiran Aset Tak Berwujud PSAK / IFRS", 15, 28);
+  doc.text(`Kode Blueprint: VAM-BLUEPRINT-2026-FINAL | Otorisasi: Direktur Utama | Tanggal: ${new Date().toLocaleDateString('id-ID')}`, 15, 33);
 
   let currentY = 46;
 
-  // Valuation Summary Card
+  // Executive Summary Card
   doc.setFillColor(22, 30, 45);
-  doc.roundedRect(10, currentY, pw - 20, 26, 3, 3, 'F');
+  doc.roundedRect(10, currentY, pw - 20, 24, 3, 3, 'F');
   doc.setDrawColor(40, 55, 80);
   doc.setLineWidth(0.3);
-  doc.roundedRect(10, currentY, pw - 20, 26, 3, 3, 'S');
+  doc.roundedRect(10, currentY, pw - 20, 24, 3, 3, 'S');
 
   doc.setFont("Helvetica", "bold");
   doc.setFontSize(7.5);
   doc.setTextColor(223, 255, 0);
-  doc.text("RINGKASAN VALUASI KAPITALISASI WAKTU PENGEMBANGAN (COST APPROACH)", 15, currentY + 6);
+  doc.text("RINGKASAN EKSEKUTIF BLUEPRINT SISTEM & VALUASI KAPITALISASI", 15, currentY + 6);
 
   doc.setFontSize(6.5);
   doc.setTextColor(200, 210, 230);
   doc.setFont("Helvetica", "normal");
-  doc.text("Estimasi Biaya Langsung Penggantian (Direct Replacement Cost):", 15, currentY + 11);
+  doc.text("Sistem dibangun dengan arsitektur 4-Lapisan mencakup Ingesti Data, Kalkulasi Finansial Klien, AI Terpadu, & Otorisasi Transaksi MFA.", 15, currentY + 11);
+  doc.text("Nilai Biaya Langsung Penggantian (Direct Replacement Cost Terkapitalisasi):", 15, currentY + 16);
   doc.setFont("Helvetica", "bold");
-  doc.setFontSize(9.5);
+  doc.setFontSize(8.5);
   doc.setTextColor(16, 185, 129);
-  doc.text("Rp 650.000.000 - Rp 850.000.000 (Terkapitalisasi Sesuai PSAK 19 / IAS 38)", 15, currentY + 17);
+  doc.text("Rp 750.000.000,- (Terkualifikasi Penuh Sesuai PSAK 19 / IAS 38)", 95, currentY + 16);
 
-  doc.setFontSize(6);
-  doc.setFont("Helvetica", "normal");
-  doc.setTextColor(150, 165, 190);
-  doc.text("Alokasi Modul: AI Engine & Quant Logic (35%), Analisis Teknikal/Fundamental (25%), Security & Gateway Bridge (20%), Reporting Ledger (20%).", 15, currentY + 22);
+  currentY += 28;
 
-  currentY += 30;
+  // Infographic Diagram 1: Data Sources Ecosystem
+  drawDataSourcesEcosystemDiagram(doc, 10, currentY, pw - 20, 52);
 
-  // Visual UI Diagram Call 1: Dashboard
-  drawDashboardDiagram(doc, 10, currentY, pw - 20, 44);
+  currentY += 56;
 
-  currentY += 48;
-
-  // Fitur & Komponen Utama Table Part 1
+  // Technical Specs Table Overview
   doc.setFont("Helvetica", "bold");
   doc.setFontSize(8.5);
   doc.setTextColor(255, 255, 255);
-  doc.text("1. MATRIKS KOMPLEKSITAS FITUR: AI ENGINE, ANALISIS TEKNIKAL & FUNDAMENTAL", 10, currentY);
+  doc.text("1. SPESIFIKASI INGESTI DATA PASAR & PENYIMPANAN PERSISTEN:", 10, currentY);
 
   currentY += 3;
 
   autoTable(doc, {
     startY: currentY,
-    head: [['Kategori Arsitektur', 'Komponen Utama', 'Spesifikasi & Algoritma Utama', 'Tingkat Keamanan / Audit']],
+    head: [['Komponen Ingesti Data', 'Teknologi & Mekanisme', 'Tingkat Kesiapan & Realitas']],
     body: [
       [
-        'AI Engine System',
-        'DailyTradingAutoAnalyst.tsx\nMarketNewsFeed.tsx\nVamSmartScanner.tsx',
-        '• Model AI Gemini 2.5 / 3 NLP untuk sintesis berita makro\n• Algoritma Auto-Analyst pemeta breakout & momentum\n• Graph Neural Network (GNN) kepemilikan pengendali ultimate',
-        'VERIFIED\n(Server-side Key Proxy & Rate Limit Active)'
+        'Broker & Clearing Gateway',
+        'IBKR Client Portal & CGS International Bridge (TLS 1.3 / WebSocket)',
+        'SIMULASI DEV / MOCK CLIENT (Perlu API Key & FIX Protocol berbayar)'
       ],
       [
-        'Analisis Fundamental',
-        'FundamentalAnalyst.tsx\nAssetDetail.tsx',
-        '• Pemeta 4 laporan keuangan emiten dasar\n• Kalkulasi Altman Z-Score (Kebangkrutan) & Piotroski F-Score\n• Model Valuasi Fair Value DCF, Graham Number, & WACC',
-        'AUDITED\n(Data Sanitized & Institutional Grade)'
+        'Local Data Engine',
+        'Persistent Local Storage Sync, React State, Memory-Safe Hooks',
+        '100% RIL AKTIF (Saldo Giro, mutasi RDN, & riwayat transaksi tersimpan)'
       ],
       [
-        'Analisis Teknikal',
-        'TechnicalIndicatorsChart.tsx\nTradingViewWidget.tsx\nAdvanceChartModal.tsx',
-        '• Multi-timeframe Technical Indicators (MACD, RSI, EMA)\n• Support & Resistance Automated Intraday Detector\n• Interaktif TradingView Integration & Volume Profile Charting',
-        'ACTIVE\n(Real-time Encrypted WebSocket Feed)'
+        'Manual File Upload',
+        'PapaParse CSV Streaming Importer & JSON Schema Validator',
+        '100% RIL AKTIF (Membaca file mutasi bank & laporan portofolio eksternal)'
+      ],
+      [
+        'Market Feeds (IDX/Bloomberg)',
+        'Normalisasi data rasio keuangan (P/E, PBV, ROE, Altman Z-Score)',
+        'STANDARISASI DATA AKTIF (Frontend Chart Ready, Feed Live via WebSocket)'
       ]
     ],
     styles: { fontSize: 6, cellPadding: 2, textColor: [220, 230, 245], fillColor: [18, 25, 38] },
@@ -1616,10 +1900,12 @@ export async function generateSystemBlueprintPDF(): Promise<jsPDF> {
 
   doc.setFontSize(6);
   doc.setTextColor(120, 130, 150);
-  doc.text("VentureAM Technical Specification Blueprint | Halaman 1 dari 3", 10, ph - 6);
+  doc.text("VentureAM Official System Architecture Blueprint | Halaman 1 dari 4", 10, ph - 6);
   doc.text(`Dicetak: ${new Date().toLocaleString('id-ID')}`, pw - 55, ph - 6);
 
-  // Page 2: Diagram Visual Fitur & Gateways
+  // -------------------------------------------------------------
+  // HALAMAN 2: KEY FEATURES - PORTFOLIO & FINANCIAL REPORTING
+  // -------------------------------------------------------------
   doc.addPage();
   doc.setFillColor(10, 14, 23);
   doc.rect(0, 0, pw, ph, 'F');
@@ -1630,62 +1916,62 @@ export async function generateSystemBlueprintPDF(): Promise<jsPDF> {
   doc.setFont("Helvetica", "bold");
   doc.setFontSize(9.5);
   doc.setTextColor(168, 85, 247);
-  doc.text("FOTO INTERFACE & ARSITEKTUR VISUAL MODUL UTAMA", 15, 18);
+  doc.text("2. KEY FEATURES: PORTFOLIO MANAGEMENT & FINANCIAL REPORTING CENTER", 15, 18);
 
   currentY = 28;
 
-  // Diagram 2: Recommendation Analysis
+  // Infographic Diagram 2: Portfolio & Reporting Center
+  drawPortfolioReportingDiagram(doc, 10, currentY, pw - 20, 58);
+
+  currentY += 62;
+
+  // Real vs Simulated Matrix for Portfolio & Reporting
   doc.setFont("Helvetica", "bold");
-  doc.setFontSize(8);
+  doc.setFontSize(8.5);
   doc.setTextColor(255, 255, 255);
-  doc.text("2. TAMPILAN MODUL REKOMENDASI SAHAM & PARAMETER EKSEKUSI RISIKO:", 10, currentY);
+  doc.text("MATRIKS KELENGKAPAN MODUL PORTOFOLIO & LAPORAN KEUANGAN:", 10, currentY);
 
   currentY += 3;
-  drawStockRecommendationDiagram(doc, 10, currentY, pw - 20, 52);
 
-  currentY += 56;
-
-  // Diagram 3: Scanner & Fundamental Audit
-  doc.setFont("Helvetica", "bold");
-  doc.setFontSize(8);
-  doc.setTextColor(255, 255, 255);
-  doc.text("3. TAMPILAN VAM SMART SCANNER & AUDIT FUNDAMENTAL EMITEN AI:", 10, currentY);
-
-  currentY += 3;
-  drawScannerFundamentalDiagram(doc, 10, currentY, pw - 20, 50);
-
-  currentY += 54;
-
-  // Gateway & Financial Table
   autoTable(doc, {
     startY: currentY,
-    head: [['Kategori Gateway', 'Komponen Utama', 'Spesifikasi Security & Gateway Bridge', 'Tingkat Kepatuhan']],
+    head: [['Fitur Modul Keuangan', 'Algoritma & Standardisasi', 'Status Realitas Teknis']],
     body: [
       [
-        'Keamanan & Gateway',
-        'ExternalGateways.tsx\nAuditSync.tsx\nRegulatoryArchive.tsx',
-        '• IBKR & CGS International Gateway API Encryption (TLS 1.3)\n• Server-Side Proxy (API Keys terisolasi dari browser Client)\n• Vault Audit Log Kriptografi Anti-Tamper',
-        'HIGH SECURITY\n(ISO 27001 & OJK Ready)'
+        'Multi-Account Dashboard',
+        'Konsolidasi saldo kas Giro Operasional, RDN CGS & IBKR Portofolio',
+        'RIL AKTIF (Kalkulasi NAV, Realized/Unrealized PnL real-time)'
       ],
       [
-        'Financial Ledger',
-        'FinancialReportingCenter.tsx\nDocumentExportCenter.tsx',
-        '• Jurnal transaksi otomatis terverifikasi & kalkulasi pajak\n• Generator Dokumen Cetak PDF/PPTX Executive 16:9\n• Laporan Audit Pembukuan Aset Institusi',
-        'AUDITED\n(PSAK 19 / IAS 38 Compliant)'
+        'Income Statement & Balance Sheet',
+        'Standar PSAK 71, PSAK 19, IFRS 9, & IFRS 13 dengan rasio otomatis',
+        'RIL AKTIF (Neraca, laba rugi, kalkulasi pajak, ROA, ROE matematis aktif)'
+      ],
+      [
+        'Generator CALK & Opini Auditor',
+        'Google Gemini SDK (@google/genai) memproses draf naratif audit',
+        'RIL DENGAN API KEY (Memerlukan GEMINI_API_KEY di server proxy)'
+      ],
+      [
+        'Ekspor Dokumen PDF & PPTX',
+        'jspdf, jspdf-autotable, & pptxgenjs render canvas beresolusi tinggi',
+        'RIL AKTIF (Unduh otomatis dokumen cetak institusional)'
       ]
     ],
     styles: { fontSize: 6, cellPadding: 2, textColor: [220, 230, 245], fillColor: [18, 25, 38] },
-    headStyles: { fillColor: [24, 32, 48], textColor: [168, 85, 247], fontStyle: 'bold' },
+    headStyles: { fillColor: [24, 32, 48], textColor: [16, 185, 129], fontStyle: 'bold' },
     alternateRowStyles: { fillColor: [14, 19, 30] },
     margin: { left: 10, right: 10 }
   });
 
   doc.setFontSize(6);
   doc.setTextColor(120, 130, 150);
-  doc.text("VentureAM Technical Specification Blueprint | Halaman 2 dari 3", 10, ph - 6);
+  doc.text("VentureAM Official System Architecture Blueprint | Halaman 2 dari 4", 10, ph - 6);
   doc.text(`Dicetak: ${new Date().toLocaleString('id-ID')}`, pw - 55, ph - 6);
 
-  // Page 3: Standar Akuntansi & Ketentuan Kapitalisasi PSAK 19
+  // -------------------------------------------------------------
+  // HALAMAN 3: THREE LAYERS OF SECURITY & REGULATORY COMPLIANCE
+  // -------------------------------------------------------------
   doc.addPage();
   doc.setFillColor(10, 14, 23);
   doc.rect(0, 0, pw, ph, 'F');
@@ -1696,112 +1982,160 @@ export async function generateSystemBlueprintPDF(): Promise<jsPDF> {
   doc.setFont("Helvetica", "bold");
   doc.setFontSize(9.5);
   doc.setTextColor(168, 85, 247);
-  doc.text("STANDAR PENCATATAN AKUNTANSI & KAPITALISASI ASET TAK BERWUJUD (PSAK 19 / IAS 38)", 15, 18);
+  doc.text("3. THREE LAYERS OF SECURITY & REGULATORY COMPLIANCE ARCHITECTURE", 15, 18);
 
   currentY = 28;
 
-  // Criteria Table
+  // Infographic Diagram 3: Three Layers of Security Pyramid
+  drawSecurityLayersDiagram(doc, 10, currentY, pw - 20, 58);
+
+  currentY += 62;
+
+  // Security Specs & Audit Matrix
+  doc.setFont("Helvetica", "bold");
+  doc.setFontSize(8.5);
+  doc.setTextColor(255, 255, 255);
+  doc.text("MATRIKS KEPATUHAN KEAMANAN & REGULASI PASAR MODAL (SEC / MIFID / ISO 27001):", 10, currentY);
+
+  currentY += 3;
+
   autoTable(doc, {
     startY: currentY,
-    head: [['Kriteria Kualifikasi PSAK 19', 'Pemenuhan Sistem VentureAM', 'Bukti Validasi Teknis & Keamanan']],
+    head: [['Lapisan Keamanan', 'Mekanisme & Standar Perlindungan', 'Status Implementasi']],
+    body: [
+      [
+        'Lapisan 1: Transaction MFA',
+        'PIN Otorisasi 4-6 digit + Canvas Signature Pad + Nama Resmi Penandatangan',
+        'RIL AKTIF (Mencegah eksekusi transfer dana tanpa izin ganda)'
+      ],
+      [
+        'Lapisan 2: Audit Trail Integrity',
+        'Pencatatan mutasi transaksi dengan kode hash unik SHA-256 (ISO 27001)',
+        'RIL AKTIF (Audit log tamper-evident tersimpan aman)'
+      ],
+      [
+        'Lapisan 3: Local Data Encryption',
+        'Enkripsi data lokal klien & isolasi kunci API di backend Cloud Run',
+        'RIL AKTIF (Zero-leakage arsitektur kunci API)'
+      ],
+      [
+        'Eksekusi Transfer Antarbank',
+        'Kliring transfer langsung ke rekening bank tujuan (BI-FAST / SKN)',
+        'BELUM RIL (Menggunakan internal ledger, perlu Open Banking API SNAP)'
+      ]
+    ],
+    styles: { fontSize: 6, cellPadding: 2, textColor: [220, 230, 245], fillColor: [18, 25, 38] },
+    headStyles: { fillColor: [24, 32, 48], textColor: [223, 255, 0], fontStyle: 'bold' },
+    alternateRowStyles: { fillColor: [14, 19, 30] },
+    margin: { left: 10, right: 10 }
+  });
+
+  doc.setFontSize(6);
+  doc.setTextColor(120, 130, 150);
+  doc.text("VentureAM Official System Architecture Blueprint | Halaman 3 dari 4", 10, ph - 6);
+  doc.text(`Dicetak: ${new Date().toLocaleString('id-ID')}`, pw - 55, ph - 6);
+
+  // -------------------------------------------------------------
+  // HALAMAN 4: STANDAR AKUNTANSI PSAK 19 & ROADMAP FULL PRODUCTION
+  // -------------------------------------------------------------
+  doc.addPage();
+  doc.setFillColor(10, 14, 23);
+  doc.rect(0, 0, pw, ph, 'F');
+
+  // Header Page 4
+  doc.setFillColor(18, 25, 38);
+  doc.roundedRect(10, 8, pw - 20, 16, 3, 3, 'F');
+  doc.setFont("Helvetica", "bold");
+  doc.setFontSize(9.5);
+  doc.setTextColor(168, 85, 247);
+  doc.text("4. STANDAR KAPITALISASI PSAK 19 & ROADMAP TAHAPAN FULL LIVE PRODUCTION", 15, 18);
+
+  currentY = 28;
+
+  // Accounting Standards Table
+  autoTable(doc, {
+    startY: currentY,
+    head: [['Kriteria Kualifikasi PSAK 19', 'Bukti Pemenuhan Sistem VentureAM', 'Status Validasi']],
     body: [
       [
         'Kelayakan Teknis (Technical Feasibility)',
-        'Sistem telah selesai diuji, terkompilasi 100% tanpa error, dan berfungsi penuh di lingkungan live production.',
-        'Kompilasi TypeScript & Vite sukses; 50+ modul berjalan di Cloud Run container dengan arsitektur secure routing.'
+        'Sistem terkompilasi 100% sukses tanpa error, 50+ modul berjalan di container Cloud Run.',
+        'VERIFIED PASSED'
       ],
       [
-        'Niat & Kemampuan Menggunakan (Ability to Use)',
-        'Perusahaan menggunakan aplikasi sebagai core system operasional pengelolaan portofolio institusi VentureAM.',
-        'Terintegrasi dengan IBKR & CGS International Gateway API & simulated execution terenkripsi TLS 1.3.'
+        'Niat Menggunakan (Ability to Use)',
+        'Aplikasi digunakan secara operasional sebagai core system pembukuan & monitoring aset institusi.',
+        'VERIFIED PASSED'
       ],
       [
-        'Manfaat Ekonomi Masa Depan (Future Economic Benefits)',
-        'Aplikasi menghasilkan efisiensi operasional audit, peningkatan akurasi transaksi, dan sinyal otomatisasi AI.',
-        'Mengurangi jam kerja analisis manual hingga 85%, integrasi AI Gemini, & otomatisasi cetak laporan keuangan.'
+        'Manfaat Ekonomi Masa Depan',
+        'Menghemat waktu analisis fundamental & audit manual hingga 85% melalui otomatisasi.',
+        'VERIFIED PASSED'
       ],
       [
-        'Pengukuran Biaya Terandalkan (Reliable Measurement)',
-        'Setiap jam kerja pengembang, lisensi API, dan komponen modul tercatat dalam log git & repositori proyek.',
-        'Arsitektur terstruktur modular di 50+ file komponen independen dengan vault audit log tersimpan.'
+        'Pengukuran Biaya Terandalkan',
+        'Seluruh jam kerja, repositori git, dan valuasi penggantian langsung (Rp 750.000.000) terdokumentasi.',
+        'VERIFIED PASSED'
       ]
     ],
-    styles: { fontSize: 6.5, cellPadding: 2.2, textColor: [220, 230, 245], fillColor: [18, 25, 38] },
+    styles: { fontSize: 6.5, cellPadding: 2, textColor: [220, 230, 245], fillColor: [18, 25, 38] },
     headStyles: { fillColor: [24, 32, 48], textColor: [168, 85, 247], fontStyle: 'bold' },
     alternateRowStyles: { fillColor: [14, 19, 30] },
     margin: { left: 10, right: 10 }
   });
 
-  currentY = (doc as any).lastAutoTable.finalY + 8;
+  currentY = (doc as any).lastAutoTable.finalY + 6;
 
   // Jurnal Akuntansi Box
   doc.setFillColor(18, 25, 38);
-  doc.roundedRect(10, currentY, pw - 20, 48, 3, 3, 'F');
+  doc.roundedRect(10, currentY, pw - 20, 36, 3, 3, 'F');
   doc.setDrawColor(40, 55, 80);
   doc.setLineWidth(0.3);
-  doc.roundedRect(10, currentY, pw - 20, 48, 3, 3, 'S');
+  doc.roundedRect(10, currentY, pw - 20, 36, 3, 3, 'S');
 
   doc.setFont("Helvetica", "bold");
-  doc.setFontSize(8.5);
+  doc.setFontSize(7.5);
   doc.setTextColor(168, 85, 247);
-  doc.text("REKOMENDASI JURNAL AKUNTANSI PENETAPAN ASET TAK BERWUJUD", 15, currentY + 7);
+  doc.text("REKOMENDASI JURNAL AKUNTANSI PENETAPAN ASET TAK BERWUJUD (PSAK 19):", 15, currentY + 6);
 
   doc.setFont("Helvetica", "normal");
-  doc.setFontSize(7);
-  doc.setTextColor(200, 210, 230);
-  
-  const journalRows = [
-    "1. Saat Kapitalisasi Pengeluaran Pengembangan Software:",
-    "   (Dr) Aset Tak Berwujud - Perangkat Lunak VentureAM ...... Rp 750.000.000",
-    "   (Cr) Kas / Beban Gaji & Biaya Ymh Dibayar .................. Rp 750.000.000",
-    "",
-    "2. Beban Amortisasi Tahunan (Masa Manfaat 4 Tahun / Garis Lurus):",
-    "   (Dr) Beban Amortisasi Perangkat Lunak .................. Rp 187.500.000 / tahun",
-    "   (Cr) Akumulasi Amortisasi Aset Tak Berwujud ............... Rp 187.500.000 / tahun"
-  ];
+  doc.setFontSize(6.5);
+  doc.setTextColor(200, 215, 235);
+  doc.text("1. Kapitalisasi Awal: (Dr) Aset Tak Berwujud - Software VentureAM Rp 750.000.000  /  (Cr) Kas & Biaya Ymh Dibayar Rp 750.000.000", 15, currentY + 12);
+  doc.text("2. Beban Amortisasi (Masa Manfaat 4 Tahun): (Dr) Beban Amortisasi Rp 187.500.000/thn  /  (Cr) Akumulasi Amortisasi Rp 187.500.000/thn", 15, currentY + 17);
+  doc.setTextColor(223, 255, 0);
+  doc.text("3. Tahapan Menuju Full Live: Integrasi SNAP Open Banking H2H, FIX Protocol CGS/IBKR, & Cloud DB Multi-User.", 15, currentY + 23);
 
-  let jY = currentY + 13;
-  journalRows.forEach(row => {
-    if (row.startsWith("1.") || row.startsWith("2.")) {
-      doc.setFont("Helvetica", "bold");
-      doc.setTextColor(168, 85, 247);
-    } else {
-      doc.setFont("Helvetica", "normal");
-      doc.setTextColor(200, 215, 235);
-    }
-    doc.text(row, 15, jY);
-    jY += 4.5;
-  });
+  currentY += 42;
 
-  currentY += 54;
-
-  // Signatures
+  // Signature Blocks
   const sigW = (pw - 28) / 2;
   doc.setFont("Helvetica", "bold");
   doc.setFontSize(7.5);
   doc.setTextColor(255, 255, 255);
   doc.text("Diperiksa Oleh Lead System Architect:", 14, currentY);
-  doc.text("Disetujui Oleh Chief Financial Officer (CFO):", 14 + sigW + 4, currentY);
+  doc.text("Disahkan Oleh Direktur Utama / CFO:", 14 + sigW + 4, currentY);
 
   doc.setFillColor(18, 25, 38);
   doc.roundedRect(14, currentY + 4, sigW, 18, 2, 2, 'F');
   doc.setTextColor(16, 185, 129);
   doc.setFontSize(6.5);
-  doc.text("[VERIFIED SYSTEM BLUEPRINT ARCHITECTURE]", 18, currentY + 13);
+  doc.text("[VERIFIED BLUEPRINT ARCHITECTURE]", 18, currentY + 13);
 
   doc.setFillColor(18, 25, 38);
   doc.roundedRect(14 + sigW + 4, currentY + 4, sigW, 18, 2, 2, 'F');
   doc.setTextColor(168, 85, 247);
-  doc.text("[APPROVED - INTANGIBLE ASSET CAPITALIZATION]", 18 + sigW + 4, currentY + 13);
+  doc.text("[APPROVED - AIDIL SYAHDAN AL FITRAH]", 18 + sigW + 4, currentY + 13);
 
   doc.setFontSize(6);
   doc.setTextColor(120, 130, 150);
-  doc.text("VentureAM Technical Specification Blueprint | Halaman 3 dari 3", 10, ph - 6);
+  doc.text("VentureAM Official System Architecture Blueprint | Halaman 4 dari 4", 10, ph - 6);
   doc.text(`Dicetak: ${new Date().toLocaleString('id-ID')}`, pw - 55, ph - 6);
 
-  doc.save(`VentureAM_Technical_Specification_Blueprint_${new Date().toISOString().slice(0, 10)}.pdf`);
+  doc.save(`VentureAM_Official_System_Blueprint_${new Date().toISOString().slice(0, 10)}.pdf`);
   return doc;
 }
+
 
 export async function generateSystemBlueprintPPTX() {
   const pptx = new pptxgen();

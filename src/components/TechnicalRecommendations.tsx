@@ -42,6 +42,7 @@ export interface RecommendationItem {
   signal: 'BUY' | 'SELL' | 'HOLD';
   rsi: number;
   macd: string;
+  ema10Score?: 'Bullish' | 'Bearish' | 'Neutral';
   ema20Score: 'Bullish' | 'Bearish' | 'Neutral';
   confidence: number;
   rationale: string;
@@ -475,8 +476,8 @@ export const TechnicalRecommendations: React.FC = () => {
   const [recommendations, setRecommendations] = useState(INITIAL_RECOMMENDATIONS);
   const [selectedItemState, setSelectedItem] = useState<RecommendationItem | null>(null);
   
-  // Filter state including ARA (Auto Rejection Atas) screening mode
-  const [signalFilter, setSignalFilter] = useState<'ALL' | 'ARA' | 'BUY' | 'HIGH_CONF'>('ALL');
+  // Filter state including ARA (Auto Rejection Atas) screening mode and EMA-10 Day Trading Trendline
+  const [signalFilter, setSignalFilter] = useState<'ALL' | 'ARA' | 'EMA10_FAST' | 'BUY' | 'HIGH_CONF'>('ALL');
   const [rsiFilter, setRsiFilter] = useState<[number, number]>([0, 100]);
   const [showRsiFilterPanel, setShowRsiFilterPanel] = useState(false);
 
@@ -713,6 +714,9 @@ export const TechnicalRecommendations: React.FC = () => {
     if (signalFilter === 'ARA') {
       return item.araPotential?.isAraCandidate || item.changePercent >= 10;
     }
+    if (signalFilter === 'EMA10_FAST') {
+      return item.ema10Score === 'Bullish' || (!item.ema10Score && item.ema20Score === 'Bullish');
+    }
     if (signalFilter === 'BUY') {
       return item.signal === 'BUY';
     }
@@ -830,6 +834,18 @@ export const TechnicalRecommendations: React.FC = () => {
               }`}>
                 {araCandidateCount}
               </span>
+            </button>
+
+            <button
+              onClick={() => setSignalFilter('EMA10_FAST')}
+              className={`px-3 py-1 rounded-xl text-[9.5px] font-bold font-mono uppercase transition-all cursor-pointer border ${
+                signalFilter === 'EMA10_FAST'
+                  ? 'bg-yellow-400/20 text-yellow-300 border-yellow-400/40 shadow-[0_0_10px_rgba(250,204,21,0.2)]'
+                  : 'text-zinc-500 hover:text-zinc-300 border-transparent'
+              }`}
+              title="Filter instrumen Day Trading dengan posisi harga di atas garis EMA-10 Trendline"
+            >
+              EMA-10 Day Trade
             </button>
 
             <button
@@ -1300,7 +1316,16 @@ export const TechnicalRecommendations: React.FC = () => {
                     </div>
 
                     <div className="flex justify-between items-center text-[10px]">
-                      <span className="text-zinc-400 font-mono">EMA-20 Trendline</span>
+                      <span className="text-zinc-400 font-mono">EMA-10 (Day Trading Trendline)</span>
+                      <span className={`font-mono font-black ${
+                        selectedItem.ema10Score === 'Bullish' || (!selectedItem.ema10Score && selectedItem.ema20Score === 'Bullish') ? 'text-yellow-400' : 'text-red-400'
+                      }`}>
+                        {selectedItem.ema10Score || selectedItem.ema20Score}
+                      </span>
+                    </div>
+
+                    <div className="flex justify-between items-center text-[10px]">
+                      <span className="text-zinc-400 font-mono">EMA-20 (Base Trendline)</span>
                       <span className={`font-mono font-black ${
                         selectedItem.ema20Score === 'Bullish' ? 'text-emerald-400' : selectedItem.ema20Score === 'Bearish' ? 'text-red-400' : 'text-slate-400'
                       }`}>
