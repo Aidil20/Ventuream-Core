@@ -82,12 +82,14 @@ const ScannerRow: React.FC<{
     );
 };
 
+const DEFAULT_PRICES: Record<string, number> = {};
+
 const VAMTerminalScanner: React.FC<VAMTerminalScannerProps> = ({ 
     portfolioContent, 
     defaultTab = 'PORTFOLIO', 
     activeMarket = null,
     activeModule = null,
-    livePrices = {}
+    livePrices = DEFAULT_PRICES
 }) => {
     const [subActiveTab, setSubActiveTab] = useState<'PORTFOLIO' | 'SCANNER'>(defaultTab);
     const [marketType, setMarketType] = useState<'IDX' | 'GLOBAL' | null>(activeMarket);
@@ -96,33 +98,38 @@ const VAMTerminalScanner: React.FC<VAMTerminalScannerProps> = ({
     const [results, setResults] = useState<ScannerResult[]>([]);
     const [showResults, setShowResults] = useState(false);
 
+    // Create fingerprint for livePrices to avoid object-reference re-render cascades
+    const livePricesFingerprint = useMemo(() => {
+        if (!livePrices) return '';
+        return Object.entries(livePrices).map(([k, v]) => `${k}:${v}`).sort().join('|');
+    }, [livePrices]);
+
     // Sync live prices to results
     useEffect(() => {
-        if (Object.keys(livePrices).length > 0) {
-            setResults(prev => {
-                if (!prev || prev.length === 0) return prev;
-                let changed = false;
-                const next = prev.map(res => {
-                    const livePrice = livePrices[res.symbol];
-                    if (livePrice) {
-                        const priceStr = livePrice.toLocaleString('id-ID');
-                        if (res.metrics['Price'] !== priceStr) {
-                            changed = true;
-                            return {
-                                ...res,
-                                metrics: {
-                                    ...res.metrics,
-                                    'Price': priceStr
-                                }
-                            };
-                        }
+        if (!livePrices || Object.keys(livePrices).length === 0) return;
+        setResults(prev => {
+            if (!prev || prev.length === 0) return prev;
+            let changed = false;
+            const next = prev.map(res => {
+                const livePrice = livePrices[res.symbol];
+                if (livePrice !== undefined) {
+                    const priceStr = livePrice.toLocaleString('id-ID');
+                    if (res.metrics['Price'] !== priceStr) {
+                        changed = true;
+                        return {
+                            ...res,
+                            metrics: {
+                                ...res.metrics,
+                                'Price': priceStr
+                            }
+                        };
                     }
-                    return res;
-                });
-                return changed ? next : prev;
+                }
+                return res;
             });
-        }
-    }, [livePrices]);
+            return changed ? next : prev;
+        });
+    }, [livePricesFingerprint]);
 
     // Konfigurasi Metrik Scanner
     const scannerConfigs: Record<string, string[]> = {

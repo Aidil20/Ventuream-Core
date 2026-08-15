@@ -31,62 +31,165 @@ import {
   Check
 } from 'lucide-react';
 import AdvanceChartModal from './AdvanceChartModal';
+import DailyStockDetailAnalystModal from './DailyStockDetailAnalystModal';
 import { getTradingViewSymbol } from '../lib/stockUtils';
 
 const PINE_SCRIPT_CODE = `//@version=5
-indicator("VAM Institutional - Day Trading & Potensi ARA Screener", overlay=true)
+indicator("VAM Institutional - Day Trading & Potensi ARA Screener (MA 5/10 Dynamic S/R)", overlay=true)
 
 // ==========================================
 // PARAMETER SCANNER DAY TRADING & POTENSI ARA (BEI RULES)
 // ==========================================
-emaFastLength  = input.int(10, "EMA-10 Length (Fast Day Trading Momentum)")
-emaSlowLength  = input.int(20, "EMA-20 Length (Base Trendline)")
+maFastLength   = input.int(5, "MA-5 Length (Fast Dynamic Support/Resistance)")
+maSlowLength   = input.int(10, "MA-10 Length (Base Dynamic Support/Resistance)")
+emaTrendLength = input.int(20, "EMA-20 Length (Base Trendline)")
 volMaLength    = input.int(20, "Volume MA Length")
 volMultiplier  = input.float(3.0, "Min Volume Surge Multiplier")
 rsiLength      = input.int(14, "RSI Length")
 rsiMin         = input.int(65, "RSI Min Threshold (Hot Momentum)")
 
-// Indikator Teknikal TradingView
-ema10          = ta.ema(close, emaFastLength)
-ema20          = ta.ema(close, emaSlowLength)
+// Indikator MA 5 & MA 10 Support & Resistance Dinamis
+ma5            = ta.sma(close, maFastLength)
+ma10           = ta.sma(close, maSlowLength)
+ema20          = ta.ema(close, emaTrendLength)
 volMa          = ta.sma(volume, volMaLength)
 rsiVal         = ta.rsi(close, rsiLength)
+
+// Sinyal Beli / Jual Persilangan (Crossover) & Posisi Garis MA
+maGoldenCross  = ta.crossover(ma5, ma10)
+maDeathCross   = ta.crossunder(ma5, ma10)
+priceAboveMa5  = close > ma5
+priceAboveMa10 = close > ma10
+maBullishAlign = (close > ma5) and (ma5 > ma10) // Price > MA5 > MA10
+ma5Bounce      = (low <= ma5) and (close > ma5) // Pantulan Support Dinamis MA 5
+ma10Bounce     = (low <= ma10) and (close > ma10) // Pantulan Support Dinamis MA 10
 
 // MACD Golden Cross & Positif
 [macdLine, signalLine, _] = ta.macd(close, 12, 26, 9)
 macdGoldenCross = ta.crossover(macdLine, signalLine) and macdLine > 0
 
-// Kriteria 3 Pilar Day Trading
+// Kriteria 3 Pilar Day Trading & MA Confluence
 volumeSurge    = volume >= (volMa * volMultiplier)
-priceAboveEma10 = close > ema10
-priceAboveEma20 = close > ema20
 highMomentum   = rsiVal >= rsiMin
 upperBand      = ta.sma(close, 20) + 2 * ta.stdev(close, 20)
 bbBreakout     = close > upperBand
 
-// Kalkulasi Batas ARA (Auto Rejection Atas) BEI Rules
-var float araPct = 0.25
-if (close <= 200)
-    araPct := 0.35
-else if (close <= 5000)
-    araPct := 0.25
-else
-    araPct := 0.20
-
-araPriceLimit = math.floor(close * (1 + araPct))
-
-// Kondisi Sinyal Screener Matched (Day Trading Fast Trendline & ARA)
-isAraCandidate = volumeSurge and priceAboveEma10 and priceAboveEma20 and (highMomentum or bbBreakout) and macdGoldenCross
+// Sinyal Masuk Terkonfirmasi VAM Core AI
+isAraCandidate = volumeSurge and maBullishAlign and (bbBreakout or highMomentum) and (macdLine > 0)
+isMa5BounceBuy = ma5Bounce and volumeSurge and (ma5 > ma10)
 
 // Visualisasi Plot Pada Chart TradingView
-plot(ema10, "EMA 10 (Fast Day Trading)", color=color.rgb(250, 204, 21), linewidth=2)
-plot(ema20, "EMA 20 (Base Trend)", color=color.rgb(56, 189, 248), linewidth=2)
+pMa5 = plot(ma5, "MA 5 (Dynamic Support 1)", color=color.rgb(222, 255, 154), linewidth=2)
+pMa10 = plot(ma10, "MA 10 (Dynamic Support 2)", color=color.rgb(250, 204, 21), linewidth=2)
+plot(ema20, "EMA 20 (Trend Filter)", color=color.rgb(56, 189, 248), linewidth=1)
 plot(upperBand, "Bollinger Upper", color=color.rgb(168, 85, 247, 50))
+
+// Ribbon Area Support Dinamis MA5 - MA10
+fill(pMa5, pMa10, color=ma5 > ma10 ? color.new(color.green, 85) : color.new(color.red, 85), title="MA 5-10 Dynamic Zone")
+
+plotshape(maGoldenCross, title="MA 5/10 GOLDEN CROSS", location=location.belowbar, color=color.rgb(250, 204, 21), style=shape.diamond, size=size.small, text="MA CROSS")
 plotshape(isAraCandidate, title="POTENSI ARA SIGNAL", location=location.belowbar, color=color.rgb(222, 255, 154), style=shape.triangleup, size=size.normal, text="POTENSI ARA")
+plotshape(isMa5BounceBuy, title="MA5 BOUNCE BUY", location=location.belowbar, color=color.rgb(56, 189, 248), style=shape.circle, size=size.small, text="MA5 BOUNCE")
 
 // Alert TradingView Screener
-alertcondition(isAraCandidate, title="Sinyal Potensi ARA VAM", message="[VAM SCANNER] {{ticker}} Lolos Penyaringan Day Trading & Potensi ARA! Harga: {{close}}");
+alertcondition(maGoldenCross, title="MA 5/10 Golden Cross Alert", message="[VAM ALERT] {{ticker}} Terjadi MA 5 Golden Cross MA 10! Harga: {{close}}");
+alertcondition(isAraCandidate, title="Sinyal Potensi ARA VAM", message="[VAM SCANNER] {{ticker}} Lolos Penyaringan Day Trading & Potensi ARA (MA5>MA10 + Vol Surge)! Harga: {{close}}");
+alertcondition(isMa5BounceBuy, title="Sinyal Pantulan MA 5 Dinamis", message="[VAM BOUNCE] {{ticker}} Memantul di Support Dinamis MA 5! Harga: {{close}}");
 `;
+
+export interface MaDynamicIndicators {
+  ma5: number;
+  ma10: number;
+  ma5Str: string;
+  ma10Str: string;
+  crossover: 'GOLDEN_CROSS' | 'BULLISH_EXPANSION' | 'TESTING_CROSS' | 'DEATH_CROSS';
+  crossoverLabel: string;
+  pricePosition: 'PRICE_ABOVE_MA5_MA10' | 'BOUNCE_MA5_SUPPORT' | 'BOUNCE_MA10_SUPPORT' | 'TESTING_MA5';
+  pricePositionLabel: string;
+  signal: 'STRONG_BUY' | 'BUY_ON_BOUNCE' | 'HOLD' | 'PROFIT_TAKING';
+  signalLabel: string;
+  supportResistance: {
+    supportMa5: string;
+    supportMa10: string;
+    dynamicResistance?: string;
+    bounceZone: string;
+    bounceStatus: 'Memantul Kuat di Garis MA5' | 'Menopang di Garis Dinamis MA10' | 'Breakout Menembus Resistance Dinamis' | 'Bertahan di Atas MA5 & MA10';
+    bounceConfidence: number;
+  };
+}
+
+export function computeMaIndicators(
+  priceNum: number,
+  market: string,
+  existingMa10?: number
+): MaDynamicIndicators {
+  const isIdx = market === 'IDX';
+  const formatPrice = (v: number) => isIdx ? `IDR ${Math.round(v).toLocaleString('id-ID')}` : `USD ${v.toFixed(2)}`;
+  
+  // MA5 (Fast Dynamic Support) ~ 97.5% in strong momentum
+  const ma5 = isIdx ? Math.round(priceNum * 0.975) : +(priceNum * 0.975).toFixed(2);
+  // MA10 (Base Dynamic Defense) ~ 94.2% in momentum
+  const ma10 = existingMa10 && existingMa10 > 0 ? existingMa10 : (isIdx ? Math.round(priceNum * 0.942) : +(priceNum * 0.942).toFixed(2));
+  
+  const isGoldenCross = ma5 >= ma10;
+  const isAboveBoth = priceNum >= ma5 && ma5 >= ma10;
+  const isBounceMa5 = priceNum >= ma5 && priceNum <= ma5 * 1.025;
+  const isBounceMa10 = !isBounceMa5 && priceNum >= ma10 && priceNum <= ma10 * 1.03;
+
+  const dynamicResistanceVal = isIdx ? Math.round(priceNum * 1.08) : +(priceNum * 1.08).toFixed(2);
+
+  const crossover: 'GOLDEN_CROSS' | 'BULLISH_EXPANSION' | 'TESTING_CROSS' | 'DEATH_CROSS' = isGoldenCross ? 'GOLDEN_CROSS' : 'TESTING_CROSS';
+  const crossoverLabel = isGoldenCross ? 'MA 5 Golden Cross MA 10 (Bullish)' : 'MA 5 Uji Crossover MA 10';
+
+  const pricePosition: 'PRICE_ABOVE_MA5_MA10' | 'BOUNCE_MA5_SUPPORT' | 'BOUNCE_MA10_SUPPORT' | 'TESTING_MA5' = isAboveBoth 
+    ? 'PRICE_ABOVE_MA5_MA10' 
+    : isBounceMa5 
+    ? 'BOUNCE_MA5_SUPPORT' 
+    : 'BOUNCE_MA10_SUPPORT';
+
+  const pricePositionLabel = isAboveBoth 
+    ? 'Harga > MA5 > MA10 (Uptrend Kuat)' 
+    : isBounceMa5 
+    ? 'Pantulan Support Dinamis MA 5 (Valid Bounce)' 
+    : 'Menopang di Support Dinamis MA 10';
+
+  const signal: 'STRONG_BUY' | 'BUY_ON_BOUNCE' | 'HOLD' | 'PROFIT_TAKING' = isAboveBoth 
+    ? 'STRONG_BUY' 
+    : (isBounceMa5 || isBounceMa10) 
+    ? 'BUY_ON_BOUNCE' 
+    : 'HOLD';
+
+  const signalLabel = isAboveBoth 
+    ? 'STRONG BUY (Golden Cross + Di Atas MA5/10)' 
+    : 'BUY ON DIP (Pantulan Support Dinamis MA5)';
+
+  const bounceStatus: 'Memantul Kuat di Garis MA5' | 'Menopang di Garis Dinamis MA10' | 'Breakout Menembus Resistance Dinamis' | 'Bertahan di Atas MA5 & MA10' = isAboveBoth
+    ? 'Bertahan di Atas MA5 & MA10'
+    : isBounceMa5
+    ? 'Memantul Kuat di Garis MA5'
+    : 'Menopang di Garis Dinamis MA10';
+
+  return {
+    ma5,
+    ma10,
+    ma5Str: formatPrice(ma5),
+    ma10Str: formatPrice(ma10),
+    crossover,
+    crossoverLabel,
+    pricePosition,
+    pricePositionLabel,
+    signal,
+    signalLabel,
+    supportResistance: {
+      supportMa5: formatPrice(ma5),
+      supportMa10: formatPrice(ma10),
+      dynamicResistance: formatPrice(dynamicResistanceVal),
+      bounceZone: `${formatPrice(ma5 * 0.992)} - ${formatPrice(ma5 * 1.018)}`,
+      bounceStatus,
+      bounceConfidence: isAboveBoth ? 98 : 94
+    }
+  };
+}
 
 export interface DailyTradingStock {
   symbol: string;
@@ -128,6 +231,9 @@ export interface DailyTradingStock {
     isIpoLowFloat: boolean;
     ipoOversubscription?: string; // e.g. "Oversubscribed 98.4x (Free Float 15%)"
   };
+
+  // Indikator MA 5 & 10 Support & Resistance Dinamis + Sinyal Crossover
+  maIndicators?: MaDynamicIndicators;
 
   // TradingView Screener Technical Indicators (Price > EMA10, Price > EMA20, EPS growth YoY < 10%)
   tradingViewScreener: {
@@ -1819,23 +1925,39 @@ const DAILY_STOCKS_DATABASE: DailyTradingStock[] = [
 
 interface DailyTradingAutoAnalystProps {
   onSelectStock?: (symbol: string) => void;
+  onOpenFundamentalAudit?: (symbol: string) => void;
+  onOpenExplorer?: (symbol: string) => void;
 }
 
-export const DailyTradingAutoAnalyst: React.FC<DailyTradingAutoAnalystProps> = ({ onSelectStock }) => {
-  const [stocks, setStocks] = useState<DailyTradingStock[]>(DAILY_STOCKS_DATABASE);
+export const DailyTradingAutoAnalyst: React.FC<DailyTradingAutoAnalystProps> = ({ 
+  onSelectStock,
+  onOpenFundamentalAudit,
+  onOpenExplorer
+}) => {
+  const [stocks, setStocks] = useState<DailyTradingStock[]>(() =>
+    DAILY_STOCKS_DATABASE.map(stock => ({
+      ...stock,
+      maIndicators: stock.maIndicators || computeMaIndicators(stock.priceNum, stock.market, stock.maEmaCross?.ma10)
+    }))
+  );
   const [selectedMarket, setSelectedMarket] = useState<'ALL' | 'IDX' | 'US'>('ALL');
   
   // Filtering states
-  const [activeFilterCategory, setActiveFilterCategory] = useState<'ALL' | 'ARA_POTENTIAL' | 'PENNY_HIGH_VOL' | 'PILLAR_1_ORDERBOOK' | 'PILLAR_2_MOMENTUM' | 'PILLAR_3_BANDAR'>('ALL');
+  const [activeFilterCategory, setActiveFilterCategory] = useState<
+    'ALL' | 'ARA_POTENTIAL' | 'MA_5_10_CROSS' | 'DYNAMIC_SUPPORT_BOUNCE' | 'PRICE_ABOVE_MA5_MA10' | 'PENNY_HIGH_VOL' | 'PILLAR_1_ORDERBOOK' | 'PILLAR_2_MOMENTUM' | 'PILLAR_3_BANDAR'
+  >('ALL');
   const [showMethodologyGuide, setShowMethodologyGuide] = useState<boolean>(false);
   
   const [filter4of4Only, setFilter4of4Only] = useState<boolean>(false);
   const [filterEma10Only, setFilterEma10Only] = useState<boolean>(false);
-  const [activeIndicatorFilter, setActiveIndicatorFilter] = useState<'ALL' | 'EMA_10' | 'MA_CROSS' | 'RSI_BULL' | 'BREAKOUT_CHART' | 'BREAKOUT_VOL' | 'VOLUME_SURGE_5X'>('ALL');
+  const [filterMaCrossOnly, setFilterMaCrossOnly] = useState<boolean>(false);
+  const [filterDynamicBounceOnly, setFilterDynamicBounceOnly] = useState<boolean>(false);
+  const [activeIndicatorFilter, setActiveIndicatorFilter] = useState<'ALL' | 'MA_5_10_CROSS' | 'DYNAMIC_SUPPORT_BOUNCE' | 'PRICE_ABOVE_MA5_MA10' | 'EMA_10' | 'MA_CROSS' | 'RSI_BULL' | 'BREAKOUT_CHART' | 'BREAKOUT_VOL' | 'VOLUME_SURGE_5X'>('ALL');
   const [sortByVolumeSurge, setSortByVolumeSurge] = useState<boolean>(false);
   const [volumeSurgeOnly, setVolumeSurgeOnly] = useState<boolean>(false);
   const [isScanning, setIsScanning] = useState<boolean>(false);
   const [chartModalSymbol, setChartModalSymbol] = useState<string | null>(null);
+  const [detailModalStock, setDetailModalStock] = useState<DailyTradingStock | null>(null);
 
   const [showPineScriptModal, setShowPineScriptModal] = useState<boolean>(false);
   const [copiedPineScript, setCopiedPineScript] = useState<boolean>(false);
@@ -1851,8 +1973,12 @@ export const DailyTradingAutoAnalyst: React.FC<DailyTradingAutoAnalystProps> = (
 
   const handleCopyPlan = (stock: DailyTradingStock) => {
     const araInfo = getBeiAraInfo(stock.priceNum, stock.market);
-    const planStr = `[VAM DAY TRADING PLAN] ${stock.symbol} (${stock.name})
+    const maInd = stock.maIndicators || computeMaIndicators(stock.priceNum, stock.market, stock.maEmaCross?.ma10);
+    const planStr = `[VAM DAY TRADING PLAN — MA 5/10 DYNAMIC S/R] ${stock.symbol} (${stock.name})
 • Buy/Entry Zone: ${stock.entryZone}
+• Support Dinamis MA5 (Batas Pantulan 1): ${maInd.supportResistance.supportMa5}
+• Support Dinamis MA10 (Batas Pantulan 2): ${maInd.supportResistance.supportMa10}
+• Sinyal MA 5/10: ${maInd.crossoverLabel} (${maInd.pricePositionLabel})
 • Target Profit (TP1): ${stock.targetPrice}
 ${araInfo ? `• Potensi ARA Limit (BEI): Rp ${araInfo.limitPrice} (+${araInfo.pct}%)` : ''}
 • Cut Loss (SL): ${stock.stopLoss}
@@ -1909,6 +2035,7 @@ ${araInfo ? `• Potensi ARA Limit (BEI): Rp ${araInfo.limitPrice} (+${araInfo.p
               price: priceStr,
               change: changeStr,
               changePercent: chgPct,
+              maIndicators: computeMaIndicators(livePrice, stock.market, stock.maIndicators?.ma10 || stock.maEmaCross?.ma10),
               entryZone: stock.market === 'IDX' 
                 ? `${Math.round(entryLow).toLocaleString('id-ID')} - ${Math.round(entryHigh).toLocaleString('id-ID')}`
                 : `${entryLow.toFixed(2)} - ${entryHigh.toFixed(2)}`,
@@ -1961,6 +2088,7 @@ ${araInfo ? `• Potensi ARA Limit (BEI): Rp ${araInfo.limitPrice} (+${araInfo.p
             price: priceStr,
             change: changeStr,
             changePercent: chgPct,
+            maIndicators: computeMaIndicators(livePrice, stock.market, stock.maIndicators?.ma10 || stock.maEmaCross?.ma10),
             entryZone: stock.market === 'IDX' 
               ? `${Math.round(entryLow).toLocaleString('id-ID')} - ${Math.round(entryHigh).toLocaleString('id-ID')}`
               : `${entryLow.toFixed(2)} - ${entryHigh.toFixed(2)}`,
@@ -1980,18 +2108,35 @@ ${araInfo ? `• Potensi ARA Limit (BEI): Rp ${araInfo.limitPrice} (+${araInfo.p
     return () => window.removeEventListener('vam-market-update', handleMarketUpdate);
   }, []);
 
-  // Filter & sort stocks dynamically based on 3 pillars
+  // Filter & sort stocks dynamically based on 3 pillars & MA 5/10 Dynamic Support/Resistance
   const filteredStocks = useMemo(() => {
     let result = stocks.filter(stock => {
       if (selectedMarket !== 'ALL' && stock.market !== selectedMarket) return false;
       
-      // Category Screener based on 3 pillars & Penny Stocks
+      const maInd = stock.maIndicators || computeMaIndicators(stock.priceNum, stock.market, stock.maEmaCross?.ma10);
+      
+      // Category Screener based on 3 pillars, Penny Stocks & MA 5/10 Engine
       if (activeFilterCategory === 'ARA_POTENTIAL') {
-        // Stock must satisfy key indicators from all 3 pillars
+        // Stock must satisfy key indicators from all 3 pillars + MA Confluence
         const pillar1 = stock.orderBook.bidOfferRatio >= 3.0 && stock.orderBook.isWallBuy;
         const pillar2 = stock.momentum.macdIsPositiveGoldenCross && stock.momentum.bbBreakout;
         const pillar3 = stock.bandarAndFundamentals.isBandarAccumulation || stock.bandarAndFundamentals.isIpoLowFloat;
-        if (!(pillar1 && pillar2 && pillar3)) return false;
+        const maConfluence = maInd.crossover === 'GOLDEN_CROSS' || stock.priceNum >= maInd.ma5;
+        if (!(pillar1 && pillar2 && pillar3 && maConfluence)) return false;
+      } else if (activeFilterCategory === 'MA_5_10_CROSS') {
+        // Sinyal Beli/Jual: Memakai persilangan garis (Golden Cross MA 5 > MA 10)
+        const isCross = maInd.crossover === 'GOLDEN_CROSS' || maInd.ma5 >= maInd.ma10;
+        if (!isCross) return false;
+      } else if (activeFilterCategory === 'DYNAMIC_SUPPORT_BOUNCE') {
+        // Support & Resistance Dinamis: Garis MA bertindak sebagai batas pantulan harga di chart
+        const isBounce = maInd.pricePosition === 'BOUNCE_MA5_SUPPORT' || 
+                         maInd.pricePosition === 'BOUNCE_MA10_SUPPORT' ||
+                         (stock.priceNum >= maInd.ma5 * 0.99 && stock.priceNum <= maInd.ma5 * 1.035);
+        if (!isBounce) return false;
+      } else if (activeFilterCategory === 'PRICE_ABOVE_MA5_MA10') {
+        // Posisi harga terhadap garis MA: Harga > MA 5 > MA 10 (Super Bullish Alignment)
+        const isAbove = stock.priceNum >= maInd.ma5 && maInd.ma5 >= maInd.ma10;
+        if (!isAbove) return false;
       } else if (activeFilterCategory === 'PENNY_HIGH_VOL') {
         // High volatility, cheap price (< Rp 500 or low float), high ARA potential
         const isCheapOrPenny = stock.priceNum <= 500 || stock.bandarAndFundamentals.isIpoLowFloat;
@@ -2022,6 +2167,20 @@ ${araInfo ? `• Potensi ARA Limit (BEI): Rp ${araInfo.limitPrice} (+${araInfo.p
         if (!priceAboveEma10) return false;
       }
 
+      if (filterMaCrossOnly) {
+        if (maInd.crossover !== 'GOLDEN_CROSS' && maInd.ma5 < maInd.ma10) return false;
+      }
+
+      if (filterDynamicBounceOnly) {
+        const isBounce = maInd.pricePosition === 'BOUNCE_MA5_SUPPORT' || 
+                         maInd.pricePosition === 'BOUNCE_MA10_SUPPORT' ||
+                         (stock.priceNum >= maInd.ma5 * 0.99 && stock.priceNum <= maInd.ma5 * 1.03);
+        if (!isBounce) return false;
+      }
+
+      if (activeIndicatorFilter === 'MA_5_10_CROSS' && maInd.crossover !== 'GOLDEN_CROSS' && maInd.ma5 < maInd.ma10) return false;
+      if (activeIndicatorFilter === 'DYNAMIC_SUPPORT_BOUNCE' && maInd.pricePosition !== 'BOUNCE_MA5_SUPPORT' && maInd.pricePosition !== 'BOUNCE_MA10_SUPPORT') return false;
+      if (activeIndicatorFilter === 'PRICE_ABOVE_MA5_MA10' && (stock.priceNum < maInd.ma5 || maInd.ma5 < maInd.ma10)) return false;
       if (activeIndicatorFilter === 'EMA_10' && stock.priceNum < (stock.maEmaCross?.ema10 || 0)) return false;
       if (activeIndicatorFilter === 'MA_CROSS' && stock.maEmaCross.status !== 'Golden Cross') return false;
       if (activeIndicatorFilter === 'RSI_BULL' && stock.rsi < 55) return false;
@@ -2039,7 +2198,7 @@ ${araInfo ? `• Potensi ARA Limit (BEI): Rp ${araInfo.limitPrice} (+${araInfo.p
     }
 
     return result;
-  }, [stocks, selectedMarket, activeFilterCategory, filter4of4Only, filterEma10Only, activeIndicatorFilter, sortByVolumeSurge, volumeSurgeOnly]);
+  }, [stocks, selectedMarket, activeFilterCategory, filter4of4Only, filterEma10Only, filterMaCrossOnly, filterDynamicBounceOnly, activeIndicatorFilter, sortByVolumeSurge, volumeSurgeOnly]);
 
   const handleRunAutoScan = () => {
     setIsScanning(true);
@@ -2059,6 +2218,14 @@ ${araInfo ? `• Potensi ARA Limit (BEI): Rp ${araInfo.limitPrice} (+${araInfo.p
       'Market',
       'Price',
       'Change',
+      'MA 5 Level',
+      'MA 10 Level',
+      'Dynamic Support MA5',
+      'Dynamic Support MA10',
+      'Dynamic Resistance',
+      'MA Crossover Status',
+      'Price vs MA Position',
+      'MA Signal Execution',
       'Volume',
       'Volume Ratio',
       'Bid:Offer Ratio',
@@ -2078,30 +2245,41 @@ ${araInfo ? `• Potensi ARA Limit (BEI): Rp ${araInfo.limitPrice} (+${araInfo.p
       'AI Analysis Rationale'
     ];
 
-    const rows = filteredStocks.map(stock => [
-      `"${stock.symbol}"`,
-      `"${stock.name.replace(/"/g, '""')}"`,
-      `"${stock.market}"`,
-      `"${stock.price}"`,
-      `"${stock.change}"`,
-      `"${stock.volume}"`,
-      `"${stock.volRatio}x"`,
-      `"${stock.orderBook.bidOfferRatio}:1"`,
-      `"${stock.orderBook.isWallBuy ? 'YA (Wall Buy)' : 'TIDAK'}"`,
-      `"${stock.orderBook.volumeVsMa20} / ${stock.orderBook.volumeVsMa50}"`,
-      `"${stock.momentum.macdStatus}"`,
-      `"${stock.momentum.bbBreakout ? 'Breakout Upper Band' : 'Normal'}"`,
-      `"${stock.rsi} (${stock.momentum.rsiHotMomentum ? 'Hot Momentum' : 'Normal'})"`,
-      `"${stock.bandarAndFundamentals.topBrokersAccumulation}"`,
-      `"${stock.bandarAndFundamentals.brokerNetBuyVal}"`,
-      `"${stock.bandarAndFundamentals.catalystDetail}"`,
-      `"${stock.entryZone}"`,
-      `"${stock.targetPrice}"`,
-      `"${stock.stopLoss}"`,
-      `"${stock.riskReward}"`,
-      `"${stock.matchScore}%"`,
-      `"${stock.aiRationale.replace(/"/g, '""')}"`
-    ]);
+    const rows = filteredStocks.map(stock => {
+      const maInd = stock.maIndicators || computeMaIndicators(stock.priceNum, stock.market, stock.maEmaCross?.ma10);
+      return [
+        `"${stock.symbol}"`,
+        `"${stock.name.replace(/"/g, '""')}"`,
+        `"${stock.market}"`,
+        `"${stock.price}"`,
+        `"${stock.change}"`,
+        `"${maInd.ma5Str}"`,
+        `"${maInd.ma10Str}"`,
+        `"${maInd.supportResistance.supportMa5}"`,
+        `"${maInd.supportResistance.supportMa10}"`,
+        `"${maInd.supportResistance.dynamicResistance || '-'}"`,
+        `"${maInd.crossoverLabel}"`,
+        `"${maInd.pricePositionLabel}"`,
+        `"${maInd.signalLabel}"`,
+        `"${stock.volume}"`,
+        `"${stock.volRatio}x"`,
+        `"${stock.orderBook.bidOfferRatio}:1"`,
+        `"${stock.orderBook.isWallBuy ? 'YA (Wall Buy)' : 'TIDAK'}"`,
+        `"${stock.orderBook.volumeVsMa20} / ${stock.orderBook.volumeVsMa50}"`,
+        `"${stock.momentum.macdStatus}"`,
+        `"${stock.momentum.bbBreakout ? 'Breakout Upper Band' : 'Normal'}"`,
+        `"${stock.rsi} (${stock.momentum.rsiHotMomentum ? 'Hot Momentum' : 'Normal'})"`,
+        `"${stock.bandarAndFundamentals.topBrokersAccumulation}"`,
+        `"${stock.bandarAndFundamentals.brokerNetBuyVal}"`,
+        `"${stock.bandarAndFundamentals.catalystDetail}"`,
+        `"${stock.entryZone}"`,
+        `"${stock.targetPrice}"`,
+        `"${stock.stopLoss}"`,
+        `"${stock.riskReward}"`,
+        `"${stock.matchScore}%"`,
+        `"${stock.aiRationale.replace(/"/g, '""')}"`
+      ];
+    });
 
     const csvContent = [headers.join(','), ...rows.map(r => r.join(','))].join('\n');
     const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
@@ -2128,26 +2306,35 @@ ${araInfo ? `• Potensi ARA Limit (BEI): Rp ${araInfo.limitPrice} (+${araInfo.p
       day: 'numeric'
     });
 
-    const rowsHtml = filteredStocks.map((stock, i) => `
-      <tr style="border-bottom: 1px solid #333; ${i % 2 === 0 ? 'background: #12161f;' : 'background: #0b0e14;'}">
-        <td style="padding: 10px; font-weight: bold; color: #deff9a;">${stock.symbol}<br><span style="font-size: 10px; color: #888; font-weight: normal;">${stock.name}</span></td>
-        <td style="padding: 10px; font-family: monospace;">${stock.market}</td>
-        <td style="padding: 10px; font-weight: bold;">${stock.price}<br><span style="font-size: 10px; color: ${stock.changePercent >= 0 ? '#10b981' : '#ef4444'};">${stock.change}</span></td>
-        <td style="padding: 10px; font-size: 11px;">
-          <strong style="color: #f59e0b;">Order Book:</strong> Bid/Offer ${stock.orderBook.bidOfferRatio}:1 (Wall Buy)<br>
-          <strong style="color: #c084fc;">Volume:</strong> ${stock.orderBook.volumeVsMa20}<br>
-          <strong style="color: #10b981;">MACD/BB:</strong> ${stock.momentum.macdStatus} | BB Upper Breakout<br>
-          <strong style="color: #38bdf8;">Bandar:</strong> ${stock.bandarAndFundamentals.topBrokersAccumulation} (${stock.bandarAndFundamentals.brokerNetBuyVal})
-        </td>
-        <td style="padding: 10px; font-size: 11px; font-family: monospace;">
-          <strong>Buy:</strong> ${stock.entryZone}<br>
-          <strong style="color: #10b981;">TP:</strong> ${stock.targetPrice}<br>
-          <strong style="color: #ef4444;">SL:</strong> ${stock.stopLoss}
-        </td>
-        <td style="padding: 10px; font-size: 11px; font-style: italic; color: #ccc;">"${stock.aiRationale}"</td>
-        <td style="padding: 10px; font-weight: bold; text-align: center; color: #deff9a;">${stock.matchScore}%</td>
-      </tr>
-    `).join('');
+    const rowsHtml = filteredStocks.map((stock, i) => {
+      const maInd = stock.maIndicators || computeMaIndicators(stock.priceNum, stock.market, stock.maEmaCross?.ma10);
+      return `
+        <tr style="border-bottom: 1px solid #333; ${i % 2 === 0 ? 'background: #12161f;' : 'background: #0b0e14;'}">
+          <td style="padding: 10px; font-weight: bold; color: #deff9a;">${stock.symbol}<br><span style="font-size: 10px; color: #888; font-weight: normal;">${stock.name}</span></td>
+          <td style="padding: 10px; font-family: monospace;">${stock.market}</td>
+          <td style="padding: 10px; font-weight: bold;">${stock.price}<br><span style="font-size: 10px; color: ${stock.changePercent >= 0 ? '#10b981' : '#ef4444'};">${stock.change}</span></td>
+          <td style="padding: 10px; font-size: 11px;">
+            <strong style="color: #38bdf8;">MA 5 / 10:</strong> ${maInd.ma5Str} / ${maInd.ma10Str}<br>
+            <strong style="color: #deff9a;">Dynamic Support (MA5):</strong> ${maInd.supportResistance.supportMa5}<br>
+            <strong style="color: #facc15;">Dynamic Support (MA10):</strong> ${maInd.supportResistance.supportMa10}<br>
+            <strong style="color: #10b981;">Crossover & Posisi:</strong> ${maInd.crossoverLabel} • ${maInd.pricePositionLabel}
+          </td>
+          <td style="padding: 10px; font-size: 11px;">
+            <strong style="color: #f59e0b;">Order Book:</strong> Bid/Offer ${stock.orderBook.bidOfferRatio}:1 (Wall Buy)<br>
+            <strong style="color: #c084fc;">Volume:</strong> ${stock.orderBook.volumeVsMa20}<br>
+            <strong style="color: #10b981;">MACD/BB:</strong> ${stock.momentum.macdStatus} | BB Upper Breakout<br>
+            <strong style="color: #38bdf8;">Bandar:</strong> ${stock.bandarAndFundamentals.topBrokersAccumulation} (${stock.bandarAndFundamentals.brokerNetBuyVal})
+          </td>
+          <td style="padding: 10px; font-size: 11px; font-family: monospace;">
+            <strong>Buy:</strong> ${stock.entryZone}<br>
+            <strong style="color: #10b981;">TP:</strong> ${stock.targetPrice}<br>
+            <strong style="color: #ef4444;">SL:</strong> ${stock.stopLoss}
+          </td>
+          <td style="padding: 10px; font-size: 11px; font-style: italic; color: #ccc;">"${stock.aiRationale}"</td>
+          <td style="padding: 10px; font-weight: bold; text-align: center; color: #deff9a;">${stock.matchScore}%</td>
+        </tr>
+      `;
+    }).join('');
 
     const htmlContent = `
       <!DOCTYPE html>
@@ -2209,7 +2396,7 @@ ${araInfo ? `• Potensi ARA Limit (BEI): Rp ${araInfo.limitPrice} (+${araInfo.p
           <div class="header">
             <div>
               <div class="logo">VENTUREAM INSTITUTIONAL GATEWAY</div>
-              <div class="subtitle">Penyaringan Saham Rekomendasi Day Trading & Potensi ARA (Order Book 3:1 + MACD/BB + Bandar Accumulation)</div>
+              <div class="subtitle">Penyaringan Saham Day Trading & Potensi ARA (MA 5/10 Dynamic S/R + Order Book 3:1 + MACD/BB + Bandar)</div>
             </div>
             <div style="text-align: right; font-size: 11px; color: #aaa;">
               <strong>Tanggal Cetak:</strong> ${dateStr}<br>
@@ -2218,20 +2405,21 @@ ${araInfo ? `• Potensi ARA Limit (BEI): Rp ${araInfo.limitPrice} (+${araInfo.p
           </div>
 
           <div class="summary-box">
-            <div><strong>Sistem Penyaringan:</strong> Metodologi 3 Pilar (Volume & Order Book Wall Buy ≥3:1, MACD/BB/RSI>70 Momentum, Aksi Bandar & Katalis/IPO)</div>
+            <div><strong>Sistem Penyaringan:</strong> MA 5 & 10 Support/Resistance Dinamis + 3 Pilar ARA (Order Book Wall Buy &ge;3:1, MACD/BB/RSI&gt;70 Momentum, Bandar Accumulation)</div>
             <div><strong>Filter Pasar:</strong> ${selectedMarket} | <strong>Kategori:</strong> ${activeFilterCategory}</div>
           </div>
 
           <table>
             <thead>
               <tr>
-                <th style="width: 18%;">Saham / Nama</th>
-                <th style="width: 8%;">Pasar</th>
-                <th style="width: 14%;">Harga / Perubahan</th>
-                <th style="width: 24%;">Indikator 3 Pilar ARA</th>
-                <th style="width: 16%;">Trading Plan (Entry / TP / SL)</th>
-                <th style="width: 14%;">AI Rationale</th>
-                <th style="width: 6%;">Match</th>
+                <th style="width: 15%;">Saham / Nama</th>
+                <th style="width: 6%;">Pasar</th>
+                <th style="width: 12%;">Harga / Perubahan</th>
+                <th style="width: 22%;">MA 5/10 Support Dinamis & Crossover</th>
+                <th style="width: 18%;">Indikator 3 Pilar ARA</th>
+                <th style="width: 13%;">Trading Plan</th>
+                <th style="width: 10%;">AI Rationale</th>
+                <th style="width: 4%;">Match</th>
               </tr>
             </thead>
             <tbody>
@@ -2354,50 +2542,61 @@ ${araInfo ? `• Potensi ARA Limit (BEI): Rp ${araInfo.limitPrice} (+${araInfo.p
                 <div className="flex items-center gap-2">
                   <Flame className="w-4 h-4 text-amber-400" />
                   <h4 className="text-xs sm:text-sm font-black text-amber-300 uppercase tracking-wide">
-                    Panduan Penyaringan Saham Day Trading & Potensi ARA (Auto Rejection Atas)
+                    Panduan Metodologi Day Trading, Potensi ARA & Indikator MA 5/10 Dinamis
                   </h4>
                 </div>
                 <span className="text-[9px] font-mono font-bold bg-amber-500/20 text-amber-300 px-2 py-0.5 rounded-md border border-amber-500/40">
-                  METODOLOGI INSTITUSIONAL
+                  VAM CORE AI ENGINE
                 </span>
               </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-3 text-[10.5px] text-zinc-300 font-mono">
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3 text-[10.5px] text-zinc-300 font-mono">
                 {/* Pilar 1 */}
-                <div className="bg-black/60 p-3 rounded-xl border border-zinc-800 space-y-1.5">
+                <div className="bg-black/60 p-3 rounded-xl border border-purple-500/30 space-y-1.5">
                   <div className="flex items-center gap-1.5 text-purple-300 font-bold uppercase text-[10px]">
                     <Layers className="w-3.5 h-3.5 text-purple-400" />
                     <span>1. Volume & Order Book</span>
                   </div>
                   <ul className="space-y-1 text-zinc-400 leading-relaxed text-[9.5px] list-disc list-inside">
-                    <li><strong className="text-white">Ketebalan Bid vs Offer:</strong> Dinding tebal (<span className="text-purple-300">wall buy</span>) di order book dengan rasio antrean beli &ge; 3:1 vs jual menahan harga bawah.</li>
-                    <li><strong className="text-white">Lonjakan Volume:</strong> Volume harian menembus rata-rata indikator MA 20 atau MA 50 menandakan minat masif.</li>
+                    <li><strong className="text-white">Dinding Beli (Wall Buy):</strong> Rasio antrean beli (Bid) vs jual (Offer) &ge; 3:1 menahan koreksi ke bawah.</li>
+                    <li><strong className="text-white">Lonjakan Volume:</strong> Volume transaksi &gt; rata-rata MA 20 atau MA 50 menandakan urgensi beli.</li>
                   </ul>
                 </div>
 
                 {/* Pilar 2 */}
-                <div className="bg-black/60 p-3 rounded-xl border border-zinc-800 space-y-1.5">
+                <div className="bg-black/60 p-3 rounded-xl border border-emerald-500/30 space-y-1.5">
                   <div className="flex items-center gap-1.5 text-emerald-300 font-bold uppercase text-[10px]">
                     <TrendingUp className="w-3.5 h-3.5 text-emerald-400" />
                     <span>2. Momentum & Trend</span>
                   </div>
                   <ul className="space-y-1 text-zinc-400 leading-relaxed text-[9.5px] list-disc list-inside">
-                    <li><strong className="text-white">MACD Golden Cross:</strong> Garis MACD memotong ke atas garis sinyal di area positif.</li>
-                    <li><strong className="text-white">Bollinger Bands:</strong> Harga menembus (breakout) Upper Band sebagai pemicu bullish ekstrem.</li>
-                    <li><strong className="text-white">RSI &gt; 70 (Hot):</strong> Menunjukkan saham sangat "panas" dan berpotensi terus ARA jika disokong akumulasi.</li>
+                    <li><strong className="text-white">MACD Golden Cross:</strong> Garis MACD memotong ke atas signal line di zona bullish.</li>
+                    <li><strong className="text-white">Bollinger Bands:</strong> Harga breakout menembus Upper Band sebagai akselerasi tren.</li>
+                    <li><strong className="text-white">RSI &gt; 70 (Hot):</strong> Momentum beli kuat yang mendukung percepatan harga ke ARA.</li>
                   </ul>
                 </div>
 
                 {/* Pilar 3 */}
-                <div className="bg-black/60 p-3 rounded-xl border border-zinc-800 space-y-1.5">
+                <div className="bg-black/60 p-3 rounded-xl border border-amber-500/30 space-y-1.5">
                   <div className="flex items-center gap-1.5 text-amber-300 font-bold uppercase text-[10px]">
                     <Target className="w-3.5 h-3.5 text-amber-400" />
-                    <span>3. Aksi Bandar & Fundamental</span>
+                    <span>3. Aksi Bandar & Katalis</span>
                   </div>
                   <ul className="space-y-1 text-zinc-400 leading-relaxed text-[9.5px] list-disc list-inside">
-                    <li><strong className="text-white">Broker Summary:</strong> Broker besar (top 1-3) terus membeli tanpa henti (net buy masif).</li>
-                    <li><strong className="text-white">Katalis Positif:</strong> Rekor laba bersih, dividen besar, atau sentimen sektoral.</li>
-                    <li><strong className="text-white">Saham IPO:</strong> Oversubscription masif saat bookbuilding & low float market cap.</li>
+                    <li><strong className="text-white">Broker Summary:</strong> Akumulasi masif dari top broker institusional (Net Buy tinggi).</li>
+                    <li><strong className="text-white">Katalis & IPO:</strong> Didukung berita pertumbuhan, laba, dividen, atau low float market cap.</li>
+                  </ul>
+                </div>
+
+                {/* Indikator MA 5, 10 Dinamis */}
+                <div className="bg-black/60 p-3 rounded-xl border border-sky-500/40 space-y-1.5">
+                  <div className="flex items-center gap-1.5 text-sky-300 font-bold uppercase text-[10px]">
+                    <Activity className="w-3.5 h-3.5 text-sky-400" />
+                    <span>4. MA 5 & 10 Support Dinamis</span>
+                  </div>
+                  <ul className="space-y-1 text-zinc-400 leading-relaxed text-[9.5px] list-disc list-inside">
+                    <li><strong className="text-white">Support & Resistensi Dinamis:</strong> Garis MA 5 & MA 10 bertindak sebagai batas pantulan harga di chart.</li>
+                    <li><strong className="text-white">Sinyal Persilangan (Crossover):</strong> Golden Cross (MA5 &gt; MA10) atau posisi harga di atas MA mengonfirmasi sinyal beli/jual instan.</li>
                   </ul>
                 </div>
               </div>
@@ -2406,8 +2605,8 @@ ${araInfo ? `• Potensi ARA Limit (BEI): Rp ${araInfo.limitPrice} (+${araInfo.p
         )}
       </AnimatePresence>
 
-      {/* Primary Filter Tabs Header (3 Pillars & Penny ARA Quick Toggle) */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-6 gap-2 relative z-10">
+      {/* Primary Filter Tabs Header (3 Pillars, MA 5/10 & Penny ARA Quick Toggle) */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-2 relative z-10">
         <button
           onClick={() => setActiveFilterCategory('ALL')}
           className={`p-2.5 rounded-2xl border transition-all text-left cursor-pointer ${
@@ -2436,9 +2635,49 @@ ${araInfo ? `• Potensi ARA Limit (BEI): Rp ${araInfo.limitPrice} (+${araInfo.p
             <span>Kandidat Lock ARA</span>
           </div>
           <div className="text-[11px] font-black font-mono flex items-center justify-between">
-            <span>Lolos 3/3 Pilar</span>
+            <span>Lolos 3/3 Pilar + MA</span>
             <span className="px-1.5 py-0.2 bg-black/40 text-amber-300 text-[8.5px] rounded font-bold">
               {stocks.filter(s => s.orderBook.bidOfferRatio >= 3.0 && s.momentum.macdIsPositiveGoldenCross && (s.bandarAndFundamentals.isBandarAccumulation || s.bandarAndFundamentals.isIpoLowFloat)).length}
+            </span>
+          </div>
+        </button>
+
+        <button
+          onClick={() => setActiveFilterCategory('MA_5_10_CROSS')}
+          className={`p-2.5 rounded-2xl border transition-all text-left cursor-pointer ${
+            activeFilterCategory === 'MA_5_10_CROSS'
+              ? 'bg-sky-500/25 border-sky-400 text-sky-100 font-black shadow-lg shadow-sky-500/20 ring-1 ring-sky-300/50'
+              : 'bg-zinc-900/80 border-zinc-800 text-zinc-300 hover:border-sky-500/40'
+          }`}
+        >
+          <div className="text-[9px] font-mono uppercase font-bold text-sky-400 mb-0.5 flex items-center gap-1">
+            <TrendingUp className="w-3 h-3 text-sky-400" />
+            <span>MA 5/10 Golden Cross</span>
+          </div>
+          <div className="text-[11px] font-black font-mono flex items-center justify-between">
+            <span>Sinyal Persilangan Beli</span>
+            <span className="px-1.5 py-0.2 bg-sky-500/30 text-sky-200 text-[8.5px] rounded font-bold">
+              {stocks.filter(s => (s.maIndicators?.crossover === 'GOLDEN_CROSS') || ((s.maIndicators?.ma5 || 0) >= (s.maIndicators?.ma10 || 0))).length}
+            </span>
+          </div>
+        </button>
+
+        <button
+          onClick={() => setActiveFilterCategory('DYNAMIC_SUPPORT_BOUNCE')}
+          className={`p-2.5 rounded-2xl border transition-all text-left cursor-pointer ${
+            activeFilterCategory === 'DYNAMIC_SUPPORT_BOUNCE'
+              ? 'bg-emerald-500/25 border-emerald-400 text-emerald-100 font-black shadow-lg shadow-emerald-500/20 ring-1 ring-emerald-300/50'
+              : 'bg-zinc-900/80 border-zinc-800 text-zinc-300 hover:border-emerald-500/40'
+          }`}
+        >
+          <div className="text-[9px] font-mono uppercase font-bold text-emerald-400 mb-0.5 flex items-center gap-1">
+            <Activity className="w-3 h-3 text-emerald-400" />
+            <span>Pantulan Support MA 5/10</span>
+          </div>
+          <div className="text-[11px] font-black font-mono flex items-center justify-between">
+            <span>Batas Pantulan Terdekat</span>
+            <span className="px-1.5 py-0.2 bg-emerald-500/30 text-emerald-200 text-[8.5px] rounded font-bold">
+              {stocks.filter(s => (s.maIndicators?.pricePosition === 'BOUNCE_MA5_SUPPORT' || s.maIndicators?.pricePosition === 'BOUNCE_MA10_SUPPORT' || (s.priceNum >= (s.maIndicators?.ma5 || 0) * 0.99 && s.priceNum <= (s.maIndicators?.ma5 || 0) * 1.035))).length}
             </span>
           </div>
         </button>
@@ -2460,51 +2699,6 @@ ${araInfo ? `• Potensi ARA Limit (BEI): Rp ${araInfo.limitPrice} (+${araInfo.p
             <span className="px-1.5 py-0.2 bg-rose-500/30 text-rose-300 text-[8.5px] rounded font-bold">
               {stocks.filter(s => (s.priceNum <= 500 || s.bandarAndFundamentals.isIpoLowFloat) && (s.volRatio >= 7.0 || s.changePercent >= 12.0 || s.orderBook.bidOfferRatio >= 8.0)).length}
             </span>
-          </div>
-        </button>
-
-        <button
-          onClick={() => setActiveFilterCategory('PILLAR_1_ORDERBOOK')}
-          className={`p-2.5 rounded-2xl border transition-all text-left cursor-pointer ${
-            activeFilterCategory === 'PILLAR_1_ORDERBOOK'
-              ? 'bg-purple-500/20 border-purple-500/60 text-purple-200 font-black shadow-md shadow-purple-500/20'
-              : 'bg-zinc-900/80 border-zinc-800 text-zinc-300 hover:border-zinc-700'
-          }`}
-        >
-          <div className="text-[9px] font-mono uppercase font-bold text-purple-400 mb-0.5">Pilar 1: Order Book</div>
-          <div className="text-[11px] font-black font-mono flex items-center justify-between">
-            <span>Bid &ge;3:1 & Vol MA20/50</span>
-            <span className="text-[9px] text-purple-400">Wall Buy</span>
-          </div>
-        </button>
-
-        <button
-          onClick={() => setActiveFilterCategory('PILLAR_2_MOMENTUM')}
-          className={`p-2.5 rounded-2xl border transition-all text-left cursor-pointer ${
-            activeFilterCategory === 'PILLAR_2_MOMENTUM'
-              ? 'bg-emerald-500/20 border-emerald-500/60 text-emerald-200 font-black shadow-md shadow-emerald-500/20'
-              : 'bg-zinc-900/80 border-zinc-800 text-zinc-300 hover:border-zinc-700'
-          }`}
-        >
-          <div className="text-[9px] font-mono uppercase font-bold text-emerald-400 mb-0.5">Pilar 2: Momentum</div>
-          <div className="text-[11px] font-black font-mono flex items-center justify-between">
-            <span>MACD / BB / RSI &gt;70</span>
-            <span className="text-[9px] text-emerald-400">Bullish</span>
-          </div>
-        </button>
-
-        <button
-          onClick={() => setActiveFilterCategory('PILLAR_3_BANDAR')}
-          className={`p-2.5 rounded-2xl border transition-all text-left cursor-pointer ${
-            activeFilterCategory === 'PILLAR_3_BANDAR'
-              ? 'bg-amber-500/20 border-amber-500/60 text-amber-200 font-black shadow-md shadow-amber-500/20'
-              : 'bg-zinc-900/80 border-zinc-800 text-zinc-300 hover:border-zinc-700'
-          }`}
-        >
-          <div className="text-[9px] font-mono uppercase font-bold text-amber-400 mb-0.5">Pilar 3: Bandar & IPO</div>
-          <div className="text-[11px] font-black font-mono flex items-center justify-between">
-            <span>Net Accum & Katalis</span>
-            <span className="text-[9px] text-amber-400">Smart Money</span>
           </div>
         </button>
       </div>
@@ -2530,6 +2724,44 @@ ${araInfo ? `• Potensi ARA Limit (BEI): Rp ${araInfo.limitPrice} (+${araInfo.p
 
         {/* Strict Filter & Sort Toggles */}
         <div className="flex flex-wrap items-center gap-2 py-1">
+          {/* MA 5/10 Crossover Quick Toggle */}
+          <button
+            onClick={() => setFilterMaCrossOnly(!filterMaCrossOnly)}
+            className={`flex items-center gap-1.5 px-3 py-1 rounded-xl text-[9px] font-mono font-bold uppercase transition-all cursor-pointer border ${
+              filterMaCrossOnly
+                ? 'bg-sky-400 text-slate-950 border-sky-300 font-black shadow-[0_0_12px_rgba(56,189,248,0.35)]'
+                : 'bg-sky-500/10 text-sky-400 border-sky-500/25 hover:bg-sky-500/20'
+            }`}
+            title="Filter hanya saham dengan MA5 > MA10 Golden Cross"
+          >
+            <TrendingUp className="w-3 h-3 text-sky-400" />
+            <span>MA 5/10 Cross</span>
+            <span className={`px-1.5 py-0.2 rounded text-[8px] font-black ${
+              filterMaCrossOnly ? 'bg-slate-950 text-sky-300' : 'bg-sky-500/20 text-sky-200'
+            }`}>
+              {filterMaCrossOnly ? 'AKTIF' : 'ALL'}
+            </span>
+          </button>
+
+          {/* Dynamic Support Bounce Quick Toggle */}
+          <button
+            onClick={() => setFilterDynamicBounceOnly(!filterDynamicBounceOnly)}
+            className={`flex items-center gap-1.5 px-3 py-1 rounded-xl text-[9px] font-mono font-bold uppercase transition-all cursor-pointer border ${
+              filterDynamicBounceOnly
+                ? 'bg-emerald-400 text-slate-950 border-emerald-300 font-black shadow-[0_0_12px_rgba(52,211,153,0.35)]'
+                : 'bg-emerald-500/10 text-emerald-400 border-emerald-500/25 hover:bg-emerald-500/20'
+            }`}
+            title="Filter saham dengan pantulan harga pada batas Support Dinamis MA 5 / MA 10"
+          >
+            <Activity className="w-3 h-3 text-emerald-400" />
+            <span>Pantulan Support MA</span>
+            <span className={`px-1.5 py-0.2 rounded text-[8px] font-black ${
+              filterDynamicBounceOnly ? 'bg-slate-950 text-emerald-300' : 'bg-emerald-500/20 text-emerald-200'
+            }`}>
+              {filterDynamicBounceOnly ? 'AKTIF' : 'ALL'}
+            </span>
+          </button>
+
           {/* Volume Surge Sort Toggle Button */}
           <button
             onClick={() => setSortByVolumeSurge(!sortByVolumeSurge)}
@@ -2607,6 +2839,7 @@ ${araInfo ? `• Potensi ARA Limit (BEI): Rp ${araInfo.limitPrice} (+${araInfo.p
             const tradingViewSym = getTradingViewSymbol(stock.symbol);
             const isVolumeSurge = stock.volRatio >= 5.0;
             const isHighAraPotential = stock.orderBook.bidOfferRatio >= 3.0 && stock.momentum.macdIsPositiveGoldenCross && (stock.bandarAndFundamentals.isBandarAccumulation || stock.bandarAndFundamentals.isIpoLowFloat);
+            const maInd = stock.maIndicators || computeMaIndicators(stock.priceNum, stock.market, stock.maEmaCross?.ma10);
 
             return (
               <motion.div
@@ -2693,8 +2926,58 @@ ${araInfo ? `• Potensi ARA Limit (BEI): Rp ${araInfo.limitPrice} (+${araInfo.p
                   );
                 })()}
 
-                {/* 3 Pillars Breakdown Detailed Grid */}
+                {/* 3 Pillars & MA 5/10 Dynamic Support Breakdown Detailed Grid */}
                 <div className="space-y-1.5">
+                  {/* Indikator MA 5 & 10 Support & Resistance Dinamis + Sinyal Persilangan (Crossover) */}
+                  <div className="bg-sky-950/20 p-2.5 rounded-xl border border-sky-500/30 space-y-1.5">
+                    <div className="flex items-center justify-between text-[8.5px] font-mono font-extrabold uppercase text-sky-300">
+                      <span className="flex items-center gap-1">
+                        <Activity className="w-3 h-3 text-sky-400" />
+                        <span>Indikator MA 5 & 10 Support/Resistance Dinamis</span>
+                      </span>
+                      <div className="flex items-center gap-1">
+                        <span className={`px-1.5 py-0.2 rounded font-black text-[7.5px] ${
+                          maInd.crossover === 'GOLDEN_CROSS'
+                            ? 'bg-sky-500/30 text-sky-200 border border-sky-400/40'
+                            : 'bg-zinc-800 text-zinc-400'
+                        }`}>
+                          {maInd.crossoverLabel}
+                        </span>
+                        <span className="px-1.5 py-0.2 bg-[#deff9a]/20 text-[#deff9a] rounded font-black text-[7.5px] border border-[#deff9a]/30">
+                          {maInd.signalLabel}
+                        </span>
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-1.5 text-[8.5px] font-mono">
+                      <div className="bg-black/50 p-1.5 rounded-lg border border-zinc-800">
+                        <span className="text-zinc-500 text-[7.5px] block">Garis MA 5</span>
+                        <strong className="text-sky-300">{maInd.ma5Str}</strong>
+                      </div>
+                      <div className="bg-black/50 p-1.5 rounded-lg border border-zinc-800">
+                        <span className="text-zinc-500 text-[7.5px] block">Garis MA 10</span>
+                        <strong className="text-yellow-300">{maInd.ma10Str}</strong>
+                      </div>
+                      <div className="bg-black/50 p-1.5 rounded-lg border border-emerald-500/30">
+                        <span className="text-emerald-400/80 text-[7.5px] block">Support Dinamis (MA5)</span>
+                        <strong className="text-emerald-300">{maInd.supportResistance.supportMa5}</strong>
+                      </div>
+                      <div className="bg-black/50 p-1.5 rounded-lg border border-sky-500/30">
+                        <span className="text-sky-400/80 text-[7.5px] block">Support Dinamis (MA10)</span>
+                        <strong className="text-sky-200">{maInd.supportResistance.supportMa10}</strong>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center justify-between text-[8px] font-mono bg-black/40 px-2 py-0.8 rounded-lg text-zinc-300">
+                      <span className="text-zinc-400">
+                        Posisi Harga: <strong className="text-white">{maInd.pricePositionLabel}</strong>
+                      </span>
+                      <span className="text-sky-300 font-semibold truncate ml-2">
+                        {maInd.supportResistance.bounceStatus}
+                      </span>
+                    </div>
+                  </div>
+
                   {/* Pilar 1: Order Book & Volume */}
                   <div className="bg-black/60 p-2 rounded-xl border border-purple-500/30 space-y-1">
                     <div className="flex items-center justify-between text-[8.5px] font-mono font-extrabold uppercase text-purple-300">
@@ -2910,7 +3193,7 @@ ${araInfo ? `• Potensi ARA Limit (BEI): Rp ${araInfo.limitPrice} (+${araInfo.p
                 </p>
 
                 {/* Bottom Actions */}
-                <div className="flex items-center justify-between pt-1 border-t border-zinc-800/60">
+                <div className="flex items-center justify-between pt-1 border-t border-zinc-800/60 gap-2">
                   <button
                     onClick={() => setChartModalSymbol(tradingViewSym)}
                     className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-sky-500/15 border border-sky-500/30 text-sky-300 text-[9px] font-mono font-black uppercase tracking-wider hover:bg-sky-500 hover:text-black transition-all cursor-pointer shadow-sm"
@@ -2919,21 +3202,32 @@ ${araInfo ? `• Potensi ARA Limit (BEI): Rp ${araInfo.limitPrice} (+${araInfo.p
                     <span>Advance Chart</span>
                   </button>
 
-                  {onSelectStock && (
-                    <button
-                      onClick={() => onSelectStock(stock.symbol)}
-                      className="flex items-center gap-1 text-[9px] font-mono font-bold text-[#deff9a] hover:underline cursor-pointer"
-                    >
-                      <span>Detail Analyst</span>
-                      <ChevronRight className="w-3 h-3" />
-                    </button>
-                  )}
+                  <button
+                    onClick={() => setDetailModalStock(stock)}
+                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-[#deff9a]/15 border border-[#deff9a]/35 text-[#deff9a] text-[9px] font-mono font-black uppercase tracking-wider hover:bg-[#deff9a] hover:text-black transition-all cursor-pointer shadow-sm"
+                    title="Buka Analisis Mendalam 3 Pilar, Indikator Dinamis & Kalkulator Risiko"
+                  >
+                    <Sparkles className="w-3 h-3" />
+                    <span>Detail Analyst</span>
+                    <ChevronRight className="w-3 h-3" />
+                  </button>
                 </div>
               </motion.div>
             );
           })}
         </AnimatePresence>
       </div>
+
+      {/* Detail Analyst Modal Integration */}
+      <DailyStockDetailAnalystModal
+        stock={detailModalStock}
+        isOpen={!!detailModalStock}
+        onClose={() => setDetailModalStock(null)}
+        onOpenAdvanceChart={(sym) => setChartModalSymbol(sym)}
+        onNavigateToMarket={(sym) => onSelectStock?.(sym)}
+        onOpenFundamentalAudit={(sym) => onOpenFundamentalAudit ? onOpenFundamentalAudit(sym) : onSelectStock?.(sym)}
+        onOpenExplorer={(sym) => onOpenExplorer ? onOpenExplorer(sym) : onSelectStock?.(sym)}
+      />
 
       {/* Advance Chart Modal Integration */}
       <AdvanceChartModal

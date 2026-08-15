@@ -74,9 +74,8 @@ export const AdvanceChartModal: React.FC<AdvanceChartModalProps> = ({
   ];
 
   const studiesList = [
-    { id: "MAExp@tv-basicstudies", name: "EMA 10 (Day Trading)" },
-    { id: "MASimple@tv-basicstudies", name: "SMA 20" },
-    { id: "MAExp@tv-basicstudies", name: "EMA 20" },
+    { id: "MAExp@tv-basicstudies", name: "EMA (Exponential MA)" },
+    { id: "MASimple@tv-basicstudies", name: "SMA (Simple MA)" },
     { id: "RSI@tv-basicstudies", name: "RSI" },
     { id: "MACD@tv-basicstudies", name: "MACD" },
     { id: "StochasticRSI@tv-basicstudies", name: "Stoch RSI" },

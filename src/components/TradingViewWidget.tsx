@@ -5,6 +5,7 @@ interface TradingViewWidgetProps {
   symbol?: string;
   studies?: string[];
   interval?: string;
+  showSROverlay?: boolean;
 }
 
 // Generate high-fidelity simulated historical OHLCV data for auditing
@@ -167,12 +168,18 @@ const generateCsv = (data: any[]) => {
 const DEFAULT_STUDIES = ["MASimple@tv-basicstudies", "MAExp@tv-basicstudies"];
 
 import { getTradingViewSymbol, getStockInfo } from '../lib/stockUtils';
+import ChartSupportResistanceOverlay from './ChartSupportResistanceOverlay';
 
 const formatSymbolForTradingView = (sym: string): string => {
   return getTradingViewSymbol(sym);
 };
 
-function TradingViewWidget({ symbol = "IDX:BBCA", studies = DEFAULT_STUDIES, interval = "D" }: TradingViewWidgetProps) {
+function TradingViewWidget({ 
+  symbol = "IDX:BBCA", 
+  studies = DEFAULT_STUDIES, 
+  interval = "D",
+  showSROverlay = true 
+}: TradingViewWidgetProps) {
   const chartContainerRef = useRef<HTMLDivElement>(null);
   const widgetId = useRef(`tv-widget-${Math.random().toString(36).substring(2, 9)}`).current;
   const [downloadSuccess, setDownloadSuccess] = useState(false);
@@ -386,6 +393,11 @@ function TradingViewWidget({ symbol = "IDX:BBCA", studies = DEFAULT_STUDIES, int
           </button>
         </div>
       </div>
+
+      {/* S/R Swing Highs & Lows Overlay & Controller */}
+      {showSROverlay && (
+        <ChartSupportResistanceOverlay symbol={symbol} />
+      )}
 
       {/* Main Chart Iframe Wrapper */}
       <div className="flex-1 min-h-[420px] w-full relative bg-zinc-950">

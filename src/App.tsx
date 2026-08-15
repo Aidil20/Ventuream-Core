@@ -2693,7 +2693,28 @@ export default function App() {
             >
               <DailyTradingAutoAnalyst 
                 onSelectStock={(sym) => {
-                  setSelectedAssetId(sym);
+                  const cleanSym = sym.toUpperCase().replace('IDX:', '');
+                  setFundamentalSymbol(cleanSym);
+                  setSelectedSymbol(`IDX:${cleanSym}`);
+                  const asset = assetsData.find(a => a.symbol === cleanSym || a.symbol === sym);
+                  if (asset) {
+                    setSelectedAssetId(asset.id);
+                  }
+                  setMarketSubTab('fundamental');
+                  navigateTo('fundamental');
+                }}
+                onOpenFundamentalAudit={(sym) => {
+                  const cleanSym = sym.toUpperCase().replace('IDX:', '');
+                  setFundamentalSymbol(cleanSym);
+                  setSelectedSymbol(`IDX:${cleanSym}`);
+                  setMarketSubTab('fundamental');
+                  navigateTo('fundamental');
+                }}
+                onOpenExplorer={(sym) => {
+                  const cleanSym = sym.toUpperCase().replace('IDX:', '');
+                  setFundamentalSymbol(cleanSym);
+                  setSelectedSymbol(`IDX:${cleanSym}`);
+                  setMarketSubTab('explorer');
                   navigateTo('market');
                 }}
               />
@@ -2928,6 +2949,7 @@ export default function App() {
 
             {marketSubTab === 'explorer' ? (
               <StockExplorer 
+                initialSymbol={fundamentalSymbol || selectedSymbol.replace('IDX:', '')}
                 alerts={alerts} 
                 onAddAlert={addAlert} 
                 onRemoveAlert={removeAlert} 

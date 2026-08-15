@@ -1,6 +1,6 @@
 {
   "name": "Venture-Ai",
-  "description": "A professional mobile asset management dashboard for VentureAM Institutional System, featuring real-time AUM tracking, priority asset monitoring, and market insights.",
+  "description": "Institutional asset management & technical terminal with interactive TradingView chart widgets, automated Swing High/Low detection, visual Support & Resistance bands overlay, and ARA day trading analytics.",
   "requestFramePermissions": [],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }

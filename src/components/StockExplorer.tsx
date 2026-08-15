@@ -41,6 +41,7 @@ interface StockExplorerProps {
   onRemoveAlert: (id: string) => void;
   onViewAsset?: (symbol: string) => void;
   onFundamentalAudit?: (symbol: string) => void;
+  initialSymbol?: string;
 }
 
 export const StockExplorer: React.FC<StockExplorerProps> = ({ 
@@ -48,10 +49,11 @@ export const StockExplorer: React.FC<StockExplorerProps> = ({
   onAddAlert, 
   onRemoveAlert,
   onViewAsset,
-  onFundamentalAudit
+  onFundamentalAudit,
+  initialSymbol
 }) => {
-  const [searchQuery, setSearchQuery] = useState('');
-  const [selectedStock, setSelectedStock] = useState<string | null>(null);
+  const [searchQuery, setSearchQuery] = useState(initialSymbol || '');
+  const [selectedStock, setSelectedStock] = useState<string | null>(initialSymbol ? initialSymbol.toUpperCase().replace('IDX:', '') : null);
   const [isAdvanceChartOpen, setIsAdvanceChartOpen] = useState(false);
   const [stockInfo, setStockInfo] = useState<AssetSearchInfo | null>(null);
   const [searchResults, setSearchResults] = useState<AssetSearchInfo[]>([]);
@@ -242,6 +244,15 @@ export const StockExplorer: React.FC<StockExplorerProps> = ({
     window.addEventListener('vam-market-update', handleMarketUpdate);
     return () => window.removeEventListener('vam-market-update', handleMarketUpdate);
   }, [selectedStock]);
+
+  useEffect(() => {
+    if (initialSymbol) {
+      const clean = initialSymbol.toUpperCase().replace('IDX:', '');
+      setSelectedStock(clean);
+      setSearchQuery(clean);
+      handleSearch(undefined, clean);
+    }
+  }, [initialSymbol]);
 
   useEffect(() => {
     if (selectedStock) {
