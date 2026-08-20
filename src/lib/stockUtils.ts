@@ -11,7 +11,10 @@ export interface StockMetaData {
 }
 
 export const MASTER_STOCKS_DATABASE: Record<string, StockMetaData> = {
-  // --- IDX (Indonesia) ---
+  // --- IDX (Indonesia Indices & Stocks) ---
+  'COMPOSITE': { symbol: 'COMPOSITE', cleanSymbol: 'COMPOSITE', tradingViewSymbol: 'IDX:COMPOSITE', yahooSymbol: '^JKSE', name: 'Indeks Harga Saham Gabungan (IHSG)', market: 'IDX', marketName: 'Bursa Efek Indonesia (IDX)', currency: 'IDR', currencySymbol: 'Rp' },
+  'IHSG': { symbol: 'IHSG', cleanSymbol: 'IHSG', tradingViewSymbol: 'IDX:COMPOSITE', yahooSymbol: '^JKSE', name: 'Indeks Harga Saham Gabungan (IHSG)', market: 'IDX', marketName: 'Bursa Efek Indonesia (IDX)', currency: 'IDR', currencySymbol: 'Rp' },
+  'JKSE': { symbol: 'JKSE', cleanSymbol: 'JKSE', tradingViewSymbol: 'IDX:COMPOSITE', yahooSymbol: '^JKSE', name: 'Jakarta Stock Exchange Composite', market: 'IDX', marketName: 'Bursa Efek Indonesia (IDX)', currency: 'IDR', currencySymbol: 'Rp' },
   'BBCA': { symbol: 'BBCA', cleanSymbol: 'BBCA', tradingViewSymbol: 'IDX:BBCA', yahooSymbol: 'BBCA.JK', name: 'PT Bank Central Asia Tbk.', market: 'IDX', marketName: 'Bursa Efek Indonesia (IDX)', currency: 'IDR', currencySymbol: 'Rp' },
   'BBRI': { symbol: 'BBRI', cleanSymbol: 'BBRI', tradingViewSymbol: 'IDX:BBRI', yahooSymbol: 'BBRI.JK', name: 'PT Bank Rakyat Indonesia (Persero) Tbk.', market: 'IDX', marketName: 'Bursa Efek Indonesia (IDX)', currency: 'IDR', currencySymbol: 'Rp' },
   'BMRI': { symbol: 'BMRI', cleanSymbol: 'BMRI', tradingViewSymbol: 'IDX:BMRI', yahooSymbol: 'BMRI.JK', name: 'PT Bank Mandiri (Persero) Tbk.', market: 'IDX', marketName: 'Bursa Efek Indonesia (IDX)', currency: 'IDR', currencySymbol: 'Rp' },
@@ -151,8 +154,6 @@ export const MASTER_STOCKS_DATABASE: Record<string, StockMetaData> = {
   'PLTR': { symbol: 'PLTR', cleanSymbol: 'PLTR', tradingViewSymbol: 'NASDAQ:PLTR', yahooSymbol: 'PLTR', name: 'Palantir Technologies Inc.', market: 'US', marketName: 'NYSE / US Market', currency: 'USD', currencySymbol: '$' },
 
   // --- WORLD (Indices & Commodities & Forex & Crypto) ---
-  'IHSG': { symbol: 'IHSG', cleanSymbol: 'IHSG', tradingViewSymbol: 'IDX:COMPOSITE', yahooSymbol: '^JKSE', name: 'Jakarta Composite Index (IHSG)', market: 'WORLD', marketName: 'Index Market', currency: 'IDR', currencySymbol: 'Pt' },
-  'COMPOSITE': { symbol: 'COMPOSITE', cleanSymbol: 'COMPOSITE', tradingViewSymbol: 'IDX:COMPOSITE', yahooSymbol: '^JKSE', name: 'Jakarta Composite Index (IHSG)', market: 'WORLD', marketName: 'Index Market', currency: 'IDR', currencySymbol: 'Pt' },
   'STI': { symbol: 'STI', cleanSymbol: 'STI', tradingViewSymbol: 'FTSE:STI', yahooSymbol: '^STI', name: 'Straits Times Index (STI)', market: 'WORLD', marketName: 'Index Market', currency: 'SGD', currencySymbol: 'Pt' },
   'SPX': { symbol: 'SPX', cleanSymbol: 'SPX', tradingViewSymbol: 'SP:SPX', yahooSymbol: '^GSPC', name: 'S&P 500 Index (SPX)', market: 'WORLD', marketName: 'Index Market', currency: 'USD', currencySymbol: 'Pt' },
   'DJI': { symbol: 'DJI', cleanSymbol: 'DJI', tradingViewSymbol: 'DJ:DJI', yahooSymbol: '^DJI', name: 'Dow Jones Industrial Average', market: 'WORLD', marketName: 'Index Market', currency: 'USD', currencySymbol: 'Pt' },
@@ -296,32 +297,48 @@ export function formatStockPrice(price: number, symbol?: string, market?: string
   }
 }
 
+export function getTickSize(price: number, market: string = 'IDX'): number {
+  if (market === 'US' || market === 'NASDAQ' || market === 'NYSE' || market === 'SGX') {
+    return 0.01;
+  }
+  if (price < 200) return 1;
+  if (price < 500) return 2;
+  if (price < 2000) return 5;
+  if (price < 5000) return 10;
+  return 25;
+}
+
 /**
  * Returns accurate live/reference market price for popular IDX and global assets
  */
 export function getKnownStockPrice(symbolStr: string): number {
   const norm = normalizeTicker(symbolStr);
   const KNOWN_PRICES: Record<string, number> = {
-    'TNCA': 173,
-    'IKAN': 72,
-    'LUCK': 95,
-    'LRNA': 168,
-    'PLAN': 58,
-    'HADE': 50,
-    'MIRA': 50,
-    'MPOW': 104,
+    'COMPOSITE': 7280,
+    'IHSG': 7280,
+    'JKSE': 7280,
+    'TNCA': 310,
+    'IKAN': 68,
+    'LUCK': 88,
+    'LRNA': 185,
+    'COAL': 105,
+    'PLAN': 38,
+    'HADE': 18,
+    'MIRA': 21,
+    'MPOW': 101,
     'CGAS': 195,
-    'SMGA': 88,
-    'DATA': 880,
+    'SMGA': 92,
+    'DATA': 410,
     'GOLF': 430,
-    'PANI': 14500,
-    'BRMS': 390,
+    'PANI': 15200,
+    'BRMS': 392,
     'PGAS': 1540,
-    'DEFI': 103,
-    'KOTA': 50,
+    'DEFI': 142,
+    'KOTA': 114,
+    'OTAS': 114,
     'PGEO': 1250,
-    'BUMI': 140,
-    'CUAN': 7800,
+    'BUMI': 148,
+    'CUAN': 8950,
     'BREN': 7850,
     'BBCA': 10475,
     'BMRI': 7225,

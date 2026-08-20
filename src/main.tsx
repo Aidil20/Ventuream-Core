@@ -2,6 +2,7 @@ import {StrictMode} from 'react';
 import {createRoot} from 'react-dom/client';
 import App from './App.tsx';
 import './index.css';
+import { ReportToastProvider } from './context/ReportToastContext';
 
 // Global error handler to capture and handle harmless CORS and iframe errors
 const isHarmlessError = (message: any, source?: string) => {
@@ -60,7 +61,9 @@ window.addEventListener('unhandledrejection', function(event) {
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
-    <App />
+    <ReportToastProvider>
+      <App />
+    </ReportToastProvider>
   </StrictMode>,
 );
 

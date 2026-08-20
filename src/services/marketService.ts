@@ -539,6 +539,62 @@ export async function fetchNewsSentimentSummary(news: MarketNews[], symbol: stri
   }
 }
 
+export interface CorporateActionItem {
+  type: 'DIVIDEND' | 'RUPS' | 'RIGHTS_ISSUE' | 'STOCK_SPLIT' | 'BUYBACK' | 'BOND_ISSUANCE' | 'WARRANT';
+  title: string;
+  cumDate?: string;
+  exDate?: string;
+  recordingDate?: string;
+  paymentDate?: string;
+  amount?: string;
+  ratio?: string;
+  status: 'UPCOMING' | 'COMPLETED' | 'ONGOING' | 'ANNOUNCED';
+  impact: 'POSITIVE' | 'NEUTRAL' | 'CAUTION';
+  description: string;
+}
+
+export interface InsiderTransactionItem {
+  personName: string;
+  position: string;
+  transactionType: 'BUY' | 'SELL' | 'EXERCISE' | 'GRANT';
+  sharesCount: string;
+  pricePerShare: string;
+  totalValue: string;
+  transactionDate: string;
+  postOwnershipPercent: string;
+  notes: string;
+}
+
+export interface MajorShareholderItem {
+  holderName: string;
+  sharePercentage: string;
+  sharesCount: string;
+  holderType: 'CONTROLLER' | 'INSTITUTION' | 'DIRECTOR' | 'PUBLIC' | 'GOVERNMENT';
+  isUltimateBeneficiary?: boolean;
+}
+
+export interface MaterialNewsCatalystItem {
+  id?: string;
+  title: string;
+  date: string;
+  source: string;
+  category: 'IDX_DISCLOSURE' | 'FINANCIAL_REPORT' | 'M&A_PARTNERSHIP' | 'MACRO_REGULATION' | 'OPERATIONAL_EXPANSION';
+  sentiment: 'BULLISH' | 'BEARISH' | 'NEUTRAL';
+  impactOnValuation: string;
+  summary: string;
+}
+
+export interface MacroIndicatorDetail {
+  gdpGrowth: string;
+  inflationRate: string;
+  interestRates: string;
+  biRate: string;
+  usdIdrFx: string;
+  foreignReserve: string;
+  commodityRelevance?: string;
+  summary: string;
+}
+
 export interface FundamentalAudit {
   ticker: string;
   companyName: string;
@@ -579,24 +635,27 @@ export interface FundamentalAudit {
     capitalStructure: string;
     summary: string;
   };
-  economicAnalysis: {
-    gdpGrowth: string;
-    inflationRate: string;
-    interestRates: string;
-    summary: string;
-  };
+  economicAnalysis: MacroIndicatorDetail;
   industryAnalysis: {
     growthPotential: string;
     competition: string;
     regulation: string;
     summary: string;
+    keyDrivers?: string[];
   };
   companyAnalysis: {
     financialHealth: string;
     managementQuality: string;
     businessModel: string;
     summary: string;
+    gcgScore?: string;
+    headquarters?: string;
+    employeesCount?: string;
   };
+  corporateActions?: CorporateActionItem[];
+  insiderTransactions?: InsiderTransactionItem[];
+  shareholderStructure?: MajorShareholderItem[];
+  materialNewsAndCatalysts?: MaterialNewsCatalystItem[];
   maScanner: {
     potential: string;
     strategicValue: string;

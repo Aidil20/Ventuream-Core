@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
+import { saveAndNotifyPdf } from '../services/reportNotificationService';
 import { 
   ArrowLeft, 
   TrendingUp, 
@@ -26,11 +27,14 @@ import {
   Star,
   ExternalLink,
   Download,
-  FileText
+  FileText,
+  QrCode,
+  ScanLine
 } from 'lucide-react';
 import { Sparkline } from './Sparkline';
 import { fetchCorrelationScore, CorrelationResult, fetchMarketNews, MarketNews } from '../services/marketService';
 import { NewsFeed } from './NewsFeed';
+import { AssetQrScannerModal } from './AssetQrScannerModal';
 
 interface CompanyProfile {
   ticker: string;
@@ -73,9 +77,10 @@ interface AssetDetailProps {
     performance: number[];
   };
   onBack: () => void;
+  onSelectAsset?: (symbol: string) => void;
 }
 
-export function AssetDetail({ asset, onBack }: AssetDetailProps) {
+export function AssetDetail({ asset, onBack, onSelectAsset }: AssetDetailProps) {
   const isPositive = asset.status === 'Bullish' || asset.status === 'Performing' || asset.status === 'Stable';
   const [correlation, setCorrelation] = useState<CorrelationResult | null>(null);
   const [news, setNews] = useState<MarketNews[]>([]);
@@ -87,6 +92,7 @@ export function AssetDetail({ asset, onBack }: AssetDetailProps) {
   const [profileTab, setProfileTab] = useState<'fundamental' | 'business' | 'management'>('fundamental');
   const [isLoadingProfile, setIsLoadingProfile] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
+  const [isQrScannerOpen, setIsQrScannerOpen] = useState(false);
 
   const handleDownloadPDF = () => {
     try {
@@ -277,8 +283,9 @@ export function AssetDetail({ asset, onBack }: AssetDetailProps) {
       doc.text("DISCLAIMER: VentureAM Research Dossier provided for institutional evaluation only. Subject to regulatory compliance & market risk disclosures.", 14, footerY + 5);
       doc.text("Confidentiality Notice: Venture Asset Management (VAM) International Gateway Security Protocol.", 14, footerY + 9);
 
-      // Save PDF
-      doc.save(`VentureAM_${asset.symbol.replace(/[^a-zA-Z0-9]/g, '_')}_Asset_Report.pdf`);
+      // Save PDF & trigger toast notification with View File modal
+      const assetReportFileName = `VentureAM_${asset.symbol.replace(/[^a-zA-Z0-9]/g, '_')}_Asset_Report.pdf`;
+      saveAndNotifyPdf(doc, assetReportFileName, `Laporan Analisis Aset & Riset Emiten (${asset.symbol})`);
     } catch (error) {
       console.error('Error generating PDF report:', error);
     } finally {
@@ -410,6 +417,14 @@ export function AssetDetail({ asset, onBack }: AssetDetailProps) {
           >
             {isExporting ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Download className="w-3.5 h-3.5" />}
             <span>{isExporting ? 'Exporting...' : 'Download Report'}</span>
+          </button>
+          <button 
+            onClick={() => setIsQrScannerOpen(true)}
+            className="p-2 bg-[#DFFF00] hover:bg-[#cbe600] text-black rounded-xl transition-all flex items-center gap-1.5 text-[10px] uppercase font-black tracking-wider shadow-lg shadow-[#DFFF00]/10"
+            title="Scan Physical Asset Barcode or Financial Document QR"
+          >
+            <QrCode className="w-3.5 h-3.5" />
+            <span>QR Scanner</span>
           </button>
         </div>
         <div className="text-right">
@@ -862,10 +877,49 @@ export function AssetDetail({ asset, onBack }: AssetDetailProps) {
         </div>
       </section>
 
+      {/* Institutional Optical Barcode & QR Verification Section */}
+      <section className="bg-gradient-to-br from-zinc-900/90 to-zinc-950 p-6 rounded-[2rem] border border-zinc-800 relative overflow-hidden shadow-xl">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+          <div className="flex items-start gap-3.5">
+            <div className="p-3 bg-[#DFFF00]/10 border border-[#DFFF00]/20 rounded-2xl text-[#DFFF00] shrink-0">
+              <ScanLine className="w-6 h-6" />
+            </div>
+            <div>
+              <div className="flex items-center gap-2">
+                <h4 className="text-sm font-black text-white uppercase tracking-tight">
+                  Optical Barcode & QR Scanner
+                </h4>
+                <span className="text-[9px] bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 px-2 py-0.5 rounded-full font-bold uppercase">
+                  Hardware & Audit Ready
+                </span>
+              </div>
+              <p className="text-xs text-zinc-400 mt-1 max-w-xl">
+                Scan physical asset tags (PSAK 16 hardware, server racks, trading terminals), tax invoices, or trade confirmation QR codes for immediate verification.
+              </p>
+            </div>
+          </div>
+
+          <button
+            onClick={() => setIsQrScannerOpen(true)}
+            className="px-5 py-3 bg-[#DFFF00] hover:bg-[#cbe600] text-black font-black text-xs uppercase tracking-wider rounded-2xl flex items-center justify-center gap-2 transition-all shadow-lg shadow-[#DFFF00]/10 shrink-0"
+          >
+            <QrCode className="w-4 h-4" />
+            <span>Open QR Scanner</span>
+          </button>
+        </div>
+      </section>
+
       {/* Action Buttons */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+      <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
         <button className="py-4 px-4 rounded-2xl bg-[#deff9a] text-slate-950 font-black text-[11px] uppercase tracking-widest shadow-[0_0_20px_rgba(222,255,154,0.2)] hover:scale-[1.02] active:scale-[0.98] transition-all flex items-center justify-center gap-2">
           Execute Buy Order
+        </button>
+        <button 
+          onClick={() => setIsQrScannerOpen(true)}
+          className="py-4 px-4 rounded-2xl bg-zinc-900/90 border border-zinc-700 hover:border-[#DFFF00]/50 text-white hover:text-[#DFFF00] font-black text-[11px] uppercase tracking-widest active:scale-[0.98] transition-all flex items-center justify-center gap-2"
+        >
+          <QrCode className="w-4 h-4 text-[#DFFF00]" />
+          <span>Scan Asset QR</span>
         </button>
         <button 
           onClick={handleDownloadPDF}
@@ -873,7 +927,7 @@ export function AssetDetail({ asset, onBack }: AssetDetailProps) {
           className="py-4 px-4 rounded-2xl bg-zinc-900 border border-zinc-700 text-[#DFFF00] hover:bg-zinc-800 font-black text-[11px] uppercase tracking-widest active:scale-[0.98] transition-all flex items-center justify-center gap-2 disabled:opacity-50"
         >
           {isExporting ? <Loader2 className="w-4 h-4 animate-spin text-[#DFFF00]" /> : <Download className="w-4 h-4 text-[#DFFF00]" />}
-          <span>{isExporting ? 'Exporting PDF...' : 'Download Asset Report'}</span>
+          <span>{isExporting ? 'Exporting PDF...' : 'Download Report'}</span>
         </button>
         <button 
           onClick={toggleWatchlist}
@@ -894,6 +948,21 @@ export function AssetDetail({ asset, onBack }: AssetDetailProps) {
           Investments in {asset.category} carry market risks. Technical analysis suggests {asset.status.toLowerCase()} momentum. Always verify with VentureAM advisory before allocation.
         </p>
       </div>
+
+      {/* QR Code Scanner & Physical Tag Modal */}
+      {isQrScannerOpen && (
+        <AssetQrScannerModal
+          isOpen={isQrScannerOpen}
+          onClose={() => setIsQrScannerOpen(false)}
+          currentAssetSymbol={asset.symbol}
+          currentAssetName={asset.name}
+          onSelectScannedAsset={(scannedSymbol) => {
+            if (onSelectAsset) {
+              onSelectAsset(scannedSymbol);
+            }
+          }}
+        />
+      )}
     </motion.div>
   );
 }

@@ -28,6 +28,7 @@ import {
 import { motion, AnimatePresence } from 'framer-motion';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
+import { saveAndNotifyPdf } from '../services/reportNotificationService';
 import { generateAuditorOpinionPDF } from '../services/documentExportService';
 
 interface RegulatorDoc {
@@ -363,8 +364,9 @@ export default function RegulatoryArchive() {
         doc.text('Satuan Pengawas Intern (Internal Audit)', 14, currentY + 29);
         doc.text('President Director', pw - 85, currentY + 29);
 
-        // Save
-        doc.save(`${docItem.docNumber.replace(/[/\\?%*:|"<>]/g, '_')}.pdf`);
+        // Save & trigger toast notification with View File modal
+        const docFileName = `${docItem.docNumber.replace(/[/\\?%*:|"<>]/g, '_')}.pdf`;
+        saveAndNotifyPdf(doc, docFileName, `Arsip Regulasi: ${docItem.title}`);
       }
     } catch (err) {
       console.error('Error generating document:', err);
@@ -514,8 +516,9 @@ export default function RegulatoryArchive() {
       doc.text('Aidil Syahdan Al fitrah — President Director', 18, finalY + 36);
       doc.text('System Stamp: SHA256-VAM-REG-2026-AUDIT-TRAIL', 120, finalY + 36);
 
-      // Save document
-      doc.save(`VAM_Regulatory_Audit_Trail_Logs_${new Date().toISOString().split('T')[0]}.pdf`);
+      // Save document & trigger toast notification with View File modal
+      const auditLogsFileName = `VAM_Regulatory_Audit_Trail_Logs_${new Date().toISOString().split('T')[0]}.pdf`;
+      saveAndNotifyPdf(doc, auditLogsFileName, 'Laporan Jejak Audit Regulasi & Kepatuhan');
       
       setExportSuccess(true);
       setTimeout(() => setExportSuccess(false), 3000);

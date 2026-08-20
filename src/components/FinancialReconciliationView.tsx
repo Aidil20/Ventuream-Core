@@ -1,5 +1,6 @@
 import React, { useState, useMemo } from 'react';
 import { jsPDF } from 'jspdf';
+import { saveAndNotifyPdf } from '../services/reportNotificationService';
 import { 
   BarChart, 
   Bar, 
@@ -699,7 +700,8 @@ export default function FinancialReconciliationView({
         doc.text('Operational Custody & Settlement', 20, sigY + 28);
         doc.text('Aidil Syahdan Al Fitrah', 140, sigY + 28);
 
-        doc.save(`Financial_vs_Regulatory_Reconciliation_${Date.now()}.pdf`);
+        const recFileName = `Financial_vs_Regulatory_Reconciliation_${Date.now()}.pdf`;
+        saveAndNotifyPdf(doc, recFileName, 'Laporan Rekonsiliasi Keuangan vs Regulasi');
       } catch (e) {
         console.error('Failed to generate PDF:', e);
       } finally {

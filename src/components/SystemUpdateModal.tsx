@@ -193,17 +193,16 @@ export function SystemUpdateModal({ isOpen, onClose, onTriggerSystemRefresh }: S
     }
   };
 
-  if (!isOpen) return null;
-
   return (
     <AnimatePresence>
-      <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/80 backdrop-blur-md p-4 overflow-y-auto">
-        <motion.div 
-          initial={{ opacity: 0, scale: 0.95, y: 10 }}
-          animate={{ opacity: 1, scale: 1, y: 0 }}
-          exit={{ opacity: 0, scale: 0.95, y: 10 }}
-          className="bg-zinc-950 border border-zinc-800 rounded-3xl max-w-2xl w-full p-6 shadow-2xl relative text-white overflow-hidden"
-        >
+      {isOpen && (
+        <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/80 backdrop-blur-md p-4 overflow-y-auto">
+          <motion.div 
+            initial={{ opacity: 0, scale: 0.95, y: 10 }}
+            animate={{ opacity: 1, scale: 1, y: 0 }}
+            exit={{ opacity: 0, scale: 0.95, y: 10 }}
+            className="bg-zinc-950 border border-zinc-800 rounded-3xl max-w-2xl w-full p-6 shadow-2xl relative text-white overflow-hidden"
+          >
           {/* Subtle glowing header backdrop */}
           <div className="absolute top-0 right-0 w-80 h-80 bg-[#DFFF00]/5 blur-3xl rounded-full pointer-events-none -mr-20 -mt-20" />
 
@@ -431,6 +430,7 @@ export function SystemUpdateModal({ isOpen, onClose, onTriggerSystemRefresh }: S
           </div>
         </motion.div>
       </div>
+      )}
     </AnimatePresence>
   );
 }

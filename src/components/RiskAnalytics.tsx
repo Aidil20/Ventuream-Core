@@ -31,6 +31,7 @@ import {
 } from 'recharts';
 import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
+import { saveAndNotifyPdf } from '../services/reportNotificationService';
 
 interface PortfolioAsset {
   ticker: string;
@@ -622,9 +623,10 @@ export default function RiskAnalytics({ portfolioData, cashBalance }: RiskAnalyt
         doc.text(`• ${note}`, 14, holdingsFinalY + 23 + (offset * 4));
       });
 
-      // Save document
+      // Save document & trigger toast notification with View File modal
       const sceneFileName = stressScenario.toUpperCase();
-      doc.save(`VAM_Stress_Test_Report_${sceneFileName}_${new Date().toISOString().split('T')[0]}.pdf`);
+      const stressReportFileName = `VAM_Stress_Test_Report_${sceneFileName}_${new Date().toISOString().split('T')[0]}.pdf`;
+      saveAndNotifyPdf(doc, stressReportFileName, `Laporan Stress Testing Skenario Makro (${stressScenario})`);
     } catch (error) {
       console.error("Failed to generate and export Stress Test PDF:", error);
     }
@@ -813,8 +815,9 @@ export default function RiskAnalytics({ portfolioData, cashBalance }: RiskAnalyt
         doc.text(`• ${note}`, 14, thirdTableFinalY + 19 + (offset * 3.5));
       });
 
-      // Save document
-      doc.save(`VAM_Unified_Risk_Report_${new Date().toISOString().split('T')[0]}.pdf`);
+      // Save document & trigger toast notification with View File modal
+      const unifiedReportFileName = `VAM_Unified_Risk_Report_${new Date().toISOString().split('T')[0]}.pdf`;
+      saveAndNotifyPdf(doc, unifiedReportFileName, 'Laporan Manajemen Risiko Terpadu & VaR Konsolidasi');
     } catch (error) {
       console.error("Failed to generate and export Unified Risk Report PDF:", error);
     }

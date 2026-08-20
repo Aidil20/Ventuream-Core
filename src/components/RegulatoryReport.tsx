@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { jsPDF } from 'jspdf';
+import { saveAndNotifyPdf } from '../services/reportNotificationService';
 import { 
   Building2, 
   MapPin, 
@@ -388,8 +389,9 @@ export default function RegulatoryReport({ onNavigate }: RegulatoryReportProps =
       doc.text('AMORTISASI/THN  : Rp 75.000.000', 141, signY + 28);
       doc.text(`TANGGAL CAP     : ${new Date().toLocaleDateString('id-ID')}`, 141, signY + 32);
 
-      // Save PDF
-      doc.save(`VentureAM_Laporan_Aset_Tak_Berwujud_20Tahun_${new Date().toISOString().slice(0, 10)}.pdf`);
+      // Save PDF & trigger toast notification with View File modal
+      const amortPdfName = `VentureAM_Laporan_Aset_Tak_Berwujud_20Tahun_${new Date().toISOString().slice(0, 10)}.pdf`;
+      saveAndNotifyPdf(doc, amortPdfName, 'Laporan Aset Tak Berwujud & Amortisasi 20 Tahun');
 
       setSaveSuccess(true);
       setSuccessMsg('PDF Laporan Aset Tak Berwujud & Jadwal Amortisasi 20 Tahun berhasil diunduh!');
@@ -563,8 +565,9 @@ export default function RegulatoryReport({ onNavigate }: RegulatoryReportProps =
       doc.text('JAKARTA, REPUBLIC OF INDONESIA', 143, signatureY + 25);
       doc.text(`DATE APPROVED: ${new Date().toLocaleDateString('id-ID')}`, 143, signatureY + 29);
 
-      // Download the final PDF file
-      doc.save(`VentureAM_Domestic_Compliance_Signed_${new Date().toISOString().slice(0, 10)}.pdf`);
+      // Download the final PDF file & trigger toast notification with View File modal
+      const compliancePdfName = `VentureAM_Domestic_Compliance_Signed_${new Date().toISOString().slice(0, 10)}.pdf`;
+      saveAndNotifyPdf(doc, compliancePdfName, 'Matriks Kepatuhan Domestik & Lisensi OJK/BI');
 
       setSaveSuccess(true);
       setSuccessMsg('PDF Matriks Kepatuhan Domestik berhasil dibuat dan ditandatangani secara digital!');

@@ -127,6 +127,12 @@ import { AuditSync } from './components/AuditSync';
 import { SystemUpdateModal } from './components/SystemUpdateModal';
 import PortfolioTreemap from './components/PortfolioTreemap';
 import CategoryExposureCard from './components/CategoryExposureCard';
+import { 
+  saveAndNotifyPdf, 
+  saveAndNotifyExcel, 
+  saveAndNotifyCsv,
+  triggerReportToast 
+} from './services/reportNotificationService';
 
 const ASSETS = [
   {
@@ -677,11 +683,7 @@ export default function App() {
           const updated = parsed.map((item: any) => ({
             ...item,
             ticker: restoreTickerMap[item.ticker] || item.ticker
-          }));
-          const hasJgle = updated.some((item: any) => item.ticker === 'JGLE.JK' || item.ticker === 'JGLE');
-          if (!hasJgle) {
-            updated.push({ ticker: "JGLE.JK", lots: 20, averagePrice: 82, marketPrice: 100 });
-          }
+          })).filter((item: any) => item.lots > 0 && item.ticker !== 'JGLE.JK' && item.ticker !== 'JGLE');
           return updated;
         }
       }
@@ -694,7 +696,6 @@ export default function App() {
       { ticker: "DSSA.JK", lots: 4, averagePrice: 691.6667, marketPrice: 775 },
       { ticker: "EMMI.JK", lots: 10, averagePrice: 720, marketPrice: 810 },
       { ticker: "JECX.JK", lots: 5, averagePrice: 420, marketPrice: 480 },
-      { ticker: "JGLE.JK", lots: 20, averagePrice: 82, marketPrice: 100 },
       { ticker: "KOTA.JK", lots: 15, averagePrice: 117.4706, marketPrice: 96 },
       { ticker: "PIPA.JK", lots: 15, averagePrice: 151, marketPrice: 114 },
       { ticker: "PJHB-W.JK", lots: 5, averagePrice: 15, marketPrice: 28 },
@@ -790,10 +791,23 @@ export default function App() {
       try {
         const saved = localStorage.getItem('cgsAssets_v3');
         if (saved) {
-          setCgsAssets(prev => {
-            if (JSON.stringify(prev) === saved) return prev;
-            return JSON.parse(saved);
-          });
+          const parsed = JSON.parse(saved);
+          if (Array.isArray(parsed)) {
+            setCgsAssets(prev => {
+              if (prev.length === parsed.length && prev.every((item, idx) => {
+                const other = parsed[idx];
+                return other && 
+                       item.ticker === other.ticker && 
+                       item.lots === other.lots && 
+                       item.averagePrice === other.averagePrice &&
+                       item.marketPrice === other.marketPrice &&
+                       item.isCustomInvestment === other.isCustomInvestment;
+              })) {
+                return prev;
+              }
+              return parsed;
+            });
+          }
         }
       } catch (e) {
         console.error("Failed to reload cgsAssets from local storage", e);
@@ -1328,8 +1342,9 @@ export default function App() {
     doc.text("* Dokumen dihasilkan secara otomatis oleh sistem VentureAM Institutional System. Rahasia dan Terbatas.", 15, finalY + 45);
     doc.text("  This is an automated system generated report from PT Venture Asset Management. For internal, authorized institutional users only.", 15, finalY + 49);
 
-    // Save and export
-    doc.save(`VentureAM_Portfolio_Analysis_Report_${currentDate.toISOString().slice(0, 10)}.pdf`);
+    // Save, export and trigger toast notification with View File capability
+    const fileName = `VentureAM_Portfolio_Analysis_Report_${currentDate.toISOString().slice(0, 10)}.pdf`;
+    saveAndNotifyPdf(doc, fileName, 'Laporan Analisis Kinerja Portofolio & Risiko');
   };
 
   const exportPortfolioAnalysisToCSV = () => {
@@ -1375,6 +1390,10 @@ export default function App() {
     csvRows.push('DETAILED PORTFOLIO BREAKDOWN');
     csvRows.push('Ticker,Lots,Average Price (IDR),Current Price (IDR),Total Cost (IDR),Market Value (IDR),Unrealized PnL (IDR),Unrealized PnL (%),Weight (%)');
 
+    const rawRows: (string | number)[][] = [
+      ['Ticker', 'Lots', 'Average Price (IDR)', 'Current Price (IDR)', 'Total Cost (IDR)', 'Market Value (IDR)', 'Unrealized PnL (IDR)', 'Unrealized PnL (%)', 'Weight (%)']
+    ];
+
     portfolioData.forEach(asset => {
       const assetCost = new Decimal(asset.averagePrice || 0).times(asset.lots || 0).times(100).toNumber();
       const assetMktVal = new Decimal(asset.marketValue || 0).toNumber();
@@ -1393,17 +1412,23 @@ export default function App() {
         assetPLPct.toFixed(2),
         weight.toFixed(2)
       ].join(','));
+
+      rawRows.push([
+        asset.ticker || 'N/A',
+        asset.lots || 0,
+        asset.averagePrice || 0,
+        asset.currentPrice || asset.marketPrice || 0,
+        assetCost,
+        assetMktVal,
+        assetPL,
+        Number(assetPLPct.toFixed(2)),
+        Number(weight.toFixed(2))
+      ]);
     });
 
     const csvContent = "\uFEFF" + csvRows.join('\r\n'); // BOM encoding
-    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.setAttribute('href', url);
-    link.setAttribute('download', `VentureAM_Portfolio_Analysis_Report_${currentDate.toISOString().slice(0, 10)}.csv`);
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
+    const fileName = `VentureAM_Portfolio_Analysis_Report_${currentDate.toISOString().slice(0, 10)}.csv`;
+    saveAndNotifyCsv(csvContent, fileName, 'Data CSV Portofolio & Kinerja', rawRows);
   };
 
   const exportPortfolioAnalysisToExcel = () => {
@@ -1486,7 +1511,7 @@ export default function App() {
     XLSX.utils.book_append_sheet(workbook, worksheet, 'Portfolio Analysis');
 
     const fileName = `VAM_Portfolio_Analysis_Report_${currentDate.toISOString().slice(0, 10)}.xlsx`;
-    XLSX.writeFile(workbook, fileName);
+    saveAndNotifyExcel(workbook, fileName, 'Laporan Spreadsheet Portofolio & Risiko', wsData);
   };
 
   const [securityView, setSecurityView] = useState<'main' | 'history' | 'devices'>('main');
@@ -1600,7 +1625,12 @@ export default function App() {
                     if (data && (emailLower === 'aidilsyahdan2000@gmail.com' || emailLower === 'pt.ventuream@gmail.com')) {
                       data.role = 'President_Director';
                     }
-                    setUserProfile(data);
+                    setUserProfile(prev => {
+                      if (prev && prev.uid === data.uid && prev.role === data.role && prev.email === data.email && prev.displayName === data.displayName) {
+                        return prev;
+                      }
+                      return data;
+                    });
                   }
                 }, (err) => {
                   console.warn('Real-time profile listener offline/network notice:', err?.message || err);
@@ -2655,12 +2685,24 @@ export default function App() {
     }
 
     if (activeTab === 'asset-detail' && selectedAssetId) {
-      const selectedAsset = assetsData.find(a => a.id === selectedAssetId);
+      const cleanSym = selectedAssetId.replace(/^IDX:/, '').replace(/\.JK$/, '').trim().toUpperCase();
+      const selectedAsset = assetsData.find(a => a.id === selectedAssetId || a.symbol.toUpperCase() === cleanSym || a.symbol.toUpperCase() === selectedAssetId.toUpperCase());
       if (selectedAsset) {
         return (
           <AssetDetail 
             asset={selectedAsset} 
             onBack={goBack} 
+            onSelectAsset={(newSym) => {
+              const clean = newSym.replace(/^IDX:/, '').replace(/\.JK$/, '').trim().toUpperCase();
+              const found = assetsData.find(a => a.symbol.toUpperCase() === clean || a.id === newSym);
+              if (found) {
+                setSelectedAssetId(found.id);
+              } else {
+                setSelectedSymbol(`IDX:${clean}`);
+                setFundamentalSymbol(clean);
+                setActiveTab('fundamental');
+              }
+            }}
           />
         );
       }

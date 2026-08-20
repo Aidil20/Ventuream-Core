@@ -1,6 +1,7 @@
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import pptxgen from 'pptxgenjs';
+import { saveAndNotifyPdf } from './reportNotificationService';
 
 // ==========================================
 // GRAPHICAL UI DIAGRAM HELPERS FOR PDF
@@ -755,7 +756,7 @@ export async function generatePresentationPDF() {
   doc.setTextColor(140, 150, 170);
   doc.text("Email Dukungan: pt.ventuream@gmail.com | aidilsyahdan2000@gmail.com", pageWidth / 2, 160, { align: 'center' });
 
-  doc.save('VentureAM_Presentation_Deck.pdf');
+  saveAndNotifyPdf(doc, 'VentureAM_Presentation_Deck.pdf', 'Dokumen Presentasi Regulator & Eksekutif');
 }
 
 export async function generatePresentationPPTX() {
@@ -1346,8 +1347,8 @@ export async function generateUserManualPDF() {
     headStyles: { fillColor: [30, 42, 60], textColor: [223, 255, 0] }
   });
 
-  // Save PDF
-  doc.save('VentureAM_User_Manual_Guide.pdf');
+  // Save PDF & trigger toast
+  saveAndNotifyPdf(doc, 'VentureAM_User_Manual_Guide.pdf', 'Panduan Pengguna Sistem (User Manual Guide)');
 }
 
 export async function generateUserManualPPTX() {
@@ -1787,7 +1788,8 @@ export async function generateWeeklyMarketInsightPDF(data?: WeeklyMarketInsightR
   doc.text(`VentureAM Institutional System | Hal 3 dari 3`, 14, ph - 10);
   doc.text(`Dicetak: ${new Date().toLocaleString('id-ID')}`, pw - 60, ph - 10);
 
-  doc.save(`Weekly_Market_Insight_${new Date().toISOString().slice(0, 10)}.pdf`);
+  const weeklyFileName = `Weekly_Market_Insight_${new Date().toISOString().slice(0, 10)}.pdf`;
+  saveAndNotifyPdf(doc, weeklyFileName, 'Laporan Insight Pasar Mingguan');
   return doc;
 }
 
@@ -2132,7 +2134,8 @@ export async function generateSystemBlueprintPDF(): Promise<jsPDF> {
   doc.text("VentureAM Official System Architecture Blueprint | Halaman 4 dari 4", 10, ph - 6);
   doc.text(`Dicetak: ${new Date().toLocaleString('id-ID')}`, pw - 55, ph - 6);
 
-  doc.save(`VentureAM_Official_System_Blueprint_${new Date().toISOString().slice(0, 10)}.pdf`);
+  const bpFileName = `VentureAM_Official_System_Blueprint_${new Date().toISOString().slice(0, 10)}.pdf`;
+  saveAndNotifyPdf(doc, bpFileName, 'Dokumen Cetak Biru Arsitektur Sistem');
   return doc;
 }
 
@@ -3083,7 +3086,8 @@ export async function generateValuationInvoicePDF(): Promise<jsPDF> {
   doc.text("VentureAM Valuation Invoice & Intangible Asset Certificate | Halaman 4 dari 4", 10, ph - 6);
   doc.text(`Dicetak: ${new Date().toLocaleString('id-ID')}`, pw - 55, ph - 6);
 
-  doc.save(`VentureAM_Faktur_Penilaian_Aset_Tak_Berwujud_${new Date().toISOString().slice(0, 10)}.pdf`);
+  const invoiceFileName = `VentureAM_Faktur_Penilaian_Aset_Tak_Berwujud_${new Date().toISOString().slice(0, 10)}.pdf`;
+  saveAndNotifyPdf(doc, invoiceFileName, 'Faktur Penilaian & Sertifikat Aset Tak Berwujud');
   return doc;
 }
 
@@ -3374,7 +3378,8 @@ export async function generateAuditorOpinionPDF(): Promise<jsPDF> {
   doc.text("Laporan Reviu Auditor Internal PT Venture Asset Management (Unaudited) | Halaman 2 dari 2", 14, ph - 6);
   doc.text(`Dicetak: ${new Date().toLocaleString('id-ID')}`, pw - 55, ph - 6);
 
-  doc.save(`VentureAM_Laporan_Reviu_Auditor_Internal_Unaudited_${new Date().toISOString().slice(0, 10)}.pdf`);
+  const auditFileName = `VentureAM_Laporan_Reviu_Auditor_Internal_Unaudited_${new Date().toISOString().slice(0, 10)}.pdf`;
+  saveAndNotifyPdf(doc, auditFileName, 'Laporan Reviu Auditor Internal Perseroan');
   return doc;
 }
 

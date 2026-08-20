@@ -1,4 +1,4 @@
-import { getStockInfo, normalizeTicker, formatStockPrice, getKnownStockPrice, roundToValidTick } from './stockUtils';
+import { getStockInfo, normalizeTicker, formatStockPrice, getKnownStockPrice, roundToValidTick, getTickSize } from './stockUtils';
 
 export interface OHLCVBar {
   date: string;
@@ -52,6 +52,7 @@ export interface SwingAnalysisResult {
   rangeHigh: number;
   rangeLow: number;
   rangeSpreadPct: number;
+  pivotPoint: number;
   detectedSwingHighs: SwingPoint[];
   detectedSwingLows: SwingPoint[];
   resistanceBands: SRBand[];
@@ -449,11 +450,12 @@ export function analyzeAssetSwingSupportResistance(
 
   const resistanceBands: SRBand[] = finalResistancePrices.slice(0, 4).map((price, idx) => {
     const corePrice = roundToValidTick(price, info.market);
-    const halfSpread = roundToValidTick(corePrice * 0.008, info.market);
+    const tick = getTickSize(corePrice, info.market);
+    const halfSpread = Math.max(tick, roundToValidTick(corePrice * 0.008, info.market));
     const upperPrice = roundToValidTick(corePrice + halfSpread, info.market);
-    const lowerPrice = roundToValidTick(corePrice - halfSpread, info.market);
+    const lowerPrice = roundToValidTick(Math.max(1, corePrice - halfSpread), info.market);
     const distancePct = Math.round(((corePrice - currentPrice) / currentPrice) * 1000) / 10;
-    const bandSpreadPct = Math.round(((upperPrice - lowerPrice) / corePrice) * 1000) / 10;
+    const bandSpreadPct = Math.max(0.5, Math.round(((upperPrice - lowerPrice) / corePrice) * 1000) / 10);
     const code = `R${idx + 1}`;
     
     let tier: SRBand['tier'] = idx === 0 ? 'MINOR' : idx === 1 ? 'INTERMEDIATE' : 'MAJOR';
@@ -516,11 +518,12 @@ export function analyzeAssetSwingSupportResistance(
 
   const supportBands: SRBand[] = finalSupportPrices.slice(0, 4).map((price, idx) => {
     const corePrice = roundToValidTick(price, info.market);
-    const halfSpread = roundToValidTick(corePrice * 0.008, info.market);
+    const tick = getTickSize(corePrice, info.market);
+    const halfSpread = Math.max(tick, roundToValidTick(corePrice * 0.008, info.market));
     const upperPrice = roundToValidTick(corePrice + halfSpread, info.market);
-    const lowerPrice = roundToValidTick(corePrice - halfSpread, info.market);
+    const lowerPrice = roundToValidTick(Math.max(1, corePrice - halfSpread), info.market);
     const distancePct = Math.round(((corePrice - currentPrice) / currentPrice) * 1000) / 10;
-    const bandSpreadPct = Math.round(((upperPrice - lowerPrice) / corePrice) * 1000) / 10;
+    const bandSpreadPct = Math.max(0.5, Math.round(((upperPrice - lowerPrice) / corePrice) * 1000) / 10);
     const code = `S${idx + 1}`;
 
     let tier: SRBand['tier'] = idx === 0 ? 'MINOR' : idx === 1 ? 'INTERMEDIATE' : 'MAJOR';
@@ -576,9 +579,10 @@ export function analyzeAssetSwingSupportResistance(
     }
 
     const corePrice = roundToValidTick(rawFibPrice, info.market);
-    const halfSpread = roundToValidTick(corePrice * 0.006, info.market);
+    const tick = getTickSize(corePrice, info.market);
+    const halfSpread = Math.max(tick, roundToValidTick(corePrice * 0.006, info.market));
     const upperPrice = roundToValidTick(corePrice + halfSpread, info.market);
-    const lowerPrice = roundToValidTick(corePrice - halfSpread, info.market);
+    const lowerPrice = roundToValidTick(Math.max(1, corePrice - halfSpread), info.market);
     const distPct = Math.round(((corePrice - currentPrice) / currentPrice) * 1000) / 10;
 
     return {
@@ -696,6 +700,7 @@ alertcondition(close <= lowBand * 1.01, title="Support Alert", message="[VAM] ${
     rangeHigh: maxHigh,
     rangeLow: minLow,
     rangeSpreadPct,
+    pivotPoint: roundToValidTick(pivotPoint, info.market),
     detectedSwingHighs: swingHighs,
     detectedSwingLows: swingLows,
     resistanceBands,

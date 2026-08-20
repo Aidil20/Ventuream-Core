@@ -1008,7 +1008,10 @@ export const IdxPriceList = () => {
                                   </span>
                                 </div>
                                 <div className="p-1 h-[270.5px] w-full relative">
-                                  <TradingViewWidget symbol={getTradingViewWidgetSymbol(symbol, selectedMarket)} />
+                                  <TradingViewWidget 
+                                    symbol={getTradingViewWidgetSymbol(symbol, selectedMarket)} 
+                                    overrideCurrentPrice={data?.price}
+                                  />
                                 </div>
                               </div>
 

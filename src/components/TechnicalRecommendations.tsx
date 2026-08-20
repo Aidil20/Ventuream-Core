@@ -1294,7 +1294,10 @@ export const TechnicalRecommendations: React.FC = () => {
                       <span className="w-1.5 h-1.5 bg-emerald-500 rounded-full animate-ping" />
                       TRADINGVIEW LIVE SYNCED
                     </div>
-                    <TradingViewWidget symbol={getTradingViewSymbol(selectedItem, activeMarket)} />
+                    <TradingViewWidget 
+                      symbol={getTradingViewSymbol(selectedItem, activeMarket)} 
+                      overrideCurrentPrice={typeof selectedItem.price === 'number' ? selectedItem.price : undefined}
+                    />
                   </div>
 
                   {/* Indicators Check */}

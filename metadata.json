@@ -1,6 +1,8 @@
 {
   "name": "Venture-Ai",
   "description": "Institutional asset management & technical terminal with interactive TradingView chart widgets, automated Swing High/Low detection, visual Support & Resistance bands overlay, and ARA day trading analytics.",
-  "requestFramePermissions": [],
+  "requestFramePermissions": [
+    "camera"
+  ],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }

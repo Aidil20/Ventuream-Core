@@ -1,6 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
+import { saveAndNotifyPdf } from '../services/reportNotificationService';
 import { 
   FileSpreadsheet, 
   Calendar, 
@@ -263,7 +264,8 @@ export default function IntangibleAssetAdjustingEntries({ onApplyAdjustment }: I
     doc.setFont('helvetica', 'bold');
     doc.text('[APPROVED - CAPITALIZED]', 150, signY + 14);
 
-    doc.save(`Voucher_Jurnal_Penyesuaian_Aset_Tak_Berwujud_${INVOICE_NO}_${new Date().toISOString().split('T')[0]}.pdf`);
+    const voucherFileName = `Voucher_Jurnal_Penyesuaian_Aset_Tak_Berwujud_${INVOICE_NO}_${new Date().toISOString().split('T')[0]}.pdf`;
+    saveAndNotifyPdf(doc, voucherFileName, `Voucher Jurnal Penyesuaian (${INVOICE_NO})`);
   };
 
   return (

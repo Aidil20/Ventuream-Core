@@ -28,9 +28,10 @@ import {
   Sliders,
   Share2
 } from 'lucide-react';
-import { DailyTradingStock, MaDynamicIndicators, computeMaIndicators } from './DailyTradingAutoAnalyst';
+import { DailyTradingStock, MaDynamicIndicators, computeMaIndicators, getDynamicAiThesis } from './DailyTradingAutoAnalyst';
 import { formatStockPrice, getTradingViewSymbol, getStockInfo } from '../lib/stockUtils';
 import { analyzeAssetSwingSupportResistance } from '../lib/swingDetection';
+import { VamNativeSRChart } from './VamNativeSRChart';
 
 interface DailyStockDetailAnalystModalProps {
   stock: DailyTradingStock | null;
@@ -59,11 +60,17 @@ export const DailyStockDetailAnalystModal: React.FC<DailyStockDetailAnalystModal
   const [tradingCapital, setTradingCapital] = useState<number>(10000000); // default Rp 10 Juta
   const [maxRiskPercent, setMaxRiskPercent] = useState<number>(2); // 2% risk rule
 
+  // Dynamically computed AI thesis memoized before any conditional returns (Rules of Hooks)
+  const dynamicAiThesis = useMemo(() => {
+    if (!stock) return '';
+    return getDynamicAiThesis(stock);
+  }, [stock]);
+
   if (!stock || !isOpen) return null;
 
   const tradingViewSym = getTradingViewSymbol(stock.symbol);
   const maInd: MaDynamicIndicators = stock.maIndicators || computeMaIndicators(stock.priceNum, stock.market, stock.maEmaCross?.ma10);
-  const swingSR = analyzeAssetSwingSupportResistance(stock.symbol, 60);
+  const swingSR = analyzeAssetSwingSupportResistance(stock.symbol, 60, stock.priceNum);
 
   // Parse numeric values for target & stoploss
   const cleanNumber = (valStr: string): number => {
@@ -71,16 +78,48 @@ export const DailyStockDetailAnalystModal: React.FC<DailyStockDetailAnalystModal
     return isNaN(num) ? stock.priceNum : num;
   };
 
-  // Estimate ARA % Limit by BEI rules (Auto Rejection Atas)
-  const getAraLimitPercent = (price: number): number => {
-    if (stock.market !== 'IDX') return 20;
-    if (price < 200) return 35; // < Rp 200 = 35% ARA
-    if (price <= 5000) return 25; // Rp 200 - 5000 = 25% ARA
-    return 20; // > Rp 5000 = 20% ARA
+  // Estimate ARA / LULD / Dynamic Limit % based on Exchange Rules
+  const getExchangeLimitInfo = (price: number, market: string) => {
+    if (market === 'IDX') {
+      let araPct = 25;
+      if (price <= 200) araPct = 35;
+      else if (price <= 5000) araPct = 25;
+      else araPct = 20;
+      return {
+        type: 'ARA_CAP',
+        label: 'Potensi ARA (BEI Rules)',
+        badge: `POTENSI ARA +${araPct}%`,
+        percent: araPct,
+        limitPrice: Math.floor(price * (1 + araPct / 100)),
+        limitPriceStr: `Rp ${Math.floor(price * (1 + araPct / 100)).toLocaleString('id-ID')}`
+      };
+    } else if (market === 'US') {
+      const luldPct = price > 100 ? 5 : 10;
+      const squeezePct = 15;
+      return {
+        type: 'LULD_BAND',
+        label: 'LULD Volatility Band (Wall Street)',
+        badge: `LULD BAND +${luldPct}% / SQUEEZE +${squeezePct}%`,
+        percent: squeezePct,
+        limitPrice: +(price * (1 + squeezePct / 100)).toFixed(2),
+        limitPriceStr: `$${(price * (1 + squeezePct / 100)).toFixed(2)}`
+      };
+    } else {
+      const limitPct = 20;
+      return {
+        type: 'GLOBAL_LIMIT',
+        label: 'Global Dynamic Price Cap',
+        badge: `GLOBAL LIMIT +${limitPct}%`,
+        percent: limitPct,
+        limitPrice: +(price * (1 + limitPct / 100)).toFixed(2),
+        limitPriceStr: `$${(price * (1 + limitPct / 100)).toFixed(2)}`
+      };
+    }
   };
 
-  const araPercent = getAraLimitPercent(stock.priceNum);
-  const estimatedAraPrice = Math.round(stock.priceNum * (1 + araPercent / 100));
+  const exchangeLimit = getExchangeLimitInfo(stock.priceNum, stock.market);
+  const araPercent = exchangeLimit.percent;
+  const estimatedAraPrice = exchangeLimit.limitPrice;
 
   const tpPriceNum = cleanNumber(stock.targetPrice);
   const slPriceNum = cleanNumber(stock.stopLoss);
@@ -90,7 +129,7 @@ export const DailyStockDetailAnalystModal: React.FC<DailyStockDetailAnalystModal
   const lotSize = isIdx ? 100 : 1; // 1 Lot = 100 shares in IDX
   const costPerLot = stock.priceNum * lotSize;
   const maxRiskAmount = (tradingCapital * maxRiskPercent) / 100;
-  const riskPerShare = Math.max(1, stock.priceNum - slPriceNum);
+  const riskPerShare = Math.max(0.01, stock.priceNum - slPriceNum);
   const riskPerLot = riskPerShare * lotSize;
 
   // Max lots based on risk limit or capital
@@ -103,15 +142,16 @@ export const DailyStockDetailAnalystModal: React.FC<DailyStockDetailAnalystModal
   const potentialLossAtSL = recommendedLots * lotSize * riskPerShare;
 
   const handleCopyTradingPlan = () => {
-    const text = `📊 [VAM DAY TRADING & POTENSI ARA PLAN]
+    const text = `📊 [VAM DAY TRADING — ${stock.market === 'IDX' ? 'POTENSI ARA BEI' : stock.market === 'US' ? 'WALL STREET MOMENTUM' : 'GLOBAL HUB'} PLAN]
 Ticker: ${stock.symbol} (${stock.name})
+Pasar: ${stock.market}
 Harga Terkini: ${stock.price} (${stock.change})
-ARA Limit Target: ${isIdx ? `IDR ${estimatedAraPrice.toLocaleString('id-ID')}` : `$${estimatedAraPrice}`} (+${araPercent}%)
+${exchangeLimit.label}: ${exchangeLimit.limitPriceStr} (+${exchangeLimit.percent}%)
 
 🎯 EKSEKUSI TRADING:
 • Entry Zone: ${stock.entryZone}
 • Target Profit 1 (TP): ${stock.targetPrice}
-• Target ARA (TP 2): ${isIdx ? `IDR ${estimatedAraPrice.toLocaleString('id-ID')}` : `$${estimatedAraPrice}`}
+• Target Limit/Squeeze (TP 2): ${exchangeLimit.limitPriceStr}
 • Stop Loss (SL): ${stock.stopLoss}
 • Risk/Reward: ${stock.riskReward}
 
@@ -119,10 +159,10 @@ ARA Limit Target: ${isIdx ? `IDR ${estimatedAraPrice.toLocaleString('id-ID')}` :
 • Order Book: ${stock.orderBook.bidVolumeRatioStr}
 • Volume Surge: ${stock.volRatio}x Rata-rata (${stock.orderBook.volumeVsMa20})
 • Momentum: MACD ${stock.momentum.macdStatus} | RSI ${stock.momentum.rsiVal} | BB Breakout: ${stock.momentum.bbBreakout ? 'YES' : 'NO'}
-• Bandar Flow: ${stock.bandarAndFundamentals.topBrokersAccumulation} (${stock.bandarAndFundamentals.brokerNetBuyVal})
+• Bandar/Inst Flow: ${stock.bandarAndFundamentals.topBrokersAccumulation} (${stock.bandarAndFundamentals.brokerNetBuyVal})
 • Support Dinamis: MA5 (${maInd.ma5Str}) | MA10 (${maInd.ma10Str})
 
-💡 AI Rationale: "${stock.aiRationale}"
+💡 Thesis Analis AI: "${dynamicAiThesis}"
 ⚡ VentureAM Institutional Intelligence Core`;
 
     navigator.clipboard.writeText(text);
@@ -131,7 +171,7 @@ ARA Limit Target: ${isIdx ? `IDR ${estimatedAraPrice.toLocaleString('id-ID')}` :
   };
 
   const handleCopySummary = () => {
-    const text = `[VAM ANALYST DETAIL] ${stock.symbol} @ ${stock.price} | Score: ${stock.matchScore}/100 | ${maInd.signalLabel} | R/R: ${stock.riskReward} | Katalis: ${stock.bandarAndFundamentals.catalystDetail}`;
+    const text = `[VAM ANALYST DETAIL] ${stock.symbol} (${stock.market}) @ ${stock.price} | Score: ${stock.matchScore}/100 | ${maInd.signalLabel} | R/R: ${stock.riskReward} | Katalis: ${stock.bandarAndFundamentals.catalystDetail}`;
     navigator.clipboard.writeText(text);
     setCopiedSummary(true);
     setTimeout(() => setCopiedSummary(false), 2000);
@@ -165,8 +205,14 @@ ARA Limit Target: ${isIdx ? `IDR ${estimatedAraPrice.toLocaleString('id-ID')}` :
                 <span className="px-2 py-0.5 rounded-md text-[9px] font-mono font-black uppercase bg-[#deff9a] text-black shadow-sm">
                   {stock.matchScore}% VAM MATCH
                 </span>
-                <span className="px-2 py-0.5 rounded-md text-[9px] font-mono font-bold uppercase bg-purple-500/20 text-purple-300 border border-purple-500/30">
-                  POTENSI ARA +{araPercent}%
+                <span className={`px-2 py-0.5 rounded-md text-[9px] font-mono font-bold uppercase border ${
+                  stock.market === 'IDX' 
+                    ? 'bg-amber-500/20 text-amber-300 border-amber-500/30' 
+                    : stock.market === 'US'
+                    ? 'bg-sky-500/20 text-sky-300 border-sky-500/30'
+                    : 'bg-purple-500/20 text-purple-300 border-purple-500/30'
+                }`}>
+                  {exchangeLimit.badge}
                 </span>
               </div>
               <p className="text-xs text-zinc-400 font-sans truncate max-w-md">
@@ -289,7 +335,7 @@ ARA Limit Target: ${isIdx ? `IDR ${estimatedAraPrice.toLocaleString('id-ID')}` :
                   <span>Thesis Analis AI (VAM Core Engine)</span>
                 </div>
                 <p className="text-xs sm:text-sm text-zinc-200 leading-relaxed italic border-l-2 border-[#deff9a] pl-3">
-                  "{stock.aiRationale}"
+                  "{dynamicAiThesis}"
                 </p>
               </div>
 
@@ -485,6 +531,11 @@ ARA Limit Target: ${isIdx ? `IDR ${estimatedAraPrice.toLocaleString('id-ID')}` :
           {/* TAB 3: SWING SUPPORT & RESISTANCE BANDS & FIBONACCI */}
           {activeTab === 'SWING_SR' && (
             <div className="space-y-4 font-mono text-xs">
+              {/* Native Interactive Candlestick & S/R Chart */}
+              <div className="w-full">
+                <VamNativeSRChart symbol={stock.symbol} height={380} overrideCurrentPrice={stock.priceNum} />
+              </div>
+
               <div className="p-4 rounded-2xl bg-zinc-900/70 border border-zinc-800 space-y-3">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2 text-[#deff9a] font-bold uppercase">

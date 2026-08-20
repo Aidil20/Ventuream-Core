@@ -28,6 +28,7 @@ import {
 import * as XLSX from 'xlsx';
 import HoldingCard from './HoldingCard';
 import { getHoldingNote } from '../lib/notes';
+import { saveAndNotifyPdf, saveAndNotifyExcel } from '../services/reportNotificationService';
 
 export interface PortfolioAsset {
   ticker: string;
@@ -341,7 +342,8 @@ export const generateHoldingsPDF = (
     doc.text('VentureAM Institutional System © 2026', 14, pageHeight - 8);
   }
 
-  doc.save(`VAM_Holdings_Details_Report_${currentDate.toISOString().slice(0, 10)}.pdf`);
+  const fileName = `VAM_Holdings_Details_Report_${currentDate.toISOString().slice(0, 10)}.pdf`;
+  saveAndNotifyPdf(doc, fileName, 'Laporan Rincian Kepemilikan Saham & Aset');
 };
 
 // Export to Excel spreadsheet helper using standard CSV data structure
@@ -429,7 +431,7 @@ export const generateHoldingsExcel = (
   XLSX.utils.book_append_sheet(workbook, worksheet, 'Portfolio Analysis');
 
   const fileName = `VAM_Portfolio_Analysis_Report_${currentDate.toISOString().slice(0, 10)}.xlsx`;
-  XLSX.writeFile(workbook, fileName);
+  saveAndNotifyExcel(workbook, fileName, 'Laporan Rincian Portofolio & Kepemilikan Saham', wsData);
 };
 
 export default function GroupedHoldingCards({

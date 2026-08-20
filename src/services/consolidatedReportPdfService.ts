@@ -1,7 +1,8 @@
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
+import { saveAndNotifyPdf } from './reportNotificationService';
 
-interface FinancialParams {
+export interface FinancialParams {
   financialValues: any;
   portfolioData: any[];
   lastUpdateTime: string;
@@ -9,19 +10,36 @@ interface FinancialParams {
     formattedInd: string;
     formattedEng: string;
   };
+  periodOptions?: {
+    periodType: 'MONTHLY' | 'QUARTERLY' | 'SEMI_ANNUAL' | 'ANNUAL' | 'CONSOLIDATED';
+    periodLabel: string;
+    periodSubLabel?: string;
+    periodCode?: string;
+    statusBadge?: string;
+    realizedPeriodProfit?: number;
+    periodNotes?: string;
+  };
 }
 
 export const generateConsolidatedBilingualPDF = async ({
   financialValues,
   portfolioData,
   lastUpdateTime,
-  reportingDate
+  reportingDate,
+  periodOptions
 }: FinancialParams) => {
   const doc = new jsPDF({
     orientation: 'portrait',
     unit: 'mm',
     format: 'a4'
   });
+
+  const isPeriodSpecific = !!periodOptions && periodOptions.periodType !== 'CONSOLIDATED';
+  const periodType = periodOptions?.periodType || 'CONSOLIDATED';
+  const periodLabel = periodOptions?.periodLabel || 'LAPORAN KEUANGAN KONSOLIDASIAN (EDISI BILINGUAL INDONESIA - INGGRIS)';
+  const periodSubLabel = periodOptions?.periodSubLabel || 'CONSOLIDATED FINANCIAL STATEMENTS & AUDIT NOTES (PSAK & IFRS COMPLIANCE)';
+  const periodCode = periodOptions?.periodCode || 'VAM-FS-CONS-2026-0818';
+  const statusBadge = periodOptions?.statusBadge || 'TERVERIFIKASI SISTEM AKUNTANSI VAM';
 
   const formatIdr = (val: number, useParensForNegative = false) => {
     if (val === 0 || !val) return '0';
@@ -89,28 +107,28 @@ export const generateConsolidatedBilingualPDF = async ({
   // ==========================================
   // Header Banner
   doc.setFillColor(15, 15, 18);
-  doc.rect(14, 16, 182, 38, 'F');
+  doc.rect(14, 16, 182, 40, 'F');
 
   doc.setFont('helvetica', 'bold');
-  doc.setFontSize(16);
+  doc.setFontSize(15);
   doc.setTextColor(223, 255, 0); // VentureAM Neon Accent
-  doc.text('PT VENTURE ASSET MANAGEMENT', 20, 26);
+  doc.text('PT VENTURE ASSET MANAGEMENT', 20, 25);
 
-  doc.setFontSize(11);
+  doc.setFontSize(10.5);
   doc.setTextColor(255, 255, 255);
-  doc.text('LAPORAN KEUANGAN KONSOLIDASIAN (EDISI BILINGUAL INDONESIA - INGGRIS)', 20, 34);
+  doc.text(periodLabel, 20, 33);
 
   doc.setFont('helvetica', 'normal');
-  doc.setFontSize(8.5);
+  doc.setFontSize(8);
   doc.setTextColor(180, 180, 180);
-  doc.text('CONSOLIDATED FINANCIAL STATEMENTS & AUDIT NOTES (PSAK & IFRS COMPLIANCE)', 20, 41);
-  doc.text(`Periode: Tahun Berjalan 2026 YTD & Buku Penuh 2025 Komparatif  |  Per ${reportingDate.formattedInd}`, 20, 48);
+  doc.text(periodSubLabel, 20, 40);
+  doc.text(`Periode: ${periodOptions?.periodSubLabel || 'Tahun Fiskal 2026 YTD & Buku Penuh 2025 Komparatif'}  |  Per ${reportingDate.formattedInd}`, 20, 47);
 
   // Metadata Card
-  let y = 60;
+  let y = 62;
   doc.setFillColor(248, 249, 250);
   doc.setDrawColor(225, 228, 232);
-  doc.roundedRect(14, y, 182, 36, 2, 2, 'FD');
+  doc.roundedRect(14, y, 182, 38, 2, 2, 'FD');
 
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(8.5);
@@ -120,9 +138,9 @@ export const generateConsolidatedBilingualPDF = async ({
   doc.setFont('helvetica', 'normal');
   doc.setFontSize(8);
   doc.setTextColor(70, 70, 70);
-  doc.text('• Nomor Registrasi: VAM-FS-CONS-2026-0814', 18, y + 13);
+  doc.text(`• Nomor Registrasi: ${periodCode}`, 18, y + 13);
   doc.text('• Basis Akuntansi: SAK / PSAK 1, PSAK 71, PSAK 2, PSAK 19 & IFRS 9, IAS 1, IAS 7, IAS 38', 18, y + 19);
-  doc.text('• Status Pemeriksaan: Unaudited by KAP / Reviewed by Satuan Pengawas Intern (SPI)', 18, y + 25);
+  doc.text(`• Status Pemeriksaan: Unaudited by KAP / Reviewed by SPI (${statusBadge})`, 18, y + 25);
   doc.text(`• Timestamp Cetak: ${lastUpdateTime}  |  Mata Uang Pelaporan: Rupiah (IDR)`, 18, y + 31);
 
   // Key Financial Highlights
@@ -504,19 +522,20 @@ export const generateConsolidatedBilingualPDF = async ({
     doc.setFont('helvetica', 'bold');
     doc.setFontSize(7.5);
     doc.setTextColor(100, 100, 100);
-    doc.text('PT VENTURE ASSET MANAGEMENT  |  LAPORAN KEUANGAN KONSOLIDASIAN (PSAK & IFRS)', 14, 9);
+    doc.text(`PT VENTURE ASSET MANAGEMENT  |  ${periodLabel.toUpperCase()} (PSAK & IFRS)`, 14, 9);
     doc.setFont('helvetica', 'normal');
-    doc.text('CONFIDENTIAL & INSTITUTIONAL', 196, 9, { align: 'right' });
+    doc.text(`KODE: ${periodCode}`, 196, 9, { align: 'right' });
 
     // Footer
     doc.line(14, 284, 196, 284);
     doc.setFontSize(7.5);
     doc.setTextColor(120, 120, 120);
-    doc.text(`Dokumen Resmi Konsolidasian  |  Bilingual Edition (ID/EN)  |  SHA-256 Digest Verified`, 14, 289);
+    doc.text(`Dokumen Resmi Penutup Periode  |  Bilingual Edition (ID/EN)  |  SHA-256 Digest Verified`, 14, 289);
     doc.text(`Halaman ${i} dari ${pageCount} / Page ${i} of ${pageCount}`, 196, 289, { align: 'right' });
   }
 
-  const fileName = `VentureAM_Laporan_Keuangan_Konsolidasi_Bilingual_PSAK_IFRS_${new Date().toISOString().split('T')[0]}.pdf`;
-  doc.save(fileName);
+  const sanitizedCode = (periodOptions?.periodCode || 'CONS-2026').replace(/[^a-zA-Z0-9_-]/g, '_');
+  const fileName = `VentureAM_Laporan_Penutup_${sanitizedCode}_${new Date().toISOString().split('T')[0]}.pdf`;
+  saveAndNotifyPdf(doc, fileName, `Laporan Keuangan Penutup Periode (${periodOptions?.periodLabel || sanitizedCode})`);
   return fileName;
 };

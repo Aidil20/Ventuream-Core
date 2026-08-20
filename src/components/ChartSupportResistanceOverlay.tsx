@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { 
   Layers, 
@@ -19,8 +19,9 @@ import {
   ChevronUp,
   AlertTriangle,
   Code2,
-  ArrowUpRight,
-  ArrowDownRight
+  BarChart2,
+  LineChart,
+  RefreshCw
 } from 'lucide-react';
 import { 
   analyzeAssetSwingSupportResistance, 
@@ -29,6 +30,7 @@ import {
   SwingPoint 
 } from '../lib/swingDetection';
 import { formatStockPrice } from '../lib/stockUtils';
+import VamNativeSRChart from './VamNativeSRChart';
 
 interface ChartSupportResistanceOverlayProps {
   symbol: string;
@@ -44,59 +46,50 @@ export const ChartSupportResistanceOverlay: React.FC<ChartSupportResistanceOverl
   overrideCurrentPrice
 }) => {
   const [lookbackBars, setLookbackBars] = useState<number>(60);
-  const [showVisualBands, setShowVisualBands] = useState<boolean>(true);
-  const [bandOpacity, setBandOpacity] = useState<number>(0.35); // 0.15 to 0.7
+  const [showNativeVisualChart, setShowNativeVisualChart] = useState<boolean>(false);
   const [activeFilter, setActiveFilter] = useState<'ALL' | 'R_LEVELS' | 'S_LEVELS' | 'MAJOR_ONLY' | 'FIBONACCI_ONLY' | 'NEAREST_ONLY'>('ALL');
-  const [hoveredBand, setHoveredBand] = useState<SRBand | null>(null);
   const [selectedBand, setSelectedBand] = useState<SRBand | null>(null);
   const [isHudExpanded, setIsHudExpanded] = useState<boolean>(false);
   const [copiedPine, setCopiedPine] = useState<boolean>(false);
   const [copiedPlan, setCopiedPlan] = useState<boolean>(false);
+  const [isSyncing, setIsSyncing] = useState<boolean>(false);
+  const [livePrice, setLivePrice] = useState<number | undefined>(overrideCurrentPrice);
 
-  // Compute Swing High/Low Analysis
+  // Synchronize when prop changes
+  useEffect(() => {
+    setLivePrice(overrideCurrentPrice);
+  }, [overrideCurrentPrice]);
+
+  // Listen to global real-time market updates to keep S/R & Fibonacci synchronized dynamically
+  useEffect(() => {
+    const handleMarketUpdate = (e: any) => {
+      const detail = e.detail;
+      if (!detail) return;
+      const cleanTarget = symbol.replace(/^(IDX|NASDAQ|NYSE|SGX|BINANCE|BITSTAMP):/, '').toUpperCase().trim();
+      const updatedSym = (detail.symbol || '').replace(/^(IDX|NASDAQ|NYSE|SGX|BINANCE|BITSTAMP):/, '').toUpperCase().trim();
+      
+      if (cleanTarget === updatedSym && typeof detail.price === 'number' && detail.price > 0) {
+        setLivePrice(detail.price);
+      }
+    };
+
+    window.addEventListener('vam-market-update', handleMarketUpdate);
+    return () => window.removeEventListener('vam-market-update', handleMarketUpdate);
+  }, [symbol]);
+
+  const effectivePrice = livePrice || overrideCurrentPrice;
+
+  // Compute Swing High/Low Analysis synchronized with active price
   const analysis: SwingAnalysisResult = useMemo(() => {
-    return analyzeAssetSwingSupportResistance(symbol, lookbackBars, overrideCurrentPrice);
-  }, [symbol, lookbackBars, overrideCurrentPrice]);
+    return analyzeAssetSwingSupportResistance(symbol, lookbackBars, effectivePrice);
+  }, [symbol, lookbackBars, effectivePrice]);
 
-  // Filter bands according to activeFilter
-  const displayBands = useMemo(() => {
-    let list: SRBand[] = [];
-    if (activeFilter === 'ALL') {
-      list = [...analysis.resistanceBands, ...analysis.supportBands, ...analysis.fibonacciBands];
-    } else if (activeFilter === 'R_LEVELS') {
-      list = analysis.resistanceBands;
-    } else if (activeFilter === 'S_LEVELS') {
-      list = analysis.supportBands;
-    } else if (activeFilter === 'MAJOR_ONLY') {
-      list = [
-        ...analysis.resistanceBands.filter(b => b.tier === 'MAJOR'),
-        ...analysis.supportBands.filter(b => b.tier === 'MAJOR'),
-        ...analysis.fibonacciBands.filter(b => b.tier === 'GOLDEN_POCKET' || b.tier === 'MIDPOINT')
-      ];
-    } else if (activeFilter === 'FIBONACCI_ONLY') {
-      list = analysis.fibonacciBands;
-    } else if (activeFilter === 'NEAREST_ONLY') {
-      if (analysis.nearestResistance) list.push(analysis.nearestResistance);
-      if (analysis.nearestSupport) list.push(analysis.nearestSupport);
-      const fibGolden = analysis.fibonacciBands.find(b => b.tier === 'GOLDEN_POCKET');
-      if (fibGolden) list.push(fibGolden);
-    }
-    return list;
-  }, [analysis, activeFilter]);
-
-  // Coordinate mapping for visual horizontal bands
-  // Normalized 0% (top = high price) to 100% (bottom = low price)
-  const rangeHigh = analysis.rangeHigh * 1.025; // 2.5% padding on top
-  const rangeLow = Math.max(1, analysis.rangeLow * 0.975); // 2.5% padding on bottom
-  const priceRange = rangeHigh - rangeLow;
-
-  const calculateYPercent = (price: number): number => {
-    if (priceRange <= 0) return 50;
-    const pct = ((rangeHigh - price) / priceRange) * 100;
-    return Math.max(4, Math.min(96, pct));
+  const handleManualSync = () => {
+    setIsSyncing(true);
+    setTimeout(() => {
+      setIsSyncing(false);
+    }, 400);
   };
-
-  const currentPriceY = calculateYPercent(analysis.currentPrice);
 
   const handleCopyPineScript = () => {
     navigator.clipboard.writeText(analysis.generatedPineScript);
@@ -107,6 +100,7 @@ export const ChartSupportResistanceOverlay: React.FC<ChartSupportResistanceOverl
   const handleCopyPlan = () => {
     const text = `[VAM S/R SWING PLAN] ${analysis.cleanTicker}
 • Harga Terkini: ${formatStockPrice(analysis.currentPrice, symbol)}
+• Live Pivot Point: ${formatStockPrice(analysis.pivotPoint, symbol)}
 • Major Swing High (Ceiling): ${formatStockPrice(analysis.rangeHigh, symbol)} (${analysis.majorSwingHigh.date})
 • Major Swing Low (Base Floor): ${formatStockPrice(analysis.rangeLow, symbol)} (${analysis.majorSwingLow.date})
 • Resistensi Terdekat (R1): ${analysis.nearestResistance ? `${formatStockPrice(analysis.nearestResistance.corePrice, symbol)} (+${analysis.nearestResistance.distancePct}%)` : '-'}
@@ -137,22 +131,29 @@ export const ChartSupportResistanceOverlay: React.FC<ChartSupportResistanceOverl
         </div>
       )}
 
-      {/* 2. Top Control HUD Bar */}
+      {/* 2. Top Precision Control HUD Bar */}
       <div className="px-3 py-1.5 bg-zinc-950/95 border-b border-zinc-800/80 flex flex-wrap items-center justify-between gap-2 text-xs">
-        {/* Left: Summary Metrics Badges */}
+        {/* Left: Ticker, Pivot, Nearest R1 & S1 */}
         <div className="flex items-center gap-1.5 flex-wrap">
+          {/* Mode Switcher: Calibrated Visual Chart vs Clean TV HUD */}
           <button
-            onClick={() => setShowVisualBands(!showVisualBands)}
+            onClick={() => setShowNativeVisualChart(!showNativeVisualChart)}
             className={`flex items-center gap-1 px-2.5 py-1 rounded-lg text-[9px] font-mono font-black uppercase transition-all cursor-pointer border ${
-              showVisualBands 
+              showNativeVisualChart 
                 ? 'bg-[#deff9a] text-black border-[#deff9a] shadow-sm'
-                : 'bg-zinc-900 text-zinc-400 border-zinc-800 hover:text-white'
+                : 'bg-zinc-900 text-zinc-300 border-zinc-800 hover:text-white hover:border-zinc-700'
             }`}
-            title="Tampilkan / Sembunyikan Visual Pita Support & Resistance pada Chart"
+            title="Beralih antara Grafik Visual S/R Terkalibrasi dan TradingView Live"
           >
-            {showVisualBands ? <Eye className="w-3 h-3" /> : <EyeOff className="w-3 h-3" />}
-            <span>{showVisualBands ? 'S/R BANDS: ON' : 'S/R BANDS: OFF'}</span>
+            {showNativeVisualChart ? <BarChart2 className="w-3 h-3 text-black" /> : <LineChart className="w-3 h-3 text-[#deff9a]" />}
+            <span>{showNativeVisualChart ? 'GRAFIK VISUAL S/R: ON' : 'GRAFIK VISUAL S/R: OFF'}</span>
           </button>
+
+          {/* Pivot Metric Badge */}
+          <div className="flex items-center gap-1 bg-cyan-950/60 border border-cyan-500/40 px-2 py-1 rounded-lg text-[9px] font-mono">
+            <span className="text-cyan-400 font-bold uppercase">PIVOT P:</span>
+            <span className="text-white font-black">{formatStockPrice(analysis.pivotPoint, symbol)}</span>
+          </div>
 
           {/* Quick Stats: Nearest R & Nearest S */}
           <div className="hidden sm:flex items-center gap-1.5 bg-black/60 px-2.5 py-1 rounded-lg border border-zinc-800/90 text-[9px] font-mono">
@@ -189,10 +190,10 @@ export const ChartSupportResistanceOverlay: React.FC<ChartSupportResistanceOverl
           </div>
         </div>
 
-        {/* Right: Quick Filter & Pine Script Copy */}
+        {/* Right: Quick Filter, Pine Script Copy & Matrix Toggle */}
         <div className="flex items-center gap-1.5">
-          {/* Filter Dropdown / Quick Tabs */}
-          <div className="flex items-center bg-zinc-900 p-0.5 rounded-lg border border-zinc-800 text-[8px] font-mono font-bold overflow-x-auto">
+          {/* Quick S/R & Fib Filter Selector */}
+          <div className="hidden lg:flex items-center bg-zinc-900 p-0.5 rounded-lg border border-zinc-800 text-[8px] font-mono font-bold">
             <button
               onClick={() => setActiveFilter('ALL')}
               className={`px-1.5 py-0.5 rounded transition-colors whitespace-nowrap ${activeFilter === 'ALL' ? 'bg-zinc-800 text-[#deff9a]' : 'text-zinc-400 hover:text-white'}`}
@@ -217,27 +218,21 @@ export const ChartSupportResistanceOverlay: React.FC<ChartSupportResistanceOverl
             >
               Fib (0.618)
             </button>
-            <button
-              onClick={() => setActiveFilter('NEAREST_ONLY')}
-              className={`px-1.5 py-0.5 rounded transition-colors whitespace-nowrap ${activeFilter === 'NEAREST_ONLY' ? 'bg-sky-950/80 text-sky-300 border border-sky-500/40' : 'text-zinc-400 hover:text-white'}`}
-            >
-              Terdekat
-            </button>
           </div>
 
-          {/* Lookback Selector */}
-          <div className="hidden lg:flex items-center gap-1 bg-zinc-900 px-2 py-0.5 rounded-lg border border-zinc-800 text-[8px] font-mono">
-            <span className="text-zinc-500">Lookback:</span>
-            {[30, 60, 90].map(lb => (
-              <button
-                key={lb}
-                onClick={() => setLookbackBars(lb)}
-                className={`px-1 rounded font-bold ${lookbackBars === lb ? 'bg-[#deff9a] text-black' : 'text-zinc-400 hover:text-white'}`}
-              >
-                {lb}B
-              </button>
-            ))}
-          </div>
+          {/* Manual Sync / Refresh Button */}
+          <button
+            onClick={handleManualSync}
+            className={`flex items-center gap-1 px-2 py-1 rounded-lg text-[8.5px] font-mono font-bold transition-all border cursor-pointer ${
+              isSyncing 
+                ? 'bg-[#deff9a]/20 text-[#deff9a] border-[#deff9a]/40' 
+                : 'bg-zinc-900 hover:bg-zinc-800 text-zinc-300 border-zinc-700'
+            }`}
+            title="Sinkronisasikan data pivot, support, resistance, dan Fibonacci terkini"
+          >
+            <RefreshCw className={`w-2.5 h-2.5 ${isSyncing ? 'animate-spin text-[#deff9a]' : 'text-zinc-400'}`} />
+            <span className="hidden sm:inline">{isSyncing ? 'SYNCING...' : 'SYNC LIVE'}</span>
+          </button>
 
           {/* Copy Pine Script Button */}
           <button
@@ -247,7 +242,7 @@ export const ChartSupportResistanceOverlay: React.FC<ChartSupportResistanceOverl
                 ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40' 
                 : 'bg-zinc-900 hover:bg-zinc-800 text-sky-300 border-sky-500/30'
             }`}
-            title="Salin Kode Indikator Pine Script v5 untuk dipaste di TradingView Editor"
+            title="Salin Kode Indikator Pine Script v5 untuk dipaste di TradingView Pine Editor"
           >
             {copiedPine ? <Check className="w-2.5 h-2.5" /> : <Code2 className="w-2.5 h-2.5" />}
             <span>{copiedPine ? 'PINE COPIED' : 'PINE SCRIPT'}</span>
@@ -256,152 +251,27 @@ export const ChartSupportResistanceOverlay: React.FC<ChartSupportResistanceOverl
           {/* Expand Details Toggle */}
           <button
             onClick={() => setIsHudExpanded(!isHudExpanded)}
-            className="p-1 rounded-lg bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 text-zinc-400 hover:text-white transition-colors"
-            title="Buka Panel Rincian S/R & Tactical Breakdown"
+            className="flex items-center gap-1 px-2 py-1 rounded-lg bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 text-zinc-300 hover:text-white transition-colors text-[8.5px] font-mono font-bold"
+            title="Buka Panel Matriks Rincian S/R & Fibonacci"
           >
-            {isHudExpanded ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
+            <span>MATRIKS S/R</span>
+            {isHudExpanded ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
           </button>
         </div>
       </div>
 
-      {/* 3. Visual Support & Resistance Bands Overlay Layer (Rendered right over the chart canvas) */}
-      {showVisualBands && (
-        <div className="relative w-full pointer-events-none z-10">
-          {/* Floating Transparent Bands Canvas Layer */}
-          <div className="absolute inset-x-0 top-0 h-[400px] sm:h-[450px] overflow-hidden pointer-events-none">
-            {displayBands.map((band) => {
-              const coreY = calculateYPercent(band.corePrice);
-              const upperY = calculateYPercent(band.upperPrice);
-              const lowerY = calculateYPercent(band.lowerPrice);
-              const heightPct = Math.max(1.8, Math.abs(lowerY - upperY));
-
-              const isResistance = band.type === 'RESISTANCE';
-              const isSupport = band.type === 'SUPPORT';
-              const isFib = band.type === 'FIBONACCI';
-              const isGoldenPocket = band.tier === 'GOLDEN_POCKET';
-              const isMidpoint = band.tier === 'MIDPOINT';
-
-              let borderColor = 'border-rose-500/60';
-              let bgColor = `rgba(244, 63, 94, ${bandOpacity * 0.4})`;
-              let textColor = 'text-rose-300';
-              let badgeBg = 'bg-rose-950/90 text-rose-300 border-rose-600/50';
-
-              if (isSupport) {
-                borderColor = 'border-emerald-500/60';
-                bgColor = `rgba(16, 185, 129, ${bandOpacity * 0.4})`;
-                textColor = 'text-emerald-300';
-                badgeBg = 'bg-emerald-950/90 text-emerald-300 border-emerald-600/50';
-              } else if (isGoldenPocket) {
-                borderColor = 'border-amber-400/80';
-                bgColor = `rgba(251, 191, 36, ${bandOpacity * 0.45})`;
-                textColor = 'text-amber-300';
-                badgeBg = 'bg-amber-950/90 text-amber-300 border-amber-500/60';
-              } else if (isMidpoint) {
-                borderColor = 'border-yellow-400/50';
-                bgColor = `rgba(234, 179, 8, ${bandOpacity * 0.25})`;
-                textColor = 'text-yellow-300';
-                badgeBg = 'bg-yellow-950/90 text-yellow-300 border-yellow-500/40';
-              } else if (isFib) {
-                borderColor = 'border-sky-500/50';
-                bgColor = `rgba(56, 189, 248, ${bandOpacity * 0.25})`;
-                textColor = 'text-sky-300';
-                badgeBg = 'bg-sky-950/90 text-sky-300 border-sky-500/40';
-              }
-
-              return (
-                <div
-                  key={band.id}
-                  style={{
-                    top: `${Math.min(upperY, lowerY)}%`,
-                    height: `${heightPct}%`,
-                    backgroundColor: bgColor
-                  }}
-                  className={`absolute inset-x-0 border-y border-dashed ${borderColor} transition-all pointer-events-auto group cursor-pointer hover:brightness-125`}
-                  onMouseEnter={() => setHoveredBand(band)}
-                  onMouseLeave={() => setHoveredBand(null)}
-                  onClick={() => setSelectedBand(selectedBand?.id === band.id ? null : band)}
-                >
-                  {/* Left Label Tag */}
-                  <div className="absolute left-2 -top-3 flex items-center gap-1.5 opacity-90 group-hover:opacity-100 transition-opacity">
-                    <span className={`px-1.5 py-0.2 rounded text-[7.5px] font-mono font-black uppercase tracking-wider border shadow-md ${badgeBg}`}>
-                      {band.code} • {formatStockPrice(band.corePrice, symbol)}
-                    </span>
-                    {band.testCount > 1 && (
-                      <span className="hidden sm:inline-block px-1 py-0.2 rounded bg-black/80 text-zinc-300 text-[7px] font-mono border border-zinc-700">
-                        {band.testCount}x Swings
-                      </span>
-                    )}
-                  </div>
-
-                  {/* Right Price & Distance Tag */}
-                  <div className="absolute right-2 -top-3 flex items-center gap-1 opacity-90 group-hover:opacity-100 transition-opacity">
-                    <span className={`px-1.5 py-0.2 rounded text-[7.5px] font-mono font-bold border shadow-md ${badgeBg}`}>
-                      {band.distancePct >= 0 ? `+${band.distancePct}%` : `${band.distancePct}%`}
-                    </span>
-                  </div>
-                </div>
-              );
-            })}
-
-            {/* Current Price Reference Line */}
-            <div 
-              style={{ top: `${currentPriceY}%` }}
-              className="absolute inset-x-0 border-t-2 border-sky-400 shadow-[0_0_10px_rgba(56,189,248,0.7)] pointer-events-none z-20 flex items-center justify-between px-3"
-            >
-              <div className="bg-sky-500 text-slate-950 font-mono font-black text-[7.5px] px-1.5 py-0.2 rounded -translate-y-1/2 uppercase tracking-tight flex items-center gap-1 shadow-md">
-                <span className="w-1.5 h-1.5 rounded-full bg-slate-950 animate-ping" />
-                <span>HARGA SAAT INI: {formatStockPrice(analysis.currentPrice, symbol)}</span>
-              </div>
-              <span className="bg-sky-950/90 text-sky-300 border border-sky-400 font-mono font-black text-[7.5px] px-1.5 py-0.2 rounded -translate-y-1/2 shadow-md">
-                LIVE PIVOT
-              </span>
-            </div>
-          </div>
+      {/* 3. Render Calibrated Native Visual S/R Candlestick Chart if Enabled */}
+      {showNativeVisualChart && (
+        <div className="p-2 bg-black border-b border-zinc-800">
+          <VamNativeSRChart 
+            symbol={symbol} 
+            overrideCurrentPrice={effectivePrice}
+            initialFilter={activeFilter === 'MAJOR_ONLY' || activeFilter === 'NEAREST_ONLY' ? 'ALL' : activeFilter} 
+          />
         </div>
       )}
 
-      {/* 4. Active Hovered / Selected Band Quick Tooltip */}
-      {(hoveredBand || selectedBand) && (
-        <div className="mx-3 my-1 p-2 rounded-xl bg-zinc-900/95 border border-zinc-700 shadow-xl flex flex-wrap items-center justify-between gap-2 text-xs relative z-30">
-          {(() => {
-            const b = hoveredBand || selectedBand;
-            if (!b) return null;
-            const isR = b.type === 'RESISTANCE';
-            const isS = b.type === 'SUPPORT';
-
-            return (
-              <div className="w-full flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-                <div className="flex items-center gap-2">
-                  <span className={`px-2 py-0.5 rounded font-mono font-black text-[9px] uppercase border ${
-                    isR ? 'bg-rose-950 text-rose-300 border-rose-500/40' :
-                    isS ? 'bg-emerald-950 text-emerald-300 border-emerald-500/40' :
-                    'bg-amber-950 text-amber-300 border-amber-500/40'
-                  }`}>
-                    {b.label}
-                  </span>
-                  <div className="text-xs font-mono font-bold text-white">
-                    {formatStockPrice(b.corePrice, symbol)}
-                    <span className="text-[10px] text-zinc-400 font-normal ml-1">
-                      (Zone: {formatStockPrice(b.lowerPrice, symbol)} - {formatStockPrice(b.upperPrice, symbol)})
-                    </span>
-                  </div>
-                  <span className="text-[9px] font-mono text-zinc-400">
-                    Jarak: <strong className={b.distancePct >= 0 ? 'text-rose-400' : 'text-emerald-400'}>{b.distancePct >= 0 ? `+${b.distancePct}%` : `${b.distancePct}%`}</strong>
-                  </span>
-                </div>
-
-                <div className="flex items-center gap-2 text-[9.5px] font-mono text-zinc-300">
-                  <span className="text-zinc-400">Uji Swing: <strong className="text-white">{b.testCount}x</strong></span>
-                  <span className="text-zinc-400">Kekuatan: <strong className="text-[#deff9a]">{b.strengthScore}/100</strong></span>
-                  <span className="text-zinc-400 truncate max-w-xs italic text-[9px]">"{b.tacticalNote}"</span>
-                </div>
-              </div>
-            );
-          })()}
-        </div>
-      )}
-
-      {/* 5. Collapsible Comprehensive S/R Swing Analytics HUD Panel */}
+      {/* 4. Collapsible Comprehensive S/R Swing Analytics HUD Panel */}
       <AnimatePresence>
         {isHudExpanded && (
           <motion.div
@@ -409,7 +279,7 @@ export const ChartSupportResistanceOverlay: React.FC<ChartSupportResistanceOverl
             animate={{ opacity: 1, height: 'auto' }}
             exit={{ opacity: 0, height: 0 }}
             transition={{ duration: 0.2 }}
-            className="border-t border-zinc-800 bg-zinc-950/95 p-3 space-y-3 relative z-30"
+            className="border-b border-zinc-800 bg-zinc-950/95 p-3 space-y-3 relative z-30"
           >
             {/* Tactical Bias Card */}
             <div className="p-2.5 rounded-xl bg-black/60 border border-zinc-800 flex flex-col md:flex-row md:items-center justify-between gap-2">

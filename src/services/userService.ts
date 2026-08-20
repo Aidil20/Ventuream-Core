@@ -28,8 +28,11 @@ export const getUserProfile = async (uid: string): Promise<UserProfile | null> =
 
   try {
     const docRef = doc(db, 'users', uid);
-    const docSnap = await getDoc(docRef);
-    if (docSnap.exists()) {
+    const docSnap = await Promise.race([
+      getDoc(docRef),
+      new Promise<any>((_, reject) => setTimeout(() => reject(new Error('Firestore timeout - switching to offline cache')), 2500))
+    ]);
+    if (docSnap && docSnap.exists()) {
       const data = docSnap.data() as UserProfile;
       const emailLower = (data && data.email) ? data.email.toLowerCase() : '';
       if (data && (emailLower === 'aidilsyahdan2000@gmail.com' || emailLower === 'pt.ventuream@gmail.com')) {
@@ -41,7 +44,7 @@ export const getUserProfile = async (uid: string): Promise<UserProfile | null> =
       return data;
     }
   } catch (error) {
-    console.warn('Silent Firestore Read Warning (offline fallback engaged):', error);
+    console.warn('Silent Firestore Read Notice (offline fallback engaged):', error);
   }
 
   // Fallback to localStorage cache
@@ -119,9 +122,12 @@ export const ensureUserProfile = async (uid: string, email: string, displayName:
   };
 
   try {
-    await setDoc(doc(db, 'users', uid), newUser);
+    await Promise.race([
+      setDoc(doc(db, 'users', uid), newUser),
+      new Promise<void>((_, reject) => setTimeout(() => reject(new Error('Write timeout - offline fallback')), 2500))
+    ]);
   } catch (err) {
-    console.warn('Silent validation warning: could not write initial profile structure, fallback to in-memory template:', err);
+    console.warn('Silent validation notice: could not write initial profile structure to cloud, continuing locally:', err);
   }
 
   const returnUser: UserProfile = {
@@ -156,12 +162,15 @@ export const updateUserRole = async (uid: string, role: UserRole): Promise<void>
 
   try {
     const docRef = doc(db, 'users', uid);
-    await updateDoc(docRef, {
-      role,
-      updatedAt: serverTimestamp()
-    });
+    await Promise.race([
+      updateDoc(docRef, {
+        role,
+        updatedAt: serverTimestamp()
+      }),
+      new Promise<void>((_, reject) => setTimeout(() => reject(new Error('Update role timeout - offline fallback')), 2500))
+    ]);
   } catch (error) {
-    console.warn('Silent validation warning: could not update firebase user role, falling back locally', error);
+    console.warn('Silent validation notice: could not update firebase user role in cloud, updated locally', error);
   }
 };
 
@@ -184,10 +193,19 @@ export const getAllUsers = async (): Promise<UserProfile[]> => {
 
   try {
     const q = query(collection(db, 'users'));
-    const querySnapshot = await getDocs(q);
-    return querySnapshot.docs.map(doc => doc.data() as UserProfile);
+    const querySnapshot = await Promise.race([
+      getDocs(q),
+      new Promise<any>((_, reject) => setTimeout(() => reject(new Error('Query timeout - offline mode')), 2500))
+    ]);
+    return querySnapshot.docs.map((doc: any) => doc.data() as UserProfile);
   } catch (error) {
-    console.warn('Could not list users from Firestore, returning empty list:', error);
+    console.warn('Silent notice: Could not list users from Firestore, using cached institutional user:', error);
+    const cached = localStorage.getItem('vam_profile_user_institutional_gateway_01');
+    if (cached) {
+      try {
+        return [JSON.parse(cached)];
+      } catch (e) {}
+    }
     return [];
   }
 };

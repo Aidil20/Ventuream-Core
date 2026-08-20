@@ -49,6 +49,7 @@ import {
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import pptxgen from 'pptxgenjs';
+import { saveAndNotifyPdf } from '../services/reportNotificationService';
 
 // Type Definitions
 interface TickerAuditData {
@@ -133,10 +134,6 @@ export function AuditSync({ autoSyncEnabled = true }: { autoSyncEnabled?: boolea
       if (stored) {
         const parsed = JSON.parse(stored);
         if (Array.isArray(parsed)) {
-          const hasJgle = parsed.some((t: any) => t.symbol === 'JGLE');
-          if (!hasJgle) {
-            return [...parsed, { symbol: 'JGLE', name: 'PT Graha Andrasentra Propertindo Tbk.', sector: 'Consumer Cyclicals / Property & Tourism', internalPrice: 100, externalPrice: 100, market: 'IDX' }];
-          }
           return parsed;
         }
       }
@@ -416,7 +413,8 @@ export function AuditSync({ autoSyncEnabled = true }: { autoSyncEnabled?: boolea
     doc.text("Lead System Architect: [VERIFIED & SIGNED]", 15, sigY + 22);
     doc.text("Chief Technology Officer: [APPROVED]", 110, sigY + 22);
 
-    doc.save(`VentureAM_Technical_Feasibility_Report_${currentDate.toISOString().slice(0, 10)}.pdf`);
+    const techReportFileName = `VentureAM_Technical_Feasibility_Report_${currentDate.toISOString().slice(0, 10)}.pdf`;
+    saveAndNotifyPdf(doc, techReportFileName, 'Laporan Kelayakan Teknis & Uji Operasional Sistem');
   };
 
   // Export PPTX Slide Presentation for Technical Feasibility Audit
@@ -1029,8 +1027,9 @@ export function AuditSync({ autoSyncEnabled = true }: { autoSyncEnabled?: boolea
     doc.text("President & Managing Director", 135, sigY + 20);
     doc.text("VentureAM Compliance Authority", 135, sigY + 24);
 
-    // Save
-    doc.save(`VentureAM_Drift_Audit_Sync_Report_${currentDate.toISOString().slice(0, 10)}.pdf`);
+    // Save & trigger toast notification with View File modal
+    const driftReportFileName = `VentureAM_Drift_Audit_Sync_Report_${currentDate.toISOString().slice(0, 10)}.pdf`;
+    saveAndNotifyPdf(doc, driftReportFileName, 'Laporan Sinkronisasi & Rekonsiliasi Deviasi Ticker');
   };
 
   // Filtered and searched tickers list

@@ -14,6 +14,7 @@ import {
 import { motion } from 'motion/react';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
+import { saveAndNotifyPdf } from '../services/reportNotificationService';
 import { Download, TrendingUp, BarChart3, Layers } from 'lucide-react';
 
 const MOCK_DATA = {
@@ -331,8 +332,9 @@ export default function PortfolioChart({ currentValue = 0, symbol = 'IDX:COMPOSI
       margin: { left: 15, right: 15 }
     });
 
-    // Save the PDF
-    doc.save(`VentureAM_Portfolio_${range}_${new Date().toISOString().slice(0, 10)}.pdf`);
+    // Save the PDF and trigger toast with View File action
+    const chartPdfName = `VentureAM_Portfolio_${range}_${new Date().toISOString().slice(0, 10)}.pdf`;
+    saveAndNotifyPdf(doc, chartPdfName, `Laporan Kinerja & Historis Tren Portofolio (${range})`);
   };
 
   return (

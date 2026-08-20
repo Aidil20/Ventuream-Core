@@ -27,6 +27,7 @@ import {
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { jsPDF } from 'jspdf';
+import { saveAndNotifyPdf } from '../services/reportNotificationService';
 
 export interface ReconciliationAdjustment {
   id: string;
@@ -208,7 +209,8 @@ export default function ReconciliationHistoryTimeline({
       doc.setFont('helvetica', 'normal');
       doc.text('Handoko, SE., Ak., CA - Kepala Satuan Pengawas Intern (SPI)', 14, currentY + 4);
 
-      doc.save(`Audit_Run_${run.id}_${Date.now()}.pdf`);
+      const runFileName = `Audit_Run_${run.id}_${Date.now()}.pdf`;
+      saveAndNotifyPdf(doc, runFileName, `Laporan Audit Rekonsiliasi (${run.period || run.id})`);
     } catch (err) {
       console.error('Failed to generate audit run PDF:', err);
     }

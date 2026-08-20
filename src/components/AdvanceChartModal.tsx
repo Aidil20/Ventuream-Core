@@ -83,20 +83,19 @@ export const AdvanceChartModal: React.FC<AdvanceChartModalProps> = ({
     { id: "VP@tv-basicstudies", name: "Volume Profile" }
   ];
 
-  if (!isOpen) return null;
-
   return (
     <AnimatePresence>
-      <div className="fixed inset-0 z-[100] flex items-center justify-center p-2 sm:p-4 md:p-6 bg-black/80 backdrop-blur-md overflow-hidden">
-        <motion.div
-          initial={{ opacity: 0, scale: 0.95, y: 15 }}
-          animate={{ opacity: 1, scale: 1, y: 0 }}
-          exit={{ opacity: 0, scale: 0.95, y: 15 }}
-          transition={{ duration: 0.2 }}
-          className={`w-full flex flex-col bg-zinc-950 border border-zinc-800 rounded-2xl shadow-2xl overflow-hidden ${
-            isFullScreen ? 'h-[98vh] max-w-[99vw]' : 'h-[90vh] max-w-7xl'
-          }`}
-        >
+      {isOpen && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-2 sm:p-4 md:p-6 bg-black/80 backdrop-blur-md overflow-hidden">
+          <motion.div
+            initial={{ opacity: 0, scale: 0.95, y: 15 }}
+            animate={{ opacity: 1, scale: 1, y: 0 }}
+            exit={{ opacity: 0, scale: 0.95, y: 15 }}
+            transition={{ duration: 0.2 }}
+            className={`w-full flex flex-col bg-zinc-950 border border-zinc-800 rounded-2xl shadow-2xl overflow-hidden ${
+              isFullScreen ? 'h-[98vh] max-w-[99vw]' : 'h-[90vh] max-w-7xl'
+            }`}
+          >
           {/* Header Bar */}
           <div className="px-4 py-3 bg-zinc-900/80 border-b border-zinc-800 flex flex-wrap items-center justify-between gap-3 shrink-0">
             {/* Ticker Info & Search */}
@@ -225,6 +224,7 @@ export const AdvanceChartModal: React.FC<AdvanceChartModalProps> = ({
           </div>
         </motion.div>
       </div>
+      )}
     </AnimatePresence>
   );
 };

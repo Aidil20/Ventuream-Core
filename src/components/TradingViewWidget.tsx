@@ -6,6 +6,7 @@ interface TradingViewWidgetProps {
   studies?: string[];
   interval?: string;
   showSROverlay?: boolean;
+  overrideCurrentPrice?: number;
 }
 
 // Generate high-fidelity simulated historical OHLCV data for auditing
@@ -178,7 +179,8 @@ function TradingViewWidget({
   symbol = "IDX:BBCA", 
   studies = DEFAULT_STUDIES, 
   interval = "D",
-  showSROverlay = true 
+  showSROverlay = true,
+  overrideCurrentPrice
 }: TradingViewWidgetProps) {
   const chartContainerRef = useRef<HTMLDivElement>(null);
   const widgetId = useRef(`tv-widget-${Math.random().toString(36).substring(2, 9)}`).current;
@@ -396,7 +398,7 @@ function TradingViewWidget({
 
       {/* S/R Swing Highs & Lows Overlay & Controller */}
       {showSROverlay && (
-        <ChartSupportResistanceOverlay symbol={symbol} />
+        <ChartSupportResistanceOverlay symbol={symbol} overrideCurrentPrice={overrideCurrentPrice} />
       )}
 
       {/* Main Chart Iframe Wrapper */}

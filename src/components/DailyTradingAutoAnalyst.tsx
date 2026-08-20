@@ -28,11 +28,26 @@ import {
   Search,
   Code,
   Copy,
-  Check
+  Check,
+  Calendar,
+  Clock,
+  Radio,
+  RotateCcw
 } from 'lucide-react';
 import AdvanceChartModal from './AdvanceChartModal';
 import DailyStockDetailAnalystModal from './DailyStockDetailAnalystModal';
 import { getTradingViewSymbol } from '../lib/stockUtils';
+import { 
+  DailyTradingStock, 
+  MaDynamicIndicators, 
+  computeMaIndicators, 
+  getDynamicAiThesis, 
+  generateDailyTradingPicks, 
+  SignalLifecycleStatus 
+} from '../lib/dailyTradingRotationEngine';
+
+export type { DailyTradingStock, MaDynamicIndicators, SignalLifecycleStatus };
+export { computeMaIndicators, getDynamicAiThesis };
 
 const PINE_SCRIPT_CODE = `//@version=5
 indicator("VAM Institutional - Day Trading & Potensi ARA Screener (MA 5/10 Dynamic S/R)", overlay=true)
@@ -96,190 +111,6 @@ alertcondition(maGoldenCross, title="MA 5/10 Golden Cross Alert", message="[VAM 
 alertcondition(isAraCandidate, title="Sinyal Potensi ARA VAM", message="[VAM SCANNER] {{ticker}} Lolos Penyaringan Day Trading & Potensi ARA (MA5>MA10 + Vol Surge)! Harga: {{close}}");
 alertcondition(isMa5BounceBuy, title="Sinyal Pantulan MA 5 Dinamis", message="[VAM BOUNCE] {{ticker}} Memantul di Support Dinamis MA 5! Harga: {{close}}");
 `;
-
-export interface MaDynamicIndicators {
-  ma5: number;
-  ma10: number;
-  ma5Str: string;
-  ma10Str: string;
-  crossover: 'GOLDEN_CROSS' | 'BULLISH_EXPANSION' | 'TESTING_CROSS' | 'DEATH_CROSS';
-  crossoverLabel: string;
-  pricePosition: 'PRICE_ABOVE_MA5_MA10' | 'BOUNCE_MA5_SUPPORT' | 'BOUNCE_MA10_SUPPORT' | 'TESTING_MA5';
-  pricePositionLabel: string;
-  signal: 'STRONG_BUY' | 'BUY_ON_BOUNCE' | 'HOLD' | 'PROFIT_TAKING';
-  signalLabel: string;
-  supportResistance: {
-    supportMa5: string;
-    supportMa10: string;
-    dynamicResistance?: string;
-    bounceZone: string;
-    bounceStatus: 'Memantul Kuat di Garis MA5' | 'Menopang di Garis Dinamis MA10' | 'Breakout Menembus Resistance Dinamis' | 'Bertahan di Atas MA5 & MA10';
-    bounceConfidence: number;
-  };
-}
-
-export function computeMaIndicators(
-  priceNum: number,
-  market: string,
-  existingMa10?: number
-): MaDynamicIndicators {
-  const isIdx = market === 'IDX';
-  const formatPrice = (v: number) => isIdx ? `IDR ${Math.round(v).toLocaleString('id-ID')}` : `USD ${v.toFixed(2)}`;
-  
-  // MA5 (Fast Dynamic Support) ~ 97.5% in strong momentum
-  const ma5 = isIdx ? Math.round(priceNum * 0.975) : +(priceNum * 0.975).toFixed(2);
-  // MA10 (Base Dynamic Defense) ~ 94.2% in momentum
-  const ma10 = existingMa10 && existingMa10 > 0 ? existingMa10 : (isIdx ? Math.round(priceNum * 0.942) : +(priceNum * 0.942).toFixed(2));
-  
-  const isGoldenCross = ma5 >= ma10;
-  const isAboveBoth = priceNum >= ma5 && ma5 >= ma10;
-  const isBounceMa5 = priceNum >= ma5 && priceNum <= ma5 * 1.025;
-  const isBounceMa10 = !isBounceMa5 && priceNum >= ma10 && priceNum <= ma10 * 1.03;
-
-  const dynamicResistanceVal = isIdx ? Math.round(priceNum * 1.08) : +(priceNum * 1.08).toFixed(2);
-
-  const crossover: 'GOLDEN_CROSS' | 'BULLISH_EXPANSION' | 'TESTING_CROSS' | 'DEATH_CROSS' = isGoldenCross ? 'GOLDEN_CROSS' : 'TESTING_CROSS';
-  const crossoverLabel = isGoldenCross ? 'MA 5 Golden Cross MA 10 (Bullish)' : 'MA 5 Uji Crossover MA 10';
-
-  const pricePosition: 'PRICE_ABOVE_MA5_MA10' | 'BOUNCE_MA5_SUPPORT' | 'BOUNCE_MA10_SUPPORT' | 'TESTING_MA5' = isAboveBoth 
-    ? 'PRICE_ABOVE_MA5_MA10' 
-    : isBounceMa5 
-    ? 'BOUNCE_MA5_SUPPORT' 
-    : 'BOUNCE_MA10_SUPPORT';
-
-  const pricePositionLabel = isAboveBoth 
-    ? 'Harga > MA5 > MA10 (Uptrend Kuat)' 
-    : isBounceMa5 
-    ? 'Pantulan Support Dinamis MA 5 (Valid Bounce)' 
-    : 'Menopang di Support Dinamis MA 10';
-
-  const signal: 'STRONG_BUY' | 'BUY_ON_BOUNCE' | 'HOLD' | 'PROFIT_TAKING' = isAboveBoth 
-    ? 'STRONG_BUY' 
-    : (isBounceMa5 || isBounceMa10) 
-    ? 'BUY_ON_BOUNCE' 
-    : 'HOLD';
-
-  const signalLabel = isAboveBoth 
-    ? 'STRONG BUY (Golden Cross + Di Atas MA5/10)' 
-    : 'BUY ON DIP (Pantulan Support Dinamis MA5)';
-
-  const bounceStatus: 'Memantul Kuat di Garis MA5' | 'Menopang di Garis Dinamis MA10' | 'Breakout Menembus Resistance Dinamis' | 'Bertahan di Atas MA5 & MA10' = isAboveBoth
-    ? 'Bertahan di Atas MA5 & MA10'
-    : isBounceMa5
-    ? 'Memantul Kuat di Garis MA5'
-    : 'Menopang di Garis Dinamis MA10';
-
-  return {
-    ma5,
-    ma10,
-    ma5Str: formatPrice(ma5),
-    ma10Str: formatPrice(ma10),
-    crossover,
-    crossoverLabel,
-    pricePosition,
-    pricePositionLabel,
-    signal,
-    signalLabel,
-    supportResistance: {
-      supportMa5: formatPrice(ma5),
-      supportMa10: formatPrice(ma10),
-      dynamicResistance: formatPrice(dynamicResistanceVal),
-      bounceZone: `${formatPrice(ma5 * 0.992)} - ${formatPrice(ma5 * 1.018)}`,
-      bounceStatus,
-      bounceConfidence: isAboveBoth ? 98 : 94
-    }
-  };
-}
-
-export interface DailyTradingStock {
-  symbol: string;
-  name: string;
-  market: 'IDX' | 'US' | 'SGX' | 'CRYPTO';
-  price: string;
-  priceNum: number;
-  change: string;
-  changePercent: number;
-  volume: string;
-  volRatio: number; // e.g., 8.5 = 8.5x of 10D/20D/50D average volume
-  
-  // Pilar 1: Volume & Order Book
-  orderBook: {
-    bidOfferRatio: number; // e.g. 4.2 = 4.2 : 1
-    bidVolumeRatioStr: string; // "1.4M Lot Bid vs 165K Lot Offer (8.4 : 1)"
-    isWallBuy: boolean; // Dinding tebal menahan harga di order book
-    volumeVsMa20: string; // e.g. "8.5x MA20"
-    volumeVsMa50: string; // e.g. "12.1x MA50"
-  };
-
-  // Pilar 2: Momentum & Trend
-  momentum: {
-    macdStatus: 'Golden Cross Positif' | 'Bullish Expansion' | 'Neutral';
-    macdIsPositiveGoldenCross: boolean;
-    bbBreakout: boolean; // Menembus Upper Band Bollinger
-    bbUpperBandLevel: string; // e.g. "IDR 14,800"
-    rsiVal: number; // e.g. 74.0
-    rsiHotMomentum: boolean; // RSI > 70 Hot Momentum + Masif Akumulasi
-  };
-
-  // Pilar 3: Aksi Bandar & Fundamental
-  bandarAndFundamentals: {
-    topBrokersAccumulation: string; // e.g. "BK, ZP, KZ, CS"
-    brokerNetBuyVal: string; // e.g. "Net Buy Rp 142.5 Miliar"
-    isBandarAccumulation: boolean;
-    catalystType: 'DIVIDEND' | 'EARNINGS_RECORD' | 'SECTORAL' | 'IPO_LOW_FLOAT' | 'STRATEGIC_ACQUISITION';
-    catalystDetail: string; // e.g. "Rekor Laba Q2 +185% YoY & Ekspansi Landbank PIK2"
-    isIpoLowFloat: boolean;
-    ipoOversubscription?: string; // e.g. "Oversubscribed 98.4x (Free Float 15%)"
-  };
-
-  // Indikator MA 5 & 10 Support & Resistance Dinamis + Sinyal Crossover
-  maIndicators?: MaDynamicIndicators;
-
-  // TradingView Screener Technical Indicators (Price > EMA10, Price > EMA20, EPS growth YoY < 10%)
-  tradingViewScreener: {
-    priceAboveEma10?: boolean;
-    ema10Value?: string;
-    priceAboveEma20: boolean;
-    ema20Value: string;
-    epsGrowthYoY: string;
-    sector: string;
-    screenerMatch: string; // e.g. "Price > EMA20 | Low Float Volatile"
-  };
-
-  // Google Search AI News Grounding Sentiment
-  googleNewsSentiment: {
-    score: number; // e.g. 92 (%)
-    sentimentStatus: 'VERY_BULLISH' | 'BULLISH' | 'ACCUMULATION' | 'NEUTRAL';
-    headline: string;
-    source: string;
-  };
-
-  // Existing technical fields
-  maEmaCross: {
-    status: 'Golden Cross' | 'Bullish Continuation' | 'Testing Cross';
-    ma10: number;
-    ema10: number;
-    diffPercent: number;
-  };
-  rsi: number;
-  rsiStatus: 'Bullish Momentum' | 'Oversold Rebound' | 'Breakout Range';
-  chartBreakout: {
-    isBreakout: boolean;
-    resistanceLevel: string;
-    breakoutType: '20-Day High Breakout' | '52-Week High Breakout' | 'Pattern Breakout';
-  };
-  volumeBreakout: {
-    isVolumeBreakout: boolean;
-    volMultiplier: string;
-  };
-  entryZone: string;
-  targetPrice: string;
-  stopLoss: string;
-  riskReward: string;
-  aiRationale: string;
-  matchScore: number;
-  sparkline: number[];
-}
 
 const DAILY_STOCKS_DATABASE: DailyTradingStock[] = [
   {
@@ -1920,6 +1751,432 @@ const DAILY_STOCKS_DATABASE: DailyTradingStock[] = [
     aiRationale: 'Volume Surge 5.8x MA20/MA50 di bursa US, Level 2 Buy Wall 4.8:1, RSI 71.2 Hot Momentum & Akumulasi institusi tier-1 Wall Street.',
     matchScore: 96,
     sparkline: [37.5, 38, 39, 40, 41.2, 42, 42.8]
+  },
+  {
+    symbol: 'NVDA',
+    name: 'NVIDIA Corporation',
+    market: 'US',
+    price: 'USD 912.40',
+    priceNum: 912.40,
+    change: '+6.80%',
+    changePercent: 6.80,
+    volume: '54.2M',
+    volRatio: 4.90,
+    orderBook: {
+      bidOfferRatio: 5.2,
+      bidVolumeRatioStr: 'Dark Pool & Institutional Buy Depth (5.2 : 1)',
+      isWallBuy: true,
+      volumeVsMa20: '4.9x MA20',
+      volumeVsMa50: '6.4x MA50'
+    },
+    momentum: {
+      macdStatus: 'Golden Cross Positif',
+      macdIsPositiveGoldenCross: true,
+      bbBreakout: true,
+      bbUpperBandLevel: 'USD 875.00',
+      rsiVal: 76.5,
+      rsiHotMomentum: true
+    },
+    bandarAndFundamentals: {
+      topBrokersAccumulation: 'BlackRock, Vanguard, Citadel, Jane Street',
+      brokerNetBuyVal: 'Net Buy $620.0 Juta',
+      isBandarAccumulation: true,
+      catalystType: 'EARNINGS_RECORD',
+      catalystDetail: 'Blackwell AI Architecture Hyperscaler Demand Surge & Data Center Outperformance',
+      isIpoLowFloat: false
+    },
+    tradingViewScreener: {
+      priceAboveEma20: true,
+      ema20Value: 'USD 860.00',
+      epsGrowthYoY: '+122.0%',
+      sector: 'Technology / Semiconductors & AI',
+      screenerMatch: 'Price > EMA20 | AI GPU Dominance | Tier 1 Wall St Buy'
+    },
+    googleNewsSentiment: {
+      score: 98,
+      sentimentStatus: 'VERY_BULLISH',
+      headline: 'Google AI Intel: Record Blackwell GPU Enterprise Allocations & Hyperscaler Capex',
+      source: 'Google Search AI Grounding'
+    },
+    maEmaCross: {
+      status: 'Golden Cross',
+      ma10: 855.0,
+      ema10: 880.0,
+      diffPercent: 3.7
+    },
+    rsi: 76.5,
+    rsiStatus: 'Bullish Momentum',
+    chartBreakout: {
+      isBreakout: true,
+      resistanceLevel: 'USD 880.00',
+      breakoutType: '52-Week High Breakout'
+    },
+    volumeBreakout: {
+      isVolumeBreakout: true,
+      volMultiplier: '4.9x 10MA'
+    },
+    entryZone: '900.00 - 912.40',
+    targetPrice: '990.00 (+8.5%)',
+    stopLoss: '855.00 (-6.3%)',
+    riskReward: '1 : 1.4',
+    aiRationale: 'Lonjakan Volume 4.9x MA20 di bursa Wall Street NASDAQ, Level 2 Buy Depth 5.2:1, RSI 76.5 Hot Momentum & Dark Pool Accumulation.',
+    matchScore: 98,
+    sparkline: [820, 840, 860, 875, 890, 905, 912.4]
+  },
+  {
+    symbol: 'TSLA',
+    name: 'Tesla, Inc.',
+    market: 'US',
+    price: 'USD 174.60',
+    priceNum: 174.60,
+    change: '+7.20%',
+    changePercent: 7.20,
+    volume: '112.4M',
+    volRatio: 5.40,
+    orderBook: {
+      bidOfferRatio: 4.6,
+      bidVolumeRatioStr: 'Retail & Institutional Call Sweep Buy Wall (4.6 : 1)',
+      isWallBuy: true,
+      volumeVsMa20: '5.4x MA20',
+      volumeVsMa50: '7.1x MA50'
+    },
+    momentum: {
+      macdStatus: 'Golden Cross Positif',
+      macdIsPositiveGoldenCross: true,
+      bbBreakout: true,
+      bbUpperBandLevel: 'USD 165.00',
+      rsiVal: 69.8,
+      rsiHotMomentum: true
+    },
+    bandarAndFundamentals: {
+      topBrokersAccumulation: 'Susquehanna, Goldman Sachs, Citadel Securities',
+      brokerNetBuyVal: 'Net Buy $310.0 Juta',
+      isBandarAccumulation: true,
+      catalystType: 'STRATEGIC_ACQUISITION',
+      catalystDetail: 'Full Self-Driving (FSD) v13 Regulatory Approval & Robotaxi Fleet Rollout',
+      isIpoLowFloat: false
+    },
+    tradingViewScreener: {
+      priceAboveEma20: true,
+      ema20Value: 'USD 162.50',
+      epsGrowthYoY: '+24.5%',
+      sector: 'Consumer Cyclical / EV & Autonomous AI',
+      screenerMatch: 'Price > EMA20 | Short Squeeze Potential | High Beta Momentum'
+    },
+    googleNewsSentiment: {
+      score: 95,
+      sentimentStatus: 'VERY_BULLISH',
+      headline: 'Google AI Intel: FSD License Acceleration & Energy Storage Gigafactory Scale',
+      source: 'Google Search AI Grounding'
+    },
+    maEmaCross: {
+      status: 'Golden Cross',
+      ma10: 161.0,
+      ema10: 168.0,
+      diffPercent: 4.1
+    },
+    rsi: 69.8,
+    rsiStatus: 'Bullish Momentum',
+    chartBreakout: {
+      isBreakout: true,
+      resistanceLevel: 'USD 165.00',
+      breakoutType: '20-Day High Breakout'
+    },
+    volumeBreakout: {
+      isVolumeBreakout: true,
+      volMultiplier: '5.4x 10MA'
+    },
+    entryZone: '170.00 - 174.60',
+    targetPrice: '198.00 (+13.4%)',
+    stopLoss: '159.00 (-8.9%)',
+    riskReward: '1 : 1.5',
+    aiRationale: 'Short Squeeze Momentum di Wall Street, Volume Surge 5.4x, Level 2 Bid Depth 4.6:1, Breakout Upper Band Bollinger & Akumulasi Call Options.',
+    matchScore: 95,
+    sparkline: [155, 158, 162, 165, 169, 172, 174.6]
+  },
+  {
+    symbol: 'COIN',
+    name: 'Coinbase Global, Inc.',
+    market: 'US',
+    price: 'USD 240.50',
+    priceNum: 240.50,
+    change: '+11.20%',
+    changePercent: 11.20,
+    volume: '28.6M',
+    volRatio: 6.20,
+    orderBook: {
+      bidOfferRatio: 6.1,
+      bidVolumeRatioStr: 'Crypto Inflow & Prime Custody Depth (6.1 : 1)',
+      isWallBuy: true,
+      volumeVsMa20: '6.2x MA20',
+      volumeVsMa50: '8.8x MA50'
+    },
+    momentum: {
+      macdStatus: 'Golden Cross Positif',
+      macdIsPositiveGoldenCross: true,
+      bbBreakout: true,
+      bbUpperBandLevel: 'USD 220.00',
+      rsiVal: 78.2,
+      rsiHotMomentum: true
+    },
+    bandarAndFundamentals: {
+      topBrokersAccumulation: 'ARK Invest, Jane Street, Virtu Financial',
+      brokerNetBuyVal: 'Net Buy $245.0 Juta',
+      isBandarAccumulation: true,
+      catalystType: 'SECTORAL',
+      catalystDetail: 'Record Spot Bitcoin & Ethereum ETF Custody Fee Revenue & Base L2 Scaling',
+      isIpoLowFloat: false
+    },
+    tradingViewScreener: {
+      priceAboveEma20: true,
+      ema20Value: 'USD 215.00',
+      epsGrowthYoY: '+340.0%',
+      sector: 'Financial Services / Digital Assets',
+      screenerMatch: 'Price > EMA20 | Vol Surge 6.2x | High Beta Breakout'
+    },
+    googleNewsSentiment: {
+      score: 96,
+      sentimentStatus: 'VERY_BULLISH',
+      headline: 'Google AI Intel: Custodial Asset Surges Above $300B Amid Institutional Crypto Allocation',
+      source: 'Google Search AI Grounding'
+    },
+    maEmaCross: {
+      status: 'Golden Cross',
+      ma10: 212.0,
+      ema10: 228.0,
+      diffPercent: 5.8
+    },
+    rsi: 78.2,
+    rsiStatus: 'Bullish Momentum',
+    chartBreakout: {
+      isBreakout: true,
+      resistanceLevel: 'USD 220.00',
+      breakoutType: '52-Week High Breakout'
+    },
+    volumeBreakout: {
+      isVolumeBreakout: true,
+      volMultiplier: '6.2x 10MA'
+    },
+    entryZone: '232.00 - 240.50',
+    targetPrice: '275.00 (+14.3%)',
+    stopLoss: '218.00 (-9.4%)',
+    riskReward: '1 : 1.5',
+    aiRationale: 'High Beta Day Trading Breakout di NASDAQ, Volume Surge 6.2x MA20, Antrean Level 2 Buy Depth 6.1:1 & Sentimen AI Bullish (+96%).',
+    matchScore: 97,
+    sparkline: [205, 212, 220, 225, 232, 238, 240.5]
+  },
+  {
+    symbol: 'GRAB',
+    name: 'Grab Holdings Limited',
+    market: 'GLOBAL',
+    price: 'USD 4.85',
+    priceNum: 4.85,
+    change: '+9.60%',
+    changePercent: 9.60,
+    volume: '42.8M',
+    volRatio: 7.10,
+    orderBook: {
+      bidOfferRatio: 5.8,
+      bidVolumeRatioStr: 'Southeast Asia Superapp Inflow (5.8 : 1)',
+      isWallBuy: true,
+      volumeVsMa20: '7.1x MA20',
+      volumeVsMa50: '9.4x MA50'
+    },
+    momentum: {
+      macdStatus: 'Golden Cross Positif',
+      macdIsPositiveGoldenCross: true,
+      bbBreakout: true,
+      bbUpperBandLevel: 'USD 4.40',
+      rsiVal: 75.4,
+      rsiHotMomentum: true
+    },
+    bandarAndFundamentals: {
+      topBrokersAccumulation: 'Morgan Stanley Asia, Temasek, GIC Singapore',
+      brokerNetBuyVal: 'Net Buy $88.0 Juta',
+      isBandarAccumulation: true,
+      catalystType: 'EARNINGS_RECORD',
+      catalystDetail: 'Laba Bersih Rekor Q2 & Pertumbuhan FinTech Digibank GXS Singapore-Malaysia',
+      isIpoLowFloat: false
+    },
+    tradingViewScreener: {
+      priceAboveEma20: true,
+      ema20Value: 'USD 4.25',
+      epsGrowthYoY: '+68.0%',
+      sector: 'Technology / SEA Mobility & Fintech',
+      screenerMatch: 'Price > EMA20 | ASEAN Tech Leader | Institutional Buy'
+    },
+    googleNewsSentiment: {
+      score: 95,
+      sentimentStatus: 'VERY_BULLISH',
+      headline: 'Google AI Intel: Grab Mobility & Deliveries Margin Expansion Tops Consensus',
+      source: 'Google Search AI Grounding'
+    },
+    maEmaCross: {
+      status: 'Golden Cross',
+      ma10: 4.20,
+      ema10: 4.55,
+      diffPercent: 7.1
+    },
+    rsi: 75.4,
+    rsiStatus: 'Bullish Momentum',
+    chartBreakout: {
+      isBreakout: true,
+      resistanceLevel: 'USD 4.40',
+      breakoutType: '52-Week High Breakout'
+    },
+    volumeBreakout: {
+      isVolumeBreakout: true,
+      volMultiplier: '7.1x 10MA'
+    },
+    entryZone: '4.65 - 4.85',
+    targetPrice: '5.60 (+15.5%)',
+    stopLoss: '4.35 (-10.3%)',
+    riskReward: '1 : 1.5',
+    aiRationale: 'Global Hub Breakout Squeeze di SGX/US, Volume Surge 7.1x MA20, Aliran modal institusi Asia Temasek/GIC & Dukungan support dinamis MA 5.',
+    matchScore: 96,
+    sparkline: [4.1, 4.2, 4.35, 4.45, 4.6, 4.75, 4.85]
+  },
+  {
+    symbol: 'SE',
+    name: 'Sea Limited (Shopee & Garena)',
+    market: 'GLOBAL',
+    price: 'USD 86.50',
+    priceNum: 86.50,
+    change: '+8.90%',
+    changePercent: 8.90,
+    volume: '16.4M',
+    volRatio: 5.70,
+    orderBook: {
+      bidOfferRatio: 4.9,
+      bidVolumeRatioStr: 'E-Commerce & Digital Bank Inflow (4.9 : 1)',
+      isWallBuy: true,
+      volumeVsMa20: '5.7x MA20',
+      volumeVsMa50: '7.6x MA50'
+    },
+    momentum: {
+      macdStatus: 'Golden Cross Positif',
+      macdIsPositiveGoldenCross: true,
+      bbBreakout: true,
+      bbUpperBandLevel: 'USD 79.50',
+      rsiVal: 73.8,
+      rsiHotMomentum: true
+    },
+    bandarAndFundamentals: {
+      topBrokersAccumulation: 'Tencent, UBS Global, Baillie Gifford',
+      brokerNetBuyVal: 'Net Buy $165.0 Juta',
+      isBandarAccumulation: true,
+      catalystType: 'EARNINGS_RECORD',
+      catalystDetail: 'Shopee Live GMV Surge +82% & SeaMoney Digital Banking Profitability Acceleration',
+      isIpoLowFloat: false
+    },
+    tradingViewScreener: {
+      priceAboveEma20: true,
+      ema20Value: 'USD 78.00',
+      epsGrowthYoY: '+115.0%',
+      sector: 'Consumer Cyclical / E-Commerce & FinTech',
+      screenerMatch: 'Price > EMA20 | Vol Surge 5.7x | Asian E-Commerce Boom'
+    },
+    googleNewsSentiment: {
+      score: 96,
+      sentimentStatus: 'VERY_BULLISH',
+      headline: 'Google AI Intel: Shopee Dominance & SeaMoney Net Interest Margin Surge',
+      source: 'Google Search AI Grounding'
+    },
+    maEmaCross: {
+      status: 'Golden Cross',
+      ma10: 77.5,
+      ema10: 82.0,
+      diffPercent: 5.5
+    },
+    rsi: 73.8,
+    rsiStatus: 'Bullish Momentum',
+    chartBreakout: {
+      isBreakout: true,
+      resistanceLevel: 'USD 80.00',
+      breakoutType: '52-Week High Breakout'
+    },
+    volumeBreakout: {
+      isVolumeBreakout: true,
+      volMultiplier: '5.7x 10MA'
+    },
+    entryZone: '83.50 - 86.50',
+    targetPrice: '98.00 (+13.3%)',
+    stopLoss: '78.50 (-9.2%)',
+    riskReward: '1 : 1.4',
+    aiRationale: 'Asian E-Commerce & FinTech Squeeze, Lonjakan Volume 5.7x MA20, Order Book Wall Buy 4.9:1 & Akumulasi Institusi Tencent/UBS.',
+    matchScore: 95,
+    sparkline: [74, 76, 78.5, 80.5, 83, 85, 86.5]
+  },
+  {
+    symbol: 'DBS',
+    name: 'DBS Group Holdings Ltd',
+    market: 'GLOBAL',
+    price: 'SGD 38.45',
+    priceNum: 38.45,
+    change: '+3.40%',
+    changePercent: 3.40,
+    volume: '8.9M',
+    volRatio: 4.20,
+    orderBook: {
+      bidOfferRatio: 4.4,
+      bidVolumeRatioStr: 'SGX Institutional Wealth Inflow (4.4 : 1)',
+      isWallBuy: true,
+      volumeVsMa20: '4.2x MA20',
+      volumeVsMa50: '5.8x MA50'
+    },
+    momentum: {
+      macdStatus: 'Golden Cross Positif',
+      macdIsPositiveGoldenCross: true,
+      bbBreakout: true,
+      bbUpperBandLevel: 'SGD 36.80',
+      rsiVal: 68.5,
+      rsiHotMomentum: false
+    },
+    bandarAndFundamentals: {
+      topBrokersAccumulation: 'Temasek Holdings, Government of Singapore, Citi Private',
+      brokerNetBuyVal: 'Net Buy SGD 120.0 Juta',
+      isBandarAccumulation: true,
+      catalystType: 'DIVIDEND',
+      catalystDetail: 'Dividend Yield 5.8% & Rekor Wealth Management AUM Hub Singapura',
+      isIpoLowFloat: false
+    },
+    tradingViewScreener: {
+      priceAboveEma20: true,
+      ema20Value: 'SGD 36.50',
+      epsGrowthYoY: '+18.2%',
+      sector: 'Financials / Singapore Banking Hub',
+      screenerMatch: 'Price > EMA20 | High Dividend Yield | Safe Haven Inflow'
+    },
+    googleNewsSentiment: {
+      score: 94,
+      sentimentStatus: 'VERY_BULLISH',
+      headline: 'Google AI Intel: DBS Group Record Return on Equity & Wealth Management Inflows',
+      source: 'Google Search AI Grounding'
+    },
+    maEmaCross: {
+      status: 'Golden Cross',
+      ma10: 36.4,
+      ema10: 37.5,
+      diffPercent: 2.9
+    },
+    rsi: 68.5,
+    rsiStatus: 'Bullish Momentum',
+    chartBreakout: {
+      isBreakout: true,
+      resistanceLevel: 'SGD 37.00',
+      breakoutType: '52-Week High Breakout'
+    },
+    volumeBreakout: {
+      isVolumeBreakout: true,
+      volMultiplier: '4.2x 10MA'
+    },
+    entryZone: '37.80 - 38.45',
+    targetPrice: '42.00 (+9.2%)',
+    stopLoss: '36.20 (-5.8%)',
+    riskReward: '1 : 1.6',
+    aiRationale: 'SGX Institutional Gateway, Sinyal Pantulan MA 5, Dividend Support 5.8% & Akumulasi Sovereign Wealth Funds Temasek.',
+    matchScore: 94,
+    sparkline: [35.5, 36, 36.5, 37.2, 37.8, 38.1, 38.45]
   }
 ];
 
@@ -1934,13 +2191,34 @@ export const DailyTradingAutoAnalyst: React.FC<DailyTradingAutoAnalystProps> = (
   onOpenFundamentalAudit,
   onOpenExplorer
 }) => {
-  const [stocks, setStocks] = useState<DailyTradingStock[]>(() =>
-    DAILY_STOCKS_DATABASE.map(stock => ({
-      ...stock,
-      maIndicators: stock.maIndicators || computeMaIndicators(stock.priceNum, stock.market, stock.maEmaCross?.ma10)
-    }))
-  );
-  const [selectedMarket, setSelectedMarket] = useState<'ALL' | 'IDX' | 'US'>('ALL');
+  const livePriceLookupRef = React.useRef<Record<string, { price: number; changePercent?: number }>>({});
+  const [selectedDate, setSelectedDate] = useState<string>(() => new Date().toISOString().split('T')[0]);
+  const [scanSeedOffset, setScanSeedOffset] = useState<number>(0);
+  const [activeSessionMode, setActiveSessionMode] = useState<'TODAY_LIVE' | 'SESSION_1_OPEN' | 'SESSION_2_POWER' | 'NEXT_DAY_SIM'>('TODAY_LIVE');
+  const [selectedSignalStatus, setSelectedSignalStatus] = useState<'ALL' | SignalLifecycleStatus>('ALL');
+  const [scanStepMessage, setScanStepMessage] = useState<string>('');
+  const [scanNotification, setScanNotification] = useState<{ message: string; type: 'success' | 'info' } | null>(null);
+
+  const [stocks, setStocks] = useState<DailyTradingStock[]>(() => {
+    const todayStr = new Date().toISOString().split('T')[0];
+    return generateDailyTradingPicks(todayStr, 0);
+  });
+  const [selectedMarket, setSelectedMarket] = useState<'ALL' | 'IDX' | 'US' | 'GLOBAL'>('ALL');
+  
+  // Real-time synchronization state per exchange
+  const [exchangeSyncTimes, setExchangeSyncTimes] = useState<{
+    IDX: string;
+    US: string;
+    GLOBAL: string;
+    lastSyncTimestamp: number;
+    syncCount: number;
+  }>({
+    IDX: 'Baru saja',
+    US: 'Baru saja',
+    GLOBAL: 'Baru saja',
+    lastSyncTimestamp: Date.now(),
+    syncCount: 1
+  });
   
   // Filtering states
   const [activeFilterCategory, setActiveFilterCategory] = useState<
@@ -1959,6 +2237,22 @@ export const DailyTradingAutoAnalyst: React.FC<DailyTradingAutoAnalystProps> = (
   const [chartModalSymbol, setChartModalSymbol] = useState<string | null>(null);
   const [detailModalStock, setDetailModalStock] = useState<DailyTradingStock | null>(null);
 
+  // Active detail modal stock dynamically resolved from live stocks state
+  const activeDetailStock = useMemo(() => {
+    if (!detailModalStock) return null;
+    const liveMatch = stocks.find(s => s.symbol.toUpperCase() === detailModalStock.symbol.toUpperCase());
+    if (liveMatch) {
+      return {
+        ...liveMatch,
+        aiRationale: getDynamicAiThesis(liveMatch)
+      };
+    }
+    return {
+      ...detailModalStock,
+      aiRationale: getDynamicAiThesis(detailModalStock)
+    };
+  }, [detailModalStock, stocks]);
+
   const [showPineScriptModal, setShowPineScriptModal] = useState<boolean>(false);
   const [copiedPineScript, setCopiedPineScript] = useState<boolean>(false);
   const [copiedPlanSymbol, setCopiedPlanSymbol] = useState<string | null>(null);
@@ -1971,19 +2265,79 @@ export const DailyTradingAutoAnalyst: React.FC<DailyTradingAutoAnalystProps> = (
     }
   };
 
+  // Estimate Exchange-Specific Price Limit / Volatility Band (ARA BEI vs LULD Wall Street vs Global Cap)
+  const getExchangeLimitInfo = (priceNum: number, market: string) => {
+    if (market === 'IDX') {
+      let araPct = 25;
+      if (priceNum <= 200) araPct = 35;
+      else if (priceNum <= 5000) araPct = 25;
+      else araPct = 20;
+
+      const limitPrice = Math.floor(priceNum * (1 + araPct / 100));
+      return {
+        market: 'IDX',
+        type: 'ARA_CAP',
+        label: 'Batas Maksimum ARA (BEI Rules)',
+        shortLabel: 'Potensi ARA',
+        badge: `POTENSI ARA +${araPct}%`,
+        pct: araPct.toString(),
+        limitPriceNum: limitPrice,
+        limitPriceFormatted: `Rp ${limitPrice.toLocaleString('id-ID')}`,
+        ruleNote: priceNum <= 200 ? 'Fraksi < Rp 200 (Cap 35%)' : priceNum <= 5000 ? 'Fraksi Rp 200-5000 (Cap 25%)' : 'Fraksi > Rp 5000 (Cap 20%)',
+        currency: 'IDR'
+      };
+    } else if (market === 'US') {
+      const luldPct = priceNum > 100 ? 5 : 10;
+      const squeezePct = 15;
+      const limitPrice = +(priceNum * (1 + squeezePct / 100)).toFixed(2);
+      return {
+        market: 'US',
+        type: 'LULD_BAND',
+        label: 'Target LULD Squeeze (Wall Street)',
+        shortLabel: 'LULD Squeeze',
+        badge: `LULD SQUEEZE +${squeezePct}%`,
+        pct: squeezePct.toString(),
+        limitPriceNum: limitPrice,
+        limitPriceFormatted: `$${limitPrice.toFixed(2)}`,
+        ruleNote: `LULD Volatility Band (+${luldPct}%) / Gamma Squeeze Band (+${squeezePct}%)`,
+        currency: 'USD'
+      };
+    } else {
+      const limitPct = 20;
+      const limitPrice = +(priceNum * (1 + limitPct / 100)).toFixed(2);
+      const isSgd = market === 'SGX';
+      return {
+        market: market,
+        type: 'GLOBAL_LIMIT',
+        label: 'Dynamic Price Cap (Global Hub)',
+        shortLabel: 'Global Breakout',
+        badge: `GLOBAL LIMIT +${limitPct}%`,
+        pct: limitPct.toString(),
+        limitPriceNum: limitPrice,
+        limitPriceFormatted: isSgd ? `SGD ${limitPrice.toFixed(2)}` : `$${limitPrice.toFixed(2)}`,
+        ruleNote: 'Cross-Border Circuit Limit (+20%)',
+        currency: isSgd ? 'SGD' : 'USD'
+      };
+    }
+  };
+
   const handleCopyPlan = (stock: DailyTradingStock) => {
-    const araInfo = getBeiAraInfo(stock.priceNum, stock.market);
+    const limitInfo = getExchangeLimitInfo(stock.priceNum, stock.market);
     const maInd = stock.maIndicators || computeMaIndicators(stock.priceNum, stock.market, stock.maEmaCross?.ma10);
-    const planStr = `[VAM DAY TRADING PLAN — MA 5/10 DYNAMIC S/R] ${stock.symbol} (${stock.name})
-• Buy/Entry Zone: ${stock.entryZone}
+    const thesisText = getDynamicAiThesis(stock);
+    const isIdx = stock.market === 'IDX';
+    const planStr = `[VAM DAY TRADING PLAN — ${isIdx ? 'POTENSI ARA BEI' : stock.market === 'US' ? 'WALL STREET MOMENTUM' : 'GLOBAL HUB'}] ${stock.symbol} (${stock.name})
+• Pasar / Exchange: ${stock.market}
+• Harga Terkini: ${stock.price} (${stock.change})
+• Buy / Entry Zone: ${stock.entryZone}
 • Support Dinamis MA5 (Batas Pantulan 1): ${maInd.supportResistance.supportMa5}
 • Support Dinamis MA10 (Batas Pantulan 2): ${maInd.supportResistance.supportMa10}
 • Sinyal MA 5/10: ${maInd.crossoverLabel} (${maInd.pricePositionLabel})
 • Target Profit (TP1): ${stock.targetPrice}
-${araInfo ? `• Potensi ARA Limit (BEI): Rp ${araInfo.limitPrice} (+${araInfo.pct}%)` : ''}
+• ${limitInfo.label}: ${limitInfo.limitPriceFormatted} (+${limitInfo.pct}%)
 • Cut Loss (SL): ${stock.stopLoss}
 • Risk/Reward: ${stock.riskReward}
-• Strategi Eksekusi: ${stock.aiRationale}`;
+• Strategi Eksekusi (Thesis AI): ${thesisText}`;
 
     if (navigator?.clipboard) {
       navigator.clipboard.writeText(planStr);
@@ -1992,50 +2346,50 @@ ${araInfo ? `• Potensi ARA Limit (BEI): Rp ${araInfo.limitPrice} (+${araInfo.p
     }
   };
 
-  const getBeiAraInfo = (priceNum: number, market: string) => {
-    if (market !== 'IDX') return null;
-    let araPct = 0.25;
-    if (priceNum <= 200) araPct = 0.35;
-    else if (priceNum <= 5000) araPct = 0.25;
-    else araPct = 0.20;
-
-    const limitPrice = Math.floor(priceNum * (1 + araPct));
-    return {
-      pct: (araPct * 100).toFixed(0),
-      limitPrice: limitPrice.toLocaleString('id-ID'),
-    };
-  };
-
   // Sync with real-time exchange last prices
   const fetchLiveExchangePrices = async () => {
     try {
       const res = await fetch('/api/market/realtime-prices');
       if (res.ok) {
         const liveData: Record<string, { price: number; changePercent?: number }> = await res.json();
+        const now = new Date();
+        setExchangeSyncTimes(prev => ({
+          IDX: now.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit', second: '2-digit' }),
+          US: now.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', second: '2-digit' }),
+          GLOBAL: now.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit', second: '2-digit' }),
+          lastSyncTimestamp: Date.now(),
+          syncCount: prev.syncCount + 1
+        }));
+
         setStocks(prev => prev.map(stock => {
           const match = liveData[stock.symbol] || liveData[`${stock.symbol}.JK`];
           if (match && typeof match.price === 'number' && match.price > 0) {
             const livePrice = match.price;
             const chgPct = match.changePercent !== undefined ? match.changePercent : stock.changePercent;
-            const priceStr = stock.market === 'IDX' ? `IDR ${Math.round(livePrice).toLocaleString('id-ID')}` : `USD ${livePrice.toFixed(2)}`;
+            const priceStr = stock.market === 'IDX' 
+              ? `IDR ${Math.round(livePrice).toLocaleString('id-ID')}` 
+              : stock.market === 'SGX'
+              ? `SGD ${livePrice.toFixed(2)}`
+              : `USD ${livePrice.toFixed(2)}`;
             const changeStr = `${chgPct >= 0 ? '+' : ''}${chgPct.toFixed(2)}%`;
             
-            const entryLow = stock.market === 'IDX' ? Math.round(livePrice * 0.992) : livePrice * 0.992;
-            const entryHigh = stock.market === 'IDX' ? Math.round(livePrice) : livePrice;
-            const targetP = stock.market === 'IDX' ? Math.round(livePrice * 1.038) : livePrice * 1.038;
-            const stopL = stock.market === 'IDX' ? Math.round(livePrice * 0.978) : livePrice * 0.978;
-            const resLevel = stock.market === 'IDX' ? Math.round(livePrice * 0.995) : livePrice * 0.995;
+            const entryLow = stock.market === 'IDX' ? Math.round(livePrice * 0.992) : +(livePrice * 0.992).toFixed(2);
+            const entryHigh = stock.market === 'IDX' ? Math.round(livePrice) : +livePrice.toFixed(2);
+            const targetP = stock.market === 'IDX' ? Math.round(livePrice * 1.038) : +(livePrice * 1.038).toFixed(2);
+            const stopL = stock.market === 'IDX' ? Math.round(livePrice * 0.978) : +(livePrice * 0.978).toFixed(2);
+            const resLevel = stock.market === 'IDX' ? Math.round(livePrice * 0.995) : +(livePrice * 0.995).toFixed(2);
 
             const targetDiffPct = (((targetP - livePrice) / livePrice) * 100).toFixed(1);
             const stopLossDiffPct = (((livePrice - stopL) / livePrice) * 100).toFixed(1);
+            const updatedMa = computeMaIndicators(livePrice, stock.market, stock.maIndicators?.ma10 || stock.maEmaCross?.ma10);
 
-            return {
+            const updatedStock: DailyTradingStock = {
               ...stock,
               priceNum: livePrice,
               price: priceStr,
               change: changeStr,
               changePercent: chgPct,
-              maIndicators: computeMaIndicators(livePrice, stock.market, stock.maIndicators?.ma10 || stock.maEmaCross?.ma10),
+              maIndicators: updatedMa,
               entryZone: stock.market === 'IDX' 
                 ? `${Math.round(entryLow).toLocaleString('id-ID')} - ${Math.round(entryHigh).toLocaleString('id-ID')}`
                 : `${entryLow.toFixed(2)} - ${entryHigh.toFixed(2)}`,
@@ -2043,8 +2397,12 @@ ${araInfo ? `• Potensi ARA Limit (BEI): Rp ${araInfo.limitPrice} (+${araInfo.p
               stopLoss: stock.market === 'IDX' ? `${Math.round(stopL).toLocaleString('id-ID')} (-${stopLossDiffPct}%)` : `${stopL.toFixed(2)} (-${stopLossDiffPct}%)`,
               chartBreakout: {
                 ...stock.chartBreakout,
-                resistanceLevel: stock.market === 'IDX' ? `IDR ${Math.round(resLevel).toLocaleString('id-ID')}` : `USD ${resLevel.toFixed(2)}`
+                resistanceLevel: stock.market === 'IDX' ? `IDR ${Math.round(resLevel).toLocaleString('id-ID')}` : `$${resLevel.toFixed(2)}`
               }
+            };
+            return {
+              ...updatedStock,
+              aiRationale: getDynamicAiThesis(updatedStock)
             };
           }
           return stock;
@@ -2058,6 +2416,10 @@ ${araInfo ? `• Potensi ARA Limit (BEI): Rp ${araInfo.limitPrice} (+${araInfo.p
   useEffect(() => {
     fetchLiveExchangePrices();
 
+    const interval = setInterval(() => {
+      fetchLiveExchangePrices();
+    }, 12000);
+
     const handleMarketUpdate = (e: Event) => {
       const customEvent = e as CustomEvent<{ symbol: string; price: number; changePercent?: number }>;
       if (!customEvent || !customEvent.detail) return;
@@ -2070,25 +2432,30 @@ ${araInfo ? `• Potensi ARA Limit (BEI): Rp ${araInfo.limitPrice} (+${araInfo.p
         if (stock.symbol.toUpperCase() === cleanSym) {
           const livePrice = price;
           const chgPct = changePercent !== undefined ? changePercent : stock.changePercent;
-          const priceStr = stock.market === 'IDX' ? `IDR ${Math.round(livePrice).toLocaleString('id-ID')}` : `USD ${livePrice.toFixed(2)}`;
+          const priceStr = stock.market === 'IDX' 
+            ? `IDR ${Math.round(livePrice).toLocaleString('id-ID')}` 
+            : stock.market === 'SGX'
+            ? `SGD ${livePrice.toFixed(2)}`
+            : `USD ${livePrice.toFixed(2)}`;
           const changeStr = `${chgPct >= 0 ? '+' : ''}${chgPct.toFixed(2)}%`;
           
-          const entryLow = stock.market === 'IDX' ? Math.round(livePrice * 0.992) : livePrice * 0.992;
-          const entryHigh = stock.market === 'IDX' ? Math.round(livePrice) : livePrice;
-          const targetP = stock.market === 'IDX' ? Math.round(livePrice * 1.038) : livePrice * 1.038;
-          const stopL = stock.market === 'IDX' ? Math.round(livePrice * 0.978) : livePrice * 0.978;
-          const resLevel = stock.market === 'IDX' ? Math.round(livePrice * 0.995) : livePrice * 0.995;
+          const entryLow = stock.market === 'IDX' ? Math.round(livePrice * 0.992) : +(livePrice * 0.992).toFixed(2);
+          const entryHigh = stock.market === 'IDX' ? Math.round(livePrice) : +livePrice.toFixed(2);
+          const targetP = stock.market === 'IDX' ? Math.round(livePrice * 1.038) : +(livePrice * 1.038).toFixed(2);
+          const stopL = stock.market === 'IDX' ? Math.round(livePrice * 0.978) : +(livePrice * 0.978).toFixed(2);
+          const resLevel = stock.market === 'IDX' ? Math.round(livePrice * 0.995) : +(livePrice * 0.995).toFixed(2);
 
           const targetDiffPct = (((targetP - livePrice) / livePrice) * 100).toFixed(1);
           const stopLossDiffPct = (((livePrice - stopL) / livePrice) * 100).toFixed(1);
+          const updatedMa = computeMaIndicators(livePrice, stock.market, stock.maIndicators?.ma10 || stock.maEmaCross?.ma10);
 
-          return {
+          const updatedStock: DailyTradingStock = {
             ...stock,
             priceNum: livePrice,
             price: priceStr,
             change: changeStr,
             changePercent: chgPct,
-            maIndicators: computeMaIndicators(livePrice, stock.market, stock.maIndicators?.ma10 || stock.maEmaCross?.ma10),
+            maIndicators: updatedMa,
             entryZone: stock.market === 'IDX' 
               ? `${Math.round(entryLow).toLocaleString('id-ID')} - ${Math.round(entryHigh).toLocaleString('id-ID')}`
               : `${entryLow.toFixed(2)} - ${entryHigh.toFixed(2)}`,
@@ -2096,8 +2463,12 @@ ${araInfo ? `• Potensi ARA Limit (BEI): Rp ${araInfo.limitPrice} (+${araInfo.p
             stopLoss: stock.market === 'IDX' ? `${Math.round(stopL).toLocaleString('id-ID')} (-${stopLossDiffPct}%)` : `${stopL.toFixed(2)} (-${stopLossDiffPct}%)`,
             chartBreakout: {
               ...stock.chartBreakout,
-              resistanceLevel: stock.market === 'IDX' ? `IDR ${Math.round(resLevel).toLocaleString('id-ID')}` : `USD ${resLevel.toFixed(2)}`
+              resistanceLevel: stock.market === 'IDX' ? `IDR ${Math.round(resLevel).toLocaleString('id-ID')}` : `$${resLevel.toFixed(2)}`
             }
+          };
+          return {
+            ...updatedStock,
+            aiRationale: getDynamicAiThesis(updatedStock)
           };
         }
         return stock;
@@ -2105,7 +2476,10 @@ ${araInfo ? `• Potensi ARA Limit (BEI): Rp ${araInfo.limitPrice} (+${araInfo.p
     };
 
     window.addEventListener('vam-market-update', handleMarketUpdate);
-    return () => window.removeEventListener('vam-market-update', handleMarketUpdate);
+    return () => {
+      clearInterval(interval);
+      window.removeEventListener('vam-market-update', handleMarketUpdate);
+    };
   }, []);
 
   // Filter & sort stocks dynamically based on 3 pillars & MA 5/10 Dynamic Support/Resistance
@@ -2190,6 +2564,9 @@ ${araInfo ? `• Potensi ARA Limit (BEI): Rp ${araInfo.limitPrice} (+${araInfo.p
 
       if (volumeSurgeOnly && stock.volRatio < 5.0) return false;
 
+      // Filter by Signal Lifecycle Status
+      if (selectedSignalStatus !== 'ALL' && stock.signalStatus !== selectedSignalStatus) return false;
+
       return true;
     });
 
@@ -2198,15 +2575,87 @@ ${araInfo ? `• Potensi ARA Limit (BEI): Rp ${araInfo.limitPrice} (+${araInfo.p
     }
 
     return result;
-  }, [stocks, selectedMarket, activeFilterCategory, filter4of4Only, filterEma10Only, filterMaCrossOnly, filterDynamicBounceOnly, activeIndicatorFilter, sortByVolumeSurge, volumeSurgeOnly]);
+  }, [stocks, selectedMarket, activeFilterCategory, filter4of4Only, filterEma10Only, filterMaCrossOnly, filterDynamicBounceOnly, activeIndicatorFilter, sortByVolumeSurge, volumeSurgeOnly, selectedSignalStatus]);
 
-  const handleRunAutoScan = () => {
+  const handleRunAutoScan = async () => {
     setIsScanning(true);
-    fetchLiveExchangePrices().finally(() => {
+    setScanStepMessage('🛰️ Menghubungi Gateway Bursa BEI & IBKR / CGS...');
+
+    try {
+      await new Promise(r => setTimeout(r, 350));
+      setScanStepMessage('📊 Memindai Order Book Level 2 Depth & Deteksi Wall Buy ≥3:1...');
+
+      await new Promise(r => setTimeout(r, 350));
+      setScanStepMessage('📈 Menghitung Confluence MA 5 & 10, RSI Hot Momentum & Akumulasi Bandar...');
+
+      // Fetch live prices
+      try {
+        const res = await fetch('/api/market/realtime-prices');
+        if (res.ok) {
+          const liveData = await res.json();
+          livePriceLookupRef.current = liveData;
+        }
+      } catch (e) {
+        console.warn("Realtime price sync error in scanner:", e);
+      }
+
+      await new Promise(r => setTimeout(r, 350));
+      const nextOffset = scanSeedOffset + 1;
+      setScanSeedOffset(nextOffset);
+
+      const newPicks = generateDailyTradingPicks(selectedDate, nextOffset, livePriceLookupRef.current);
+      setStocks(newPicks);
+
+      setScanStepMessage('🎯 Radar Berhasil! Saham rekomendasi baru hasil rotasi pasar berhasil dimuat.');
+      setScanNotification({
+        message: `⚡ Pemindaian Selesai: Berhasil merotasi ${newPicks.length} saham rekomendasi untuk sesi trading aktif!`,
+        type: 'success'
+      });
+    } catch (err) {
+      console.error("Auto scan failed:", err);
+    } finally {
       setTimeout(() => {
         setIsScanning(false);
-      }, 1200);
-    });
+        setScanStepMessage('');
+      }, 500);
+
+      setTimeout(() => {
+        setScanNotification(null);
+      }, 4000);
+    }
+  };
+
+  const handleSelectSessionMode = (mode: 'TODAY_LIVE' | 'SESSION_1_OPEN' | 'SESSION_2_POWER' | 'NEXT_DAY_SIM') => {
+    setActiveSessionMode(mode);
+    let offset = 0;
+    if (mode === 'SESSION_1_OPEN') offset = 101;
+    else if (mode === 'SESSION_2_POWER') offset = 202;
+    else if (mode === 'NEXT_DAY_SIM') offset = 303;
+    else offset = 0;
+
+    setScanSeedOffset(offset);
+    setIsScanning(true);
+    setScanStepMessage(`🔄 Merotasi ke ${
+      mode === 'SESSION_1_OPEN' ? 'Sesi 1 (Pre-Market / Morning Breakout)' :
+      mode === 'SESSION_2_POWER' ? 'Sesi 2 (Power Hour / Afternoon Rally)' :
+      mode === 'NEXT_DAY_SIM' ? 'Simulasi Rotasi Hari Berikutnya' : 'Sesi Hari Ini (Live)'
+    }...`);
+
+    setTimeout(() => {
+      const rotated = generateDailyTradingPicks(selectedDate, offset, livePriceLookupRef.current);
+      setStocks(rotated);
+      setIsScanning(false);
+      setScanStepMessage('');
+      setScanNotification({
+        message: `✅ Mode Sesi Diperbarui: ${
+          mode === 'SESSION_1_OPEN' ? 'Sesi 1 Pagi (Morning Breakout)' :
+          mode === 'SESSION_2_POWER' ? 'Sesi 2 Siang (Power Hour)' :
+          mode === 'NEXT_DAY_SIM' ? 'Simulasi Hari Berikutnya' : 'Sesi Hari Ini'
+        } (${rotated.length} Saham Terpilih)`,
+        type: 'info'
+      });
+      setTimeout(() => setScanNotification(null), 3500);
+    }, 400);
   };
 
   const handleExportCSV = () => {
@@ -2445,6 +2894,410 @@ ${araInfo ? `• Potensi ARA Limit (BEI): Rp ${araInfo.limitPrice} (+${araInfo.p
     printWindow.document.close();
   };
 
+  const renderStockCard = (stock: DailyTradingStock) => {
+    const tradingViewSym = getTradingViewSymbol(stock.symbol);
+    const isVolumeSurge = stock.volRatio >= 5.0;
+    const isHighAraPotential = stock.orderBook.bidOfferRatio >= 3.0 && stock.momentum.macdIsPositiveGoldenCross && (stock.bandarAndFundamentals.isBandarAccumulation || stock.bandarAndFundamentals.isIpoLowFloat);
+    const maInd = stock.maIndicators || computeMaIndicators(stock.priceNum, stock.market, stock.maEmaCross?.ma10);
+    const limitInfo = getExchangeLimitInfo(stock.priceNum, stock.market);
+
+    return (
+      <motion.div
+        key={stock.symbol}
+        initial={{ opacity: 0, y: 15 }}
+        animate={{ opacity: 1, y: 0 }}
+        exit={{ opacity: 0, scale: 0.95 }}
+        transition={{ duration: 0.2 }}
+        className={`bg-zinc-900/70 hover:bg-zinc-900/90 border rounded-2xl p-4 space-y-3 transition-all relative overflow-hidden group shadow-lg ${
+          isHighAraPotential
+            ? 'border-amber-500/60 shadow-[0_0_20px_rgba(245,158,11,0.2)] bg-gradient-to-br from-amber-950/20 via-zinc-900/90 to-zinc-900'
+            : isVolumeSurge 
+            ? 'border-purple-500/50 shadow-[0_0_18px_rgba(168,85,247,0.15)] bg-gradient-to-br from-purple-950/20 via-zinc-900/80 to-zinc-900/90' 
+            : 'border-zinc-800 hover:border-zinc-700/80'
+        }`}
+      >
+        {/* Score & Potential Header Tag */}
+        <div className="flex items-center justify-between gap-2">
+          <div className="flex items-center flex-wrap gap-1.5">
+            <div className="bg-black/60 px-2.5 py-1 rounded-xl border border-zinc-800 flex items-center gap-1.5">
+              <span className="text-[9px] font-black text-zinc-400 font-mono">{stock.market}</span>
+              <span className="text-sm font-black text-white font-mono">{stock.symbol}</span>
+            </div>
+
+            {/* Dynamic Signal Lifecycle Status Tag */}
+            {stock.signalStatus && (
+              <span className={`px-2 py-0.5 rounded-lg text-[8px] font-black font-mono uppercase tracking-wider flex items-center gap-1 border ${
+                stock.signalStatus === 'TRIGGER_HARI_INI'
+                  ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40 shadow-[0_0_8px_rgba(16,185,129,0.25)]'
+                  : stock.signalStatus === 'LANJUTAN_TREN'
+                  ? 'bg-yellow-500/20 text-yellow-300 border-yellow-500/40'
+                  : stock.signalStatus === 'PULLBACK_RETEST'
+                  ? 'bg-sky-500/20 text-sky-300 border-sky-500/40'
+                  : 'bg-purple-500/20 text-purple-300 border-purple-500/40'
+              }`}>
+                <span className={`w-1.5 h-1.5 rounded-full ${
+                  stock.signalStatus === 'TRIGGER_HARI_INI' ? 'bg-emerald-400 animate-ping' :
+                  stock.signalStatus === 'LANJUTAN_TREN' ? 'bg-yellow-400' :
+                  stock.signalStatus === 'PULLBACK_RETEST' ? 'bg-sky-400' : 'bg-purple-400'
+                }`} />
+                <span>
+                  {stock.signalStatus === 'TRIGGER_HARI_INI' ? 'BARU HARI INI' :
+                   stock.signalStatus === 'LANJUTAN_TREN' ? 'LANJUTAN TREN' :
+                   stock.signalStatus === 'PULLBACK_RETEST' ? 'RETEST MA5' : 'AKUMULASI'}
+                </span>
+              </span>
+            )}
+
+            <span className="text-[10px] font-semibold text-zinc-400 truncate max-w-[120px] sm:max-w-[150px]">
+              {stock.name}
+            </span>
+          </div>
+
+          <div className="flex items-center gap-2">
+            {/* High ARA / Limit Potential Badge */}
+            {isHighAraPotential && (
+              <div className="flex items-center gap-1 px-2.5 py-1 rounded-xl bg-amber-500/20 border border-amber-500/50 text-amber-300 text-[8.5px] font-black font-mono uppercase tracking-wider animate-pulse shadow-[0_0_10px_rgba(245,158,11,0.3)]">
+                <Flame className="w-3 h-3 fill-amber-400 text-amber-400" />
+                <span>{limitInfo.badge}</span>
+              </div>
+            )}
+
+            {/* Volume Surge Badge */}
+            {!isHighAraPotential && isVolumeSurge && (
+              <div className="flex items-center gap-1 px-2 py-0.5 rounded-xl bg-purple-500/20 border border-purple-500/50 text-purple-300 text-[8.5px] font-black font-mono uppercase tracking-wider">
+                <Zap className="w-3 h-3 fill-purple-400 text-purple-400" />
+                <span>SURGE {stock.volRatio.toFixed(1)}x</span>
+              </div>
+            )}
+
+            <div className="flex items-center gap-1.5 bg-[#deff9a]/10 px-2.5 py-1 rounded-xl border border-[#deff9a]/30">
+              <Sparkles className="w-3 h-3 text-[#deff9a]" />
+              <span className="text-[10px] font-black font-mono text-[#deff9a]">
+                {stock.matchScore}% MATCH
+              </span>
+            </div>
+          </div>
+        </div>
+
+        {/* Price & Change Row */}
+        <div className="flex items-baseline justify-between pt-1">
+          <div>
+            <span className="text-lg font-black text-white font-mono">{stock.price}</span>
+            <span className="text-[9px] font-bold text-zinc-400 font-mono ml-2">Vol: {stock.volume}</span>
+          </div>
+          <div className={`text-xs font-black font-mono px-2 py-0.5 rounded-lg border ${
+            stock.changePercent >= 0 
+              ? 'bg-emerald-500/15 border-emerald-500/30 text-emerald-400'
+              : 'bg-rose-500/15 border-rose-500/30 text-rose-400'
+          }`}>
+            {stock.change}
+          </div>
+        </div>
+
+        {/* Exchange Limit Target Banner */}
+        <div className={`flex items-center justify-between text-[8.5px] font-mono px-2.5 py-1 rounded-xl border ${
+          stock.market === 'IDX'
+            ? 'bg-purple-950/40 border-purple-500/30 text-purple-200'
+            : stock.market === 'US'
+            ? 'bg-sky-950/40 border-sky-500/30 text-sky-200'
+            : 'bg-emerald-950/40 border-emerald-500/30 text-emerald-200'
+        }`}>
+          <span className="font-bold flex items-center gap-1">
+            <Zap className={`w-3 h-3 ${stock.market === 'IDX' ? 'text-purple-400 fill-purple-400' : stock.market === 'US' ? 'text-sky-400 fill-sky-400' : 'text-emerald-400 fill-emerald-400'}`} />
+            <span>{limitInfo.label}:</span>
+          </span>
+          <span className="text-white font-extrabold">
+            {limitInfo.limitPriceFormatted} <span className="text-[#deff9a] font-black">(+{limitInfo.pct}%)</span>
+          </span>
+        </div>
+
+        {/* 3 Pillars & MA 5/10 Dynamic Support Breakdown Detailed Grid */}
+        <div className="space-y-1.5">
+          {/* Indikator MA 5 & 10 Support & Resistance Dinamis + Sinyal Persilangan (Crossover) */}
+          <div className="bg-sky-950/20 p-2.5 rounded-xl border border-sky-500/30 space-y-1.5">
+            <div className="flex items-center justify-between text-[8.5px] font-mono font-extrabold uppercase text-sky-300">
+              <span className="flex items-center gap-1">
+                <Activity className="w-3 h-3 text-sky-400" />
+                <span>Indikator MA 5 & 10 Support/Resistance Dinamis</span>
+              </span>
+              <div className="flex items-center gap-1">
+                <span className={`px-1.5 py-0.2 rounded font-black text-[7.5px] ${
+                  maInd.crossover === 'GOLDEN_CROSS'
+                    ? 'bg-sky-500/30 text-sky-200 border border-sky-400/40'
+                    : 'bg-zinc-800 text-zinc-400'
+                }`}>
+                  {maInd.crossoverLabel}
+                </span>
+                <span className="px-1.5 py-0.2 bg-[#deff9a]/20 text-[#deff9a] rounded font-black text-[7.5px] border border-[#deff9a]/30">
+                  {maInd.signalLabel}
+                </span>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-1.5 text-[8.5px] font-mono">
+              <div className="bg-black/50 p-1.5 rounded-lg border border-zinc-800">
+                <span className="text-zinc-500 text-[7.5px] block">Garis MA 5</span>
+                <strong className="text-sky-300">{maInd.ma5Str}</strong>
+              </div>
+              <div className="bg-black/50 p-1.5 rounded-lg border border-zinc-800">
+                <span className="text-zinc-500 text-[7.5px] block">Garis MA 10</span>
+                <strong className="text-yellow-300">{maInd.ma10Str}</strong>
+              </div>
+              <div className="bg-black/50 p-1.5 rounded-lg border border-emerald-500/30">
+                <span className="text-emerald-400/80 text-[7.5px] block">Support Dinamis (MA5)</span>
+                <strong className="text-emerald-300">{maInd.supportResistance.supportMa5}</strong>
+              </div>
+              <div className="bg-black/50 p-1.5 rounded-lg border border-sky-500/30">
+                <span className="text-sky-400/80 text-[7.5px] block">Support Dinamis (MA10)</span>
+                <strong className="text-sky-200">{maInd.supportResistance.supportMa10}</strong>
+              </div>
+            </div>
+
+            <div className="flex items-center justify-between text-[8px] font-mono bg-black/40 px-2 py-0.8 rounded-lg text-zinc-300">
+              <span className="text-zinc-400">
+                Posisi Harga: <strong className="text-white">{maInd.pricePositionLabel}</strong>
+              </span>
+              <span className="text-sky-300 font-semibold truncate ml-2">
+                {maInd.supportResistance.bounceStatus}
+              </span>
+            </div>
+          </div>
+
+          {/* Pilar 1: Order Book & Volume */}
+          <div className="bg-black/60 p-2 rounded-xl border border-purple-500/30 space-y-1">
+            <div className="flex items-center justify-between text-[8.5px] font-mono font-extrabold uppercase text-purple-300">
+              <span className="flex items-center gap-1">
+                <Layers className="w-3 h-3 text-purple-400" />
+                <span>Pilar 1: Order Book Wall Buy & Volume</span>
+              </span>
+              {stock.orderBook.isWallBuy && (
+                <span className="px-1.5 py-0.2 bg-purple-500/30 text-purple-200 rounded font-black text-[7.5px]">
+                  WALL BUY &ge;3:1
+                </span>
+              )}
+            </div>
+            <div className="grid grid-cols-2 gap-2 text-[9px] font-mono text-zinc-300">
+              <div>
+                <span className="text-zinc-500">Rasio Bid/Offer: </span>
+                <strong className="text-purple-200">{stock.orderBook.bidOfferRatio} : 1</strong>
+              </div>
+              <div>
+                <span className="text-zinc-500">Vol vs MA20/50: </span>
+                <strong className="text-purple-200">{stock.orderBook.volumeVsMa20}</strong>
+              </div>
+            </div>
+            <div className="text-[8px] font-mono text-zinc-400 italic truncate">
+              {stock.orderBook.bidVolumeRatioStr}
+            </div>
+          </div>
+
+          {/* Pilar 2: Momentum & Trend */}
+          <div className="bg-black/60 p-2 rounded-xl border border-emerald-500/30 space-y-1">
+            <div className="flex items-center justify-between text-[8.5px] font-mono font-extrabold uppercase text-emerald-300">
+              <span className="flex items-center gap-1">
+                <TrendingUp className="w-3 h-3 text-emerald-400" />
+                <span>Pilar 2: Momentum MACD / BB / RSI</span>
+              </span>
+              {stock.momentum.rsiHotMomentum && (
+                <span className="px-1.5 py-0.2 bg-emerald-500/30 text-emerald-200 rounded font-black text-[7.5px]">
+                  RSI &gt;70 HOT
+                </span>
+              )}
+            </div>
+            <div className="grid grid-cols-2 gap-2 text-[9px] font-mono text-zinc-300">
+              <div>
+                <span className="text-zinc-500">MACD: </span>
+                <strong className="text-emerald-300">{stock.momentum.macdStatus}</strong>
+              </div>
+              <div>
+                <span className="text-zinc-500">Bollinger: </span>
+                <strong className="text-emerald-300">{stock.momentum.bbBreakout ? 'Upper Breakout' : 'Range'}</strong>
+              </div>
+            </div>
+          </div>
+
+          {/* Pilar 3: Aksi Bandar & Katalis / IPO */}
+          <div className="bg-black/60 p-2 rounded-xl border border-amber-500/30 space-y-1">
+            <div className="flex items-center justify-between text-[8.5px] font-mono font-extrabold uppercase text-amber-300">
+              <span className="flex items-center gap-1">
+                <Target className="w-3 h-3 text-amber-400" />
+                <span>Pilar 3: Bandar Accumulation & Katalis</span>
+              </span>
+              {stock.bandarAndFundamentals.isIpoLowFloat && (
+                <span className="px-1.5 py-0.2 bg-amber-500/30 text-amber-200 rounded font-black text-[7.5px]">
+                  IPO LOW FLOAT
+                </span>
+              )}
+            </div>
+            <div className="text-[9px] font-mono text-zinc-300 space-y-0.5">
+              <div>
+                <span className="text-zinc-500">Top Brokers: </span>
+                <strong className="text-amber-200">{stock.bandarAndFundamentals.topBrokersAccumulation} ({stock.bandarAndFundamentals.brokerNetBuyVal})</strong>
+              </div>
+              <div className="truncate">
+                <span className="text-zinc-500">Katalis: </span>
+                <span className="text-zinc-200 font-semibold">{stock.bandarAndFundamentals.catalystDetail}</span>
+              </div>
+            </div>
+          </div>
+
+          {/* TradingView Screener Technical Indicators & Google News AI Sentiment */}
+          {(stock.tradingViewScreener || stock.googleNewsSentiment) && (
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5 pt-0.5">
+              {stock.tradingViewScreener && (
+                <div className="bg-sky-950/30 p-2 rounded-xl border border-sky-500/30 space-y-1">
+                  <div className="flex items-center justify-between text-[8.5px] font-mono font-extrabold uppercase text-sky-300">
+                    <span className="flex items-center gap-1">
+                      <BarChart3 className="w-3 h-3 text-sky-400" />
+                      <span>TradingView Screener</span>
+                    </span>
+                    <div className="flex items-center gap-1">
+                      <span className={`px-1.5 py-0.2 rounded font-black text-[7.5px] ${
+                        stock.priceNum >= (stock.maEmaCross?.ema10 || 0)
+                          ? 'bg-yellow-400/25 text-yellow-300 border border-yellow-400/40'
+                          : 'bg-zinc-800 text-zinc-400'
+                      }`}>
+                        {stock.priceNum >= (stock.maEmaCross?.ema10 || 0) ? 'PRICE > EMA10' : 'EMA10'}
+                      </span>
+                      <span className="px-1.5 py-0.2 bg-sky-500/20 text-sky-200 rounded font-bold text-[7.5px]">
+                        {stock.tradingViewScreener.priceAboveEma20 ? 'PRICE > EMA20' : 'EMA20'}
+                      </span>
+                    </div>
+                  </div>
+                  <div className="text-[8.5px] font-mono text-zinc-300 space-y-0.5">
+                    <div className="flex justify-between">
+                      <span className="text-zinc-500">EMA10: <strong className="text-yellow-300">{stock.market === 'IDX' ? `Rp ${stock.maEmaCross?.ema10?.toLocaleString('id-ID')}` : `$${stock.maEmaCross?.ema10}`}</strong></span>
+                      <span className="text-zinc-500">EMA20: <strong className="text-sky-200">{stock.tradingViewScreener.ema20Value}</strong></span>
+                    </div>
+                    <div className="text-[8px] text-sky-300/80 truncate italic">
+                      {stock.tradingViewScreener.screenerMatch}
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {stock.googleNewsSentiment && (
+                <div className="bg-emerald-950/30 p-2 rounded-xl border border-emerald-500/30 space-y-1">
+                  <div className="flex items-center justify-between text-[8.5px] font-mono font-extrabold uppercase text-emerald-300">
+                    <span className="flex items-center gap-1">
+                      <Globe className="w-3 h-3 text-emerald-400" />
+                      <span>Google News Sentiment</span>
+                    </span>
+                    <span className="px-1.5 py-0.2 bg-emerald-500/20 text-emerald-300 rounded font-black text-[7.5px]">
+                      {stock.googleNewsSentiment.score}% BULLISH
+                    </span>
+                  </div>
+                  <div className="text-[8.5px] font-mono text-zinc-300 leading-tight line-clamp-2">
+                    {stock.googleNewsSentiment.headline}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+
+        {/* Action Plan & Strategi Eksekusi Day Trading */}
+        <div className="bg-zinc-950 p-3 rounded-2xl border border-zinc-800 space-y-2">
+          <div className="flex items-center justify-between text-[9.5px] font-mono font-black uppercase tracking-wider text-zinc-300 border-b border-zinc-800/80 pb-1.5">
+            <div className="flex items-center gap-1.5 text-[#deff9a]">
+              <Target className="w-3.5 h-3.5 text-[#deff9a]" />
+              <span>ACTION PLAN & EKSEKUSI TRADING</span>
+            </div>
+            <button
+              onClick={() => handleCopyPlan(stock)}
+              className="flex items-center gap-1 px-2 py-0.5 rounded-md bg-zinc-900 hover:bg-zinc-800 text-[8px] font-mono font-bold text-zinc-300 hover:text-white border border-zinc-700/80 transition-all cursor-pointer"
+              title="Salin Rencana Eksekusi Trading"
+            >
+              {copiedPlanSymbol === stock.symbol ? (
+                <>
+                  <Check className="w-3 h-3 text-emerald-400" />
+                  <span className="text-emerald-400 font-bold">COPIED PLAN</span>
+                </>
+              ) : (
+                <>
+                  <Copy className="w-3 h-3 text-zinc-400" />
+                  <span>COPY PLAN</span>
+                </>
+              )}
+            </button>
+          </div>
+
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-1.5 font-mono text-[9px]">
+            {/* Buy / Entry Zone */}
+            <div className="bg-sky-950/20 p-2 rounded-xl border border-sky-500/30 flex flex-col justify-between">
+              <span className="text-zinc-500 text-[8px] uppercase font-bold">Buy / Entry Zone</span>
+              <span className="text-sky-300 font-extrabold text-[10px] mt-0.5">{stock.entryZone}</span>
+              <span className="text-[7.5px] text-sky-400/80 font-medium">HAKA / Limit Order</span>
+            </div>
+
+            {/* Target Price (TP1) */}
+            <div className="bg-emerald-950/20 p-2 rounded-xl border border-emerald-500/30 flex flex-col justify-between">
+              <span className="text-zinc-500 text-[8px] uppercase font-bold">Target Profit (TP)</span>
+              <span className="text-emerald-400 font-extrabold text-[10px] mt-0.5">{stock.targetPrice}</span>
+              <span className="text-[7.5px] text-emerald-500/80 font-medium">Breakout Target</span>
+            </div>
+
+            {/* Target Potensi ARA / Squeeze Limit */}
+            <div className="bg-amber-950/20 p-2 rounded-xl border border-amber-500/30 flex flex-col justify-between">
+              <span className="text-zinc-500 text-[8px] uppercase font-bold flex items-center gap-0.5">
+                <Zap className="w-2.5 h-2.5 text-amber-400 fill-amber-400" />
+                <span>{limitInfo.shortLabel}</span>
+              </span>
+              <span className="text-amber-300 font-extrabold text-[10px] mt-0.5">
+                {limitInfo.limitPriceFormatted} (+{limitInfo.pct}%)
+              </span>
+              <span className="text-[7.5px] text-amber-400/80 font-medium truncate" title={limitInfo.ruleNote}>
+                {limitInfo.ruleNote}
+              </span>
+            </div>
+
+            {/* Stop Loss (Cut Loss) */}
+            <div className="bg-rose-950/20 p-2 rounded-xl border border-rose-500/30 flex flex-col justify-between">
+              <span className="text-zinc-500 text-[8px] uppercase font-bold">Cut Loss (SL)</span>
+              <span className="text-rose-400 font-extrabold text-[10px] mt-0.5">{stock.stopLoss}</span>
+              <span className="text-[7.5px] text-rose-400/80 font-medium">Disiplin Risk Limit</span>
+            </div>
+          </div>
+
+          <div className="flex flex-wrap items-center justify-between gap-1.5 text-[8.5px] font-mono bg-black/40 px-2.5 py-1 rounded-xl border border-zinc-800">
+            <span className="text-zinc-400">
+              R/R Ratio: <strong className="text-emerald-400 font-bold">{stock.riskReward}</strong>
+            </span>
+            <span className="text-zinc-400">
+              Taktik: <span className="text-zinc-200 font-semibold">Trailing Stop @ MA5 & Partial TP</span>
+            </span>
+          </div>
+        </div>
+
+        {/* AI Rationale */}
+        <p className="text-[9.5px] text-zinc-400 leading-relaxed italic border-l-2 border-[#deff9a] pl-2.5">
+          "{stock.aiRationale}"
+        </p>
+
+        {/* Bottom Actions */}
+        <div className="flex items-center justify-between pt-1 border-t border-zinc-800/60 gap-2">
+          <button
+            onClick={() => setChartModalSymbol(tradingViewSym)}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-sky-500/15 border border-sky-500/30 text-sky-300 text-[9px] font-mono font-black uppercase tracking-wider hover:bg-sky-500 hover:text-black transition-all cursor-pointer shadow-sm"
+          >
+            <ChartCandlestick className="w-3.5 h-3.5" />
+            <span>Advance Chart</span>
+          </button>
+
+          <button
+            onClick={() => setDetailModalStock(stock)}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-[#deff9a]/15 border border-[#deff9a]/35 text-[#deff9a] text-[9px] font-mono font-black uppercase tracking-wider hover:bg-[#deff9a] hover:text-black transition-all cursor-pointer shadow-sm"
+            title="Buka Analisis Mendalam 3 Pilar, Indikator Dinamis & Kalkulator Risiko"
+          >
+            <Sparkles className="w-3 h-3" />
+            <span>Detail Analyst</span>
+            <ChevronRight className="w-3 h-3" />
+          </button>
+        </div>
+      </motion.div>
+    );
+  };
+
   return (
     <div className="bg-[#0b0e14] rounded-3xl border border-zinc-800/80 p-4 sm:p-6 space-y-5 shadow-2xl relative overflow-hidden">
       {/* Background Subtle Gradient Glow */}
@@ -2527,6 +3380,159 @@ ${araInfo ? `• Potensi ARA Limit (BEI): Rp ${araInfo.limitPrice} (+${araInfo.p
         </div>
       </div>
 
+      {/* Real-Time Exchange Synchronization Matrix Banner */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-3 relative z-10">
+        {/* IDX Card */}
+        <div 
+          onClick={() => setSelectedMarket('IDX')}
+          className={`p-3.5 rounded-2xl border transition-all cursor-pointer relative overflow-hidden ${
+            selectedMarket === 'IDX'
+              ? 'bg-purple-950/40 border-purple-400 shadow-lg shadow-purple-500/15 ring-1 ring-purple-400/50'
+              : 'bg-zinc-900/80 border-zinc-800 hover:border-purple-500/40'
+          }`}
+        >
+          <div className="flex items-center justify-between pb-2 border-b border-zinc-800/80">
+            <div className="flex items-center gap-2">
+              <span className="text-base">🇮🇩</span>
+              <div>
+                <span className="text-[11px] font-black text-white font-mono uppercase">Bursa Efek Indonesia</span>
+                <span className="text-[8.5px] font-mono text-purple-300 block">IDX Market Gateway</span>
+              </div>
+            </div>
+            <div className="flex items-center gap-1.5">
+              <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+              <span className="px-1.5 py-0.2 rounded bg-emerald-500/20 text-emerald-300 text-[8px] font-black font-mono">
+                LIVE SESI II
+              </span>
+            </div>
+          </div>
+          <div className="grid grid-cols-2 gap-2 pt-2 text-[9px] font-mono">
+            <div>
+              <span className="text-zinc-500 block text-[8px]">ATURAN BATAS</span>
+              <strong className="text-amber-300">Cap ARA +20% s/d +35%</strong>
+            </div>
+            <div>
+              <span className="text-zinc-500 block text-[8px]">JAM PERDAGANGAN</span>
+              <strong className="text-zinc-300">09:00 - 16:00 WIB</strong>
+            </div>
+            <div>
+              <span className="text-zinc-500 block text-[8px]">UNIT FRAKSI</span>
+              <span className="text-zinc-300 font-semibold">1 Lot (100 Lbr) IDR</span>
+            </div>
+            <div>
+              <span className="text-zinc-500 block text-[8px]">SINKRONISASI</span>
+              <span className="text-purple-300 font-bold">{exchangeSyncTimes.IDX}</span>
+            </div>
+          </div>
+          <div className="mt-2.5 pt-2 border-t border-zinc-800/60 flex items-center justify-between text-[8px] font-mono text-zinc-400">
+            <span className="text-zinc-500">Latensi Feed: &lt; 12ms</span>
+            <span className="text-purple-300 font-bold hover:underline">
+              {stocks.filter(s => s.market === 'IDX').length} Saham Tersedia &rarr;
+            </span>
+          </div>
+        </div>
+
+        {/* Wall Street (US) Card */}
+        <div 
+          onClick={() => setSelectedMarket('US')}
+          className={`p-3.5 rounded-2xl border transition-all cursor-pointer relative overflow-hidden ${
+            selectedMarket === 'US'
+              ? 'bg-sky-950/40 border-sky-400 shadow-lg shadow-sky-500/15 ring-1 ring-sky-300/50'
+              : 'bg-zinc-900/80 border-zinc-800 hover:border-sky-500/40'
+          }`}
+        >
+          <div className="flex items-center justify-between pb-2 border-b border-zinc-800/80">
+            <div className="flex items-center gap-2">
+              <span className="text-base">🇺🇸</span>
+              <div>
+                <span className="text-[11px] font-black text-white font-mono uppercase">Wall Street (US)</span>
+                <span className="text-[8.5px] font-mono text-sky-300 block">NYSE / NASDAQ (IBKR)</span>
+              </div>
+            </div>
+            <div className="flex items-center gap-1.5">
+              <span className="w-2 h-2 rounded-full bg-sky-400 animate-pulse" />
+              <span className="px-1.5 py-0.2 rounded bg-sky-500/20 text-sky-300 text-[8px] font-black font-mono">
+                REGULAR / PRE
+              </span>
+            </div>
+          </div>
+          <div className="grid grid-cols-2 gap-2 pt-2 text-[9px] font-mono">
+            <div>
+              <span className="text-zinc-500 block text-[8px]">ATURAN BATAS</span>
+              <strong className="text-sky-300">LULD Bands & Squeeze</strong>
+            </div>
+            <div>
+              <span className="text-zinc-500 block text-[8px]">JAM PERDAGANGAN</span>
+              <strong className="text-zinc-300">09:30 - 16:00 EST</strong>
+            </div>
+            <div>
+              <span className="text-zinc-500 block text-[8px]">UNIT FRAKSI</span>
+              <span className="text-zinc-300 font-semibold">1 Share (USD $)</span>
+            </div>
+            <div>
+              <span className="text-zinc-500 block text-[8px]">SINKRONISASI</span>
+              <span className="text-sky-300 font-bold">{exchangeSyncTimes.US}</span>
+            </div>
+          </div>
+          <div className="mt-2.5 pt-2 border-t border-zinc-800/60 flex items-center justify-between text-[8px] font-mono text-zinc-400">
+            <span className="text-zinc-500">Latensi Feed: &lt; 18ms</span>
+            <span className="text-sky-300 font-bold hover:underline">
+              {stocks.filter(s => s.market === 'US').length} Saham Tersedia &rarr;
+            </span>
+          </div>
+        </div>
+
+        {/* Global Hub Card */}
+        <div 
+          onClick={() => setSelectedMarket('GLOBAL')}
+          className={`p-3.5 rounded-2xl border transition-all cursor-pointer relative overflow-hidden ${
+            selectedMarket === 'GLOBAL'
+              ? 'bg-emerald-950/40 border-emerald-400 shadow-lg shadow-emerald-500/15 ring-1 ring-emerald-300/50'
+              : 'bg-zinc-900/80 border-zinc-800 hover:border-emerald-500/40'
+          }`}
+        >
+          <div className="flex items-center justify-between pb-2 border-b border-zinc-800/80">
+            <div className="flex items-center gap-2">
+              <span className="text-base">🌐</span>
+              <div>
+                <span className="text-[11px] font-black text-white font-mono uppercase">Global Hub</span>
+                <span className="text-[8.5px] font-mono text-emerald-300 block">SGX / HKEX / CGS Feed</span>
+              </div>
+            </div>
+            <div className="flex items-center gap-1.5">
+              <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+              <span className="px-1.5 py-0.2 rounded bg-emerald-500/20 text-emerald-300 text-[8px] font-black font-mono">
+                24/7 ACTIVE
+              </span>
+            </div>
+          </div>
+          <div className="grid grid-cols-2 gap-2 pt-2 text-[9px] font-mono">
+            <div>
+              <span className="text-zinc-500 block text-[8px]">ATURAN BATAS</span>
+              <strong className="text-emerald-300">Price Cap +20% S/R</strong>
+            </div>
+            <div>
+              <span className="text-zinc-500 block text-[8px]">JAM PERDAGANGAN</span>
+              <strong className="text-zinc-300">Continuous 24/7</strong>
+            </div>
+            <div>
+              <span className="text-zinc-500 block text-[8px]">UNIT FRAKSI</span>
+              <span className="text-zinc-300 font-semibold">1 Unit (USD/SGD)</span>
+            </div>
+            <div>
+              <span className="text-zinc-500 block text-[8px]">SINKRONISASI</span>
+              <span className="text-emerald-300 font-bold">{exchangeSyncTimes.GLOBAL}</span>
+            </div>
+          </div>
+          <div className="mt-2.5 pt-2 border-t border-zinc-800/60 flex items-center justify-between text-[8px] font-mono text-zinc-400">
+            <span className="text-zinc-500">Latensi Feed: &lt; 15ms</span>
+            <span className="text-emerald-300 font-bold hover:underline">
+              {stocks.filter(s => s.market === 'GLOBAL' || s.market === 'SGX' || s.market === 'CRYPTO').length} Saham Tersedia &rarr;
+            </span>
+          </div>
+        </div>
+      </div>
+
       {/* Interactive Collapsible Methodology Guide Box */}
       <AnimatePresence>
         {showMethodologyGuide && (
@@ -2605,6 +3611,147 @@ ${araInfo ? `• Potensi ARA Limit (BEI): Rp ${araInfo.limitPrice} (+${araInfo.p
         )}
       </AnimatePresence>
 
+      {/* Live Market Scanner & Daily Rotation Engine Control Deck */}
+      <div className="bg-gradient-to-r from-zinc-950 via-zinc-900 to-black p-3.5 sm:p-4 rounded-2xl border border-zinc-800 shadow-xl space-y-3 relative overflow-hidden">
+        {/* Background glow */}
+        <div className="absolute top-0 right-0 w-80 h-80 bg-[#deff9a]/5 rounded-full blur-3xl pointer-events-none" />
+        <div className="absolute bottom-0 left-0 w-80 h-80 bg-purple-500/5 rounded-full blur-3xl pointer-events-none" />
+
+        {/* Top Header of the Deck */}
+        <div className="flex flex-wrap items-center justify-between gap-2.5 pb-2.5 border-b border-zinc-800/80 relative z-10">
+          <div className="flex items-center gap-2.5">
+            <div className="p-2 rounded-xl bg-purple-500/10 border border-purple-500/30 text-purple-300">
+              <RotateCcw className={`w-4 h-4 text-purple-400 ${isScanning ? 'animate-spin' : ''}`} />
+            </div>
+            <div>
+              <div className="flex items-center gap-2">
+                <h4 className="text-xs sm:text-sm font-black text-white font-mono uppercase tracking-wide">
+                  Daily Rotation Engine & Live Radar Scanner
+                </h4>
+                <span className="px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 text-[8.5px] font-black font-mono flex items-center gap-1">
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                  ROTASI OTOMATIS AKTIF
+                </span>
+              </div>
+              <p className="text-[10px] text-zinc-400 font-mono mt-0.5">
+                Rekomendasi saham dirotasi setiap hari secara dinamis berdasarkan kalkulasi order book, momentum & akumulasi bursa.
+              </p>
+            </div>
+          </div>
+
+          {/* Live Scanner Action Button */}
+          <button
+            onClick={handleRunAutoScan}
+            disabled={isScanning}
+            className="flex items-center gap-2 px-3.5 py-2 rounded-xl bg-gradient-to-r from-[#deff9a] to-emerald-400 hover:from-[#c8f075] hover:to-emerald-300 text-black font-black text-[10.5px] uppercase tracking-wider transition-all disabled:opacity-50 active:scale-95 shadow-lg shadow-[#deff9a]/15 cursor-pointer"
+          >
+            <RefreshCw className={`w-3.5 h-3.5 ${isScanning ? 'animate-spin' : ''}`} />
+            <span>{isScanning ? 'Memindai Radar...' : '⚡ Pindai Ulang Radar Pasar'}</span>
+          </button>
+        </div>
+
+        {/* Scanning Step Live Progress Message */}
+        <AnimatePresence>
+          {isScanning && scanStepMessage && (
+            <motion.div
+              initial={{ opacity: 0, height: 0 }}
+              animate={{ opacity: 1, height: 'auto' }}
+              exit={{ opacity: 0, height: 0 }}
+              className="bg-purple-950/40 border border-purple-500/50 p-2.5 rounded-xl flex items-center gap-2.5 text-[11px] font-mono text-purple-200 shadow-inner"
+            >
+              <RefreshCw className="w-4 h-4 text-purple-400 animate-spin flex-shrink-0" />
+              <div className="flex-1 font-semibold">{scanStepMessage}</div>
+              <div className="w-20 bg-zinc-800 rounded-full h-1.5 overflow-hidden">
+                <div className="bg-[#deff9a] h-full animate-pulse w-3/4 rounded-full" />
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+        {/* Scan Notification Banner */}
+        <AnimatePresence>
+          {scanNotification && !isScanning && (
+            <motion.div
+              initial={{ opacity: 0, y: -4 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -4 }}
+              className="bg-emerald-950/40 border border-emerald-500/40 p-2.5 rounded-xl flex items-center justify-between gap-2 text-[11px] font-mono text-emerald-200"
+            >
+              <div className="flex items-center gap-2">
+                <CheckCircle2 className="w-4 h-4 text-emerald-400 flex-shrink-0" />
+                <span>{scanNotification.message}</span>
+              </div>
+              <button 
+                onClick={() => setScanNotification(null)}
+                className="text-zinc-400 hover:text-white text-[10px] uppercase font-bold"
+              >
+                ✕
+              </button>
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+        {/* Session Switcher and Signal Lifecycle Filter */}
+        <div className="flex flex-wrap items-center justify-between gap-3 pt-1">
+          {/* Sesi Mode Buttons */}
+          <div className="flex flex-wrap items-center gap-1.5">
+            <span className="text-[9.5px] font-mono text-zinc-400 uppercase font-bold mr-1 flex items-center gap-1">
+              <Clock className="w-3 h-3 text-zinc-400" />
+              <span>Sesi Rotasi:</span>
+            </span>
+
+            {[
+              { id: 'TODAY_LIVE', label: 'Hari Ini (Live)', icon: '⚡' },
+              { id: 'SESSION_1_OPEN', label: 'Sesi I (Pagi Breakout)', icon: '🌅' },
+              { id: 'SESSION_2_POWER', label: 'Sesi II (Power Hour)', icon: '🔥' },
+              { id: 'NEXT_DAY_SIM', label: 'Simulasi Rotasi Berikutnya', icon: '🎲' },
+            ].map((s) => (
+              <button
+                key={s.id}
+                onClick={() => handleSelectSessionMode(s.id as any)}
+                className={`px-2.5 py-1 rounded-lg text-[9px] font-black font-mono uppercase transition-all cursor-pointer border ${
+                  activeSessionMode === s.id
+                    ? 'bg-[#deff9a] text-black border-[#deff9a] shadow-md shadow-[#deff9a]/10'
+                    : 'bg-zinc-900 border-zinc-800 text-zinc-400 hover:text-zinc-200 hover:border-zinc-700'
+                }`}
+              >
+                <span>{s.icon} {s.label}</span>
+              </button>
+            ))}
+          </div>
+
+          {/* Sinyal Status Chips */}
+          <div className="flex flex-wrap items-center gap-1">
+            <span className="text-[9.5px] font-mono text-zinc-400 uppercase font-bold mr-1">
+              Status Sinyal:
+            </span>
+
+            {[
+              { id: 'ALL', label: 'Semua Status' },
+              { id: 'TRIGGER_HARI_INI', label: '🟢 Baru Hari Ini', count: stocks.filter(s => s.signalStatus === 'TRIGGER_HARI_INI').length },
+              { id: 'LANJUTAN_TREN', label: '🟡 Lanjutan Tren', count: stocks.filter(s => s.signalStatus === 'LANJUTAN_TREN').length },
+              { id: 'PULLBACK_RETEST', label: '🔵 Retest MA5', count: stocks.filter(s => s.signalStatus === 'PULLBACK_RETEST').length },
+              { id: 'AKUMULASI_BANDAR', label: '🟣 Akumulasi', count: stocks.filter(s => s.signalStatus === 'AKUMULASI_BANDAR').length },
+            ].map((statusChip) => (
+              <button
+                key={statusChip.id}
+                onClick={() => setSelectedSignalStatus(statusChip.id as any)}
+                className={`px-2.5 py-1 rounded-lg text-[8.5px] font-black font-mono uppercase transition-all cursor-pointer border ${
+                  selectedSignalStatus === statusChip.id
+                    ? 'bg-zinc-200 text-black border-white shadow'
+                    : 'bg-zinc-900/90 border-zinc-800 text-zinc-400 hover:text-white'
+                }`}
+              >
+                <span>{statusChip.label}</span>
+                {statusChip.count !== undefined && (
+                  <span className="ml-1 opacity-70">({statusChip.count})</span>
+                )}
+              </button>
+            ))}
+          </div>
+        </div>
+      </div>
+
       {/* Primary Filter Tabs Header (3 Pillars, MA 5/10 & Penny ARA Quick Toggle) */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-2 relative z-10">
         <button
@@ -2632,7 +3779,7 @@ ${araInfo ? `• Potensi ARA Limit (BEI): Rp ${araInfo.limitPrice} (+${araInfo.p
         >
           <div className="text-[9px] font-mono uppercase font-bold text-amber-300 mb-0.5 flex items-center gap-1">
             <Flame className="w-3 h-3 fill-amber-300" />
-            <span>Kandidat Lock ARA</span>
+            <span>Kandidat Lock ARA / Limit</span>
           </div>
           <div className="text-[11px] font-black font-mono flex items-center justify-between">
             <span>Lolos 3/3 Pilar + MA</span>
@@ -2706,18 +3853,28 @@ ${araInfo ? `• Potensi ARA Limit (BEI): Rp ${araInfo.limitPrice} (+${araInfo.p
       {/* Filter Tabs Toolbar */}
       <div className="flex flex-wrap items-center justify-between gap-3 pt-2 border-t border-zinc-800/80 relative z-10">
         {/* Market Selector */}
-        <div className="flex items-center gap-1 bg-zinc-900/80 p-1 rounded-xl border border-zinc-800">
-          {(['ALL', 'IDX', 'US'] as const).map((m) => (
+        <div className="flex flex-wrap items-center gap-1 bg-zinc-900/80 p-1 rounded-xl border border-zinc-800">
+          {[
+            { id: 'ALL', label: 'Semua Bursa', count: stocks.length },
+            { id: 'IDX', label: 'IDX (BEI)', count: stocks.filter(s => s.market === 'IDX').length },
+            { id: 'US', label: 'Wall Street (US)', count: stocks.filter(s => s.market === 'US').length },
+            { id: 'GLOBAL', label: 'Global Hub', count: stocks.filter(s => s.market === 'GLOBAL' || s.market === 'SGX' || s.market === 'CRYPTO').length },
+          ].map((m) => (
             <button
-              key={m}
-              onClick={() => setSelectedMarket(m)}
-              className={`px-3 py-1 rounded-lg text-[9px] font-black font-mono uppercase transition-all cursor-pointer ${
-                selectedMarket === m
+              key={m.id}
+              onClick={() => setSelectedMarket(m.id as any)}
+              className={`flex items-center gap-1.5 px-3 py-1 rounded-lg text-[9px] font-black font-mono uppercase transition-all cursor-pointer ${
+                selectedMarket === m.id
                   ? 'bg-[#deff9a] text-black shadow'
                   : 'text-zinc-400 hover:text-white'
               }`}
             >
-              {m === 'ALL' ? 'Semua Pasar' : m}
+              <span>{m.label}</span>
+              <span className={`text-[8px] px-1.5 py-0.2 rounded font-bold ${
+                selectedMarket === m.id ? 'bg-black/20 text-black' : 'bg-zinc-800 text-zinc-400'
+              }`}>
+                {m.count}
+              </span>
             </button>
           ))}
         </div>
@@ -2832,395 +3989,107 @@ ${araInfo ? `• Potensi ARA Limit (BEI): Rp ${araInfo.limitPrice} (+${araInfo.p
         </div>
       </div>
 
-      {/* Stock Cards Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 relative z-10">
-        <AnimatePresence mode="popLayout">
-          {filteredStocks.map((stock) => {
-            const tradingViewSym = getTradingViewSymbol(stock.symbol);
-            const isVolumeSurge = stock.volRatio >= 5.0;
-            const isHighAraPotential = stock.orderBook.bidOfferRatio >= 3.0 && stock.momentum.macdIsPositiveGoldenCross && (stock.bandarAndFundamentals.isBandarAccumulation || stock.bandarAndFundamentals.isIpoLowFloat);
-            const maInd = stock.maIndicators || computeMaIndicators(stock.priceNum, stock.market, stock.maEmaCross?.ma10);
-
-            return (
-              <motion.div
-                key={stock.symbol}
-                initial={{ opacity: 0, y: 15 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, scale: 0.95 }}
-                transition={{ duration: 0.2 }}
-                className={`bg-zinc-900/70 hover:bg-zinc-900/90 border rounded-2xl p-4 space-y-3 transition-all relative overflow-hidden group shadow-lg ${
-                  isHighAraPotential
-                    ? 'border-amber-500/60 shadow-[0_0_20px_rgba(245,158,11,0.2)] bg-gradient-to-br from-amber-950/20 via-zinc-900/90 to-zinc-900'
-                    : isVolumeSurge 
-                    ? 'border-purple-500/50 shadow-[0_0_18px_rgba(168,85,247,0.15)] bg-gradient-to-br from-purple-950/20 via-zinc-900/80 to-zinc-900/90' 
-                    : 'border-zinc-800 hover:border-zinc-700/80'
-                }`}
-              >
-                {/* Score & Potential Header Tag */}
-                <div className="flex items-center justify-between gap-2">
-                  <div className="flex items-center gap-2">
-                    <div className="bg-black/60 px-2.5 py-1 rounded-xl border border-zinc-800 flex items-center gap-1.5">
-                      <span className="text-[9px] font-black text-zinc-400 font-mono">{stock.market}</span>
-                      <span className="text-sm font-black text-white font-mono">{stock.symbol}</span>
-                    </div>
-                    <span className="text-[10px] font-semibold text-zinc-400 truncate max-w-[120px] sm:max-w-[150px]">
-                      {stock.name}
+      {/* Stock Cards Grid - Grouped by Exchange when ALL is selected, or filtered to single exchange */}
+      {selectedMarket === 'ALL' ? (
+        <div className="space-y-6 relative z-10">
+          {/* Section 1: Bursa Efek Indonesia (IDX) */}
+          <div className="space-y-3">
+            <div className="flex items-center justify-between bg-zinc-900/80 border border-purple-500/40 p-3 rounded-2xl">
+              <div className="flex items-center gap-2.5">
+                <span className="text-xl">🇮🇩</span>
+                <div>
+                  <h4 className="text-xs sm:text-sm font-black text-white uppercase tracking-wider flex items-center gap-2">
+                    <span>Bursa Efek Indonesia (IDX)</span>
+                    <span className="px-2 py-0.5 rounded-md bg-purple-500/20 text-purple-300 border border-purple-500/40 text-[9px] font-mono font-bold">
+                      POTENSI ARA & DAY TRADING
                     </span>
-                  </div>
-
-                  <div className="flex items-center gap-2">
-                    {/* High ARA Potential Badge */}
-                    {isHighAraPotential && (
-                      <div className="flex items-center gap-1 px-2.5 py-1 rounded-xl bg-amber-500/20 border border-amber-500/50 text-amber-300 text-[8.5px] font-black font-mono uppercase tracking-wider animate-pulse shadow-[0_0_10px_rgba(245,158,11,0.3)]">
-                        <Flame className="w-3 h-3 fill-amber-400 text-amber-400" />
-                        <span>KANDIDAT ARA</span>
-                      </div>
-                    )}
-
-                    {/* Volume Surge Badge */}
-                    {!isHighAraPotential && isVolumeSurge && (
-                      <div className="flex items-center gap-1 px-2 py-0.5 rounded-xl bg-purple-500/20 border border-purple-500/50 text-purple-300 text-[8.5px] font-black font-mono uppercase tracking-wider">
-                        <Zap className="w-3 h-3 fill-purple-400 text-purple-400" />
-                        <span>SURGE {stock.volRatio.toFixed(1)}x</span>
-                      </div>
-                    )}
-
-                    <div className="flex items-center gap-1.5 bg-[#deff9a]/10 px-2.5 py-1 rounded-xl border border-[#deff9a]/30">
-                      <Sparkles className="w-3 h-3 text-[#deff9a]" />
-                      <span className="text-[10px] font-black font-mono text-[#deff9a]">
-                        {stock.matchScore}% MATCH
-                      </span>
-                    </div>
-                  </div>
+                  </h4>
+                  <p className="text-[10px] text-zinc-400 font-mono">
+                    Aturan Batas: Auto Rejection Atas (ARA) Cap +20% s/d +35% • Sesi II Live
+                  </p>
                 </div>
+              </div>
+              <span className="text-[10px] font-mono font-bold text-zinc-400 bg-black/50 px-2.5 py-1 rounded-xl border border-zinc-800">
+                {filteredStocks.filter(s => s.market === 'IDX').length} Saham Terpilih
+              </span>
+            </div>
 
-                {/* Price & Change Row */}
-                <div className="flex items-baseline justify-between pt-1">
-                  <div>
-                    <span className="text-lg font-black text-white font-mono">{stock.price}</span>
-                    <span className="text-[9px] font-bold text-zinc-400 font-mono ml-2">Vol: {stock.volume}</span>
-                  </div>
-                  <div className={`text-xs font-black font-mono px-2 py-0.5 rounded-lg border ${
-                    stock.changePercent >= 0 
-                      ? 'bg-emerald-500/15 border-emerald-500/30 text-emerald-400'
-                      : 'bg-rose-500/15 border-rose-500/30 text-rose-400'
-                  }`}>
-                    {stock.change}
-                  </div>
-                </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <AnimatePresence mode="popLayout">
+                {filteredStocks.filter(s => s.market === 'IDX').map(renderStockCard)}
+              </AnimatePresence>
+            </div>
+          </div>
 
-                {/* BEI ARA Limit Target Banner */}
-                {(() => {
-                  const araInfo = getBeiAraInfo(stock.priceNum, stock.market);
-                  if (!araInfo) return null;
-                  return (
-                    <div className="flex items-center justify-between text-[8.5px] font-mono bg-purple-950/40 px-2.5 py-1 rounded-xl border border-purple-500/30">
-                      <span className="text-purple-300 font-bold flex items-center gap-1">
-                        <Zap className="w-3 h-3 text-purple-400 fill-purple-400" />
-                        <span>Batas Maksimum ARA (BEI):</span>
-                      </span>
-                      <span className="text-white font-extrabold">
-                        Rp {araInfo.limitPrice} <span className="text-[#deff9a] font-black">(+{araInfo.pct}% ARA Cap)</span>
-                      </span>
-                    </div>
-                  );
-                })()}
-
-                {/* 3 Pillars & MA 5/10 Dynamic Support Breakdown Detailed Grid */}
-                <div className="space-y-1.5">
-                  {/* Indikator MA 5 & 10 Support & Resistance Dinamis + Sinyal Persilangan (Crossover) */}
-                  <div className="bg-sky-950/20 p-2.5 rounded-xl border border-sky-500/30 space-y-1.5">
-                    <div className="flex items-center justify-between text-[8.5px] font-mono font-extrabold uppercase text-sky-300">
-                      <span className="flex items-center gap-1">
-                        <Activity className="w-3 h-3 text-sky-400" />
-                        <span>Indikator MA 5 & 10 Support/Resistance Dinamis</span>
-                      </span>
-                      <div className="flex items-center gap-1">
-                        <span className={`px-1.5 py-0.2 rounded font-black text-[7.5px] ${
-                          maInd.crossover === 'GOLDEN_CROSS'
-                            ? 'bg-sky-500/30 text-sky-200 border border-sky-400/40'
-                            : 'bg-zinc-800 text-zinc-400'
-                        }`}>
-                          {maInd.crossoverLabel}
-                        </span>
-                        <span className="px-1.5 py-0.2 bg-[#deff9a]/20 text-[#deff9a] rounded font-black text-[7.5px] border border-[#deff9a]/30">
-                          {maInd.signalLabel}
-                        </span>
-                      </div>
-                    </div>
-
-                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-1.5 text-[8.5px] font-mono">
-                      <div className="bg-black/50 p-1.5 rounded-lg border border-zinc-800">
-                        <span className="text-zinc-500 text-[7.5px] block">Garis MA 5</span>
-                        <strong className="text-sky-300">{maInd.ma5Str}</strong>
-                      </div>
-                      <div className="bg-black/50 p-1.5 rounded-lg border border-zinc-800">
-                        <span className="text-zinc-500 text-[7.5px] block">Garis MA 10</span>
-                        <strong className="text-yellow-300">{maInd.ma10Str}</strong>
-                      </div>
-                      <div className="bg-black/50 p-1.5 rounded-lg border border-emerald-500/30">
-                        <span className="text-emerald-400/80 text-[7.5px] block">Support Dinamis (MA5)</span>
-                        <strong className="text-emerald-300">{maInd.supportResistance.supportMa5}</strong>
-                      </div>
-                      <div className="bg-black/50 p-1.5 rounded-lg border border-sky-500/30">
-                        <span className="text-sky-400/80 text-[7.5px] block">Support Dinamis (MA10)</span>
-                        <strong className="text-sky-200">{maInd.supportResistance.supportMa10}</strong>
-                      </div>
-                    </div>
-
-                    <div className="flex items-center justify-between text-[8px] font-mono bg-black/40 px-2 py-0.8 rounded-lg text-zinc-300">
-                      <span className="text-zinc-400">
-                        Posisi Harga: <strong className="text-white">{maInd.pricePositionLabel}</strong>
-                      </span>
-                      <span className="text-sky-300 font-semibold truncate ml-2">
-                        {maInd.supportResistance.bounceStatus}
-                      </span>
-                    </div>
-                  </div>
-
-                  {/* Pilar 1: Order Book & Volume */}
-                  <div className="bg-black/60 p-2 rounded-xl border border-purple-500/30 space-y-1">
-                    <div className="flex items-center justify-between text-[8.5px] font-mono font-extrabold uppercase text-purple-300">
-                      <span className="flex items-center gap-1">
-                        <Layers className="w-3 h-3 text-purple-400" />
-                        <span>Pilar 1: Order Book Wall Buy & Volume</span>
-                      </span>
-                      {stock.orderBook.isWallBuy && (
-                        <span className="px-1.5 py-0.2 bg-purple-500/30 text-purple-200 rounded font-black text-[7.5px]">
-                          WALL BUY &ge;3:1
-                        </span>
-                      )}
-                    </div>
-                    <div className="grid grid-cols-2 gap-2 text-[9px] font-mono text-zinc-300">
-                      <div>
-                        <span className="text-zinc-500">Rasio Bid/Offer: </span>
-                        <strong className="text-purple-200">{stock.orderBook.bidOfferRatio} : 1</strong>
-                      </div>
-                      <div>
-                        <span className="text-zinc-500">Vol vs MA20/50: </span>
-                        <strong className="text-purple-200">{stock.orderBook.volumeVsMa20}</strong>
-                      </div>
-                    </div>
-                    <div className="text-[8px] font-mono text-zinc-400 italic truncate">
-                      {stock.orderBook.bidVolumeRatioStr}
-                    </div>
-                  </div>
-
-                  {/* Pilar 2: Momentum & Trend */}
-                  <div className="bg-black/60 p-2 rounded-xl border border-emerald-500/30 space-y-1">
-                    <div className="flex items-center justify-between text-[8.5px] font-mono font-extrabold uppercase text-emerald-300">
-                      <span className="flex items-center gap-1">
-                        <TrendingUp className="w-3 h-3 text-emerald-400" />
-                        <span>Pilar 2: Momentum MACD / BB / RSI</span>
-                      </span>
-                      {stock.momentum.rsiHotMomentum && (
-                        <span className="px-1.5 py-0.2 bg-emerald-500/30 text-emerald-200 rounded font-black text-[7.5px]">
-                          RSI &gt;70 HOT
-                        </span>
-                      )}
-                    </div>
-                    <div className="grid grid-cols-2 gap-2 text-[9px] font-mono text-zinc-300">
-                      <div>
-                        <span className="text-zinc-500">MACD: </span>
-                        <strong className="text-emerald-300">{stock.momentum.macdStatus}</strong>
-                      </div>
-                      <div>
-                        <span className="text-zinc-500">Bollinger: </span>
-                        <strong className="text-emerald-300">{stock.momentum.bbBreakout ? 'Upper Breakout' : 'Range'}</strong>
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Pilar 3: Aksi Bandar & Katalis / IPO */}
-                  <div className="bg-black/60 p-2 rounded-xl border border-amber-500/30 space-y-1">
-                    <div className="flex items-center justify-between text-[8.5px] font-mono font-extrabold uppercase text-amber-300">
-                      <span className="flex items-center gap-1">
-                        <Target className="w-3 h-3 text-amber-400" />
-                        <span>Pilar 3: Bandar Accumulation & Katalis</span>
-                      </span>
-                      {stock.bandarAndFundamentals.isIpoLowFloat && (
-                        <span className="px-1.5 py-0.2 bg-amber-500/30 text-amber-200 rounded font-black text-[7.5px]">
-                          IPO LOW FLOAT
-                        </span>
-                      )}
-                    </div>
-                    <div className="text-[9px] font-mono text-zinc-300 space-y-0.5">
-                      <div>
-                        <span className="text-zinc-500">Top Brokers: </span>
-                        <strong className="text-amber-200">{stock.bandarAndFundamentals.topBrokersAccumulation} ({stock.bandarAndFundamentals.brokerNetBuyVal})</strong>
-                      </div>
-                      <div className="truncate">
-                        <span className="text-zinc-500">Katalis: </span>
-                        <span className="text-zinc-200 font-semibold">{stock.bandarAndFundamentals.catalystDetail}</span>
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* TradingView Screener Technical Indicators & Google News AI Sentiment */}
-                  {(stock.tradingViewScreener || stock.googleNewsSentiment) && (
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5 pt-0.5">
-                      {stock.tradingViewScreener && (
-                        <div className="bg-sky-950/30 p-2 rounded-xl border border-sky-500/30 space-y-1">
-                          <div className="flex items-center justify-between text-[8.5px] font-mono font-extrabold uppercase text-sky-300">
-                            <span className="flex items-center gap-1">
-                              <BarChart3 className="w-3 h-3 text-sky-400" />
-                              <span>TradingView Screener</span>
-                            </span>
-                            <div className="flex items-center gap-1">
-                              <span className={`px-1.5 py-0.2 rounded font-black text-[7.5px] ${
-                                stock.priceNum >= (stock.maEmaCross?.ema10 || 0)
-                                  ? 'bg-yellow-400/25 text-yellow-300 border border-yellow-400/40'
-                                  : 'bg-zinc-800 text-zinc-400'
-                              }`}>
-                                {stock.priceNum >= (stock.maEmaCross?.ema10 || 0) ? 'PRICE > EMA10' : 'EMA10'}
-                              </span>
-                              <span className="px-1.5 py-0.2 bg-sky-500/20 text-sky-200 rounded font-bold text-[7.5px]">
-                                {stock.tradingViewScreener.priceAboveEma20 ? 'PRICE > EMA20' : 'EMA20'}
-                              </span>
-                            </div>
-                          </div>
-                          <div className="text-[8.5px] font-mono text-zinc-300 space-y-0.5">
-                            <div className="flex justify-between">
-                              <span className="text-zinc-500">EMA10: <strong className="text-yellow-300">{stock.market === 'IDX' ? `Rp ${stock.maEmaCross?.ema10?.toLocaleString('id-ID')}` : `$${stock.maEmaCross?.ema10}`}</strong></span>
-                              <span className="text-zinc-500">EMA20: <strong className="text-sky-200">{stock.tradingViewScreener.ema20Value}</strong></span>
-                            </div>
-                            <div className="text-[8px] text-sky-300/80 truncate italic">
-                              {stock.tradingViewScreener.screenerMatch}
-                            </div>
-                          </div>
-                        </div>
-                      )}
-
-                      {stock.googleNewsSentiment && (
-                        <div className="bg-emerald-950/30 p-2 rounded-xl border border-emerald-500/30 space-y-1">
-                          <div className="flex items-center justify-between text-[8.5px] font-mono font-extrabold uppercase text-emerald-300">
-                            <span className="flex items-center gap-1">
-                              <Globe className="w-3 h-3 text-emerald-400" />
-                              <span>Google News Sentiment</span>
-                            </span>
-                            <span className="px-1.5 py-0.2 bg-emerald-500/20 text-emerald-300 rounded font-black text-[7.5px]">
-                              {stock.googleNewsSentiment.score}% BULLISH
-                            </span>
-                          </div>
-                          <div className="text-[8.5px] font-mono text-zinc-300 leading-tight line-clamp-2">
-                            {stock.googleNewsSentiment.headline}
-                          </div>
-                        </div>
-                      )}
-                    </div>
-                  )}
-                </div>
-
-                {/* Action Plan & Strategi Eksekusi Day Trading */}
-                <div className="bg-zinc-950 p-3 rounded-2xl border border-zinc-800 space-y-2">
-                  <div className="flex items-center justify-between text-[9.5px] font-mono font-black uppercase tracking-wider text-zinc-300 border-b border-zinc-800/80 pb-1.5">
-                    <div className="flex items-center gap-1.5 text-[#deff9a]">
-                      <Target className="w-3.5 h-3.5 text-[#deff9a]" />
-                      <span>ACTION PLAN & EKSEKUSI TRADING</span>
-                    </div>
-                    <button
-                      onClick={() => handleCopyPlan(stock)}
-                      className="flex items-center gap-1 px-2 py-0.5 rounded-md bg-zinc-900 hover:bg-zinc-800 text-[8px] font-mono font-bold text-zinc-300 hover:text-white border border-zinc-700/80 transition-all cursor-pointer"
-                      title="Salin Rencana Eksekusi Trading"
-                    >
-                      {copiedPlanSymbol === stock.symbol ? (
-                        <>
-                          <Check className="w-3 h-3 text-emerald-400" />
-                          <span className="text-emerald-400 font-bold">COPIED PLAN</span>
-                        </>
-                      ) : (
-                        <>
-                          <Copy className="w-3 h-3 text-zinc-400" />
-                          <span>COPY PLAN</span>
-                        </>
-                      )}
-                    </button>
-                  </div>
-
-                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-1.5 font-mono text-[9px]">
-                    {/* Buy / Entry Zone */}
-                    <div className="bg-sky-950/20 p-2 rounded-xl border border-sky-500/30 flex flex-col justify-between">
-                      <span className="text-zinc-500 text-[8px] uppercase font-bold">Buy / Entry Zone</span>
-                      <span className="text-sky-300 font-extrabold text-[10px] mt-0.5">{stock.entryZone}</span>
-                      <span className="text-[7.5px] text-sky-400/80 font-medium">HAKA / Limit Order</span>
-                    </div>
-
-                    {/* Target Price (TP1) */}
-                    <div className="bg-emerald-950/20 p-2 rounded-xl border border-emerald-500/30 flex flex-col justify-between">
-                      <span className="text-zinc-500 text-[8px] uppercase font-bold">Target Profit (TP)</span>
-                      <span className="text-emerald-400 font-extrabold text-[10px] mt-0.5">{stock.targetPrice}</span>
-                      <span className="text-[7.5px] text-emerald-500/80 font-medium">Breakout Target</span>
-                    </div>
-
-                    {/* Target Potensi ARA (BEI Rules) */}
-                    <div className="bg-amber-950/20 p-2 rounded-xl border border-amber-500/30 flex flex-col justify-between">
-                      <span className="text-zinc-500 text-[8px] uppercase font-bold flex items-center gap-0.5">
-                        <Zap className="w-2.5 h-2.5 text-amber-400 fill-amber-400" />
-                        <span>Potensi ARA Cap</span>
-                      </span>
-                      {(() => {
-                        const araInfo = getBeiAraInfo(stock.priceNum, stock.market);
-                        return (
-                          <span className="text-amber-300 font-extrabold text-[10px] mt-0.5">
-                            {araInfo ? `Rp ${araInfo.limitPrice} (+${araInfo.pct}%)` : stock.targetPrice}
-                          </span>
-                        );
-                      })()}
-                      <span className="text-[7.5px] text-amber-400/80 font-medium">Batas Maksimum BEI</span>
-                    </div>
-
-                    {/* Stop Loss (Cut Loss) */}
-                    <div className="bg-rose-950/20 p-2 rounded-xl border border-rose-500/30 flex flex-col justify-between">
-                      <span className="text-zinc-500 text-[8px] uppercase font-bold">Cut Loss (SL)</span>
-                      <span className="text-rose-400 font-extrabold text-[10px] mt-0.5">{stock.stopLoss}</span>
-                      <span className="text-[7.5px] text-rose-400/80 font-medium">Disiplin Risk Limit</span>
-                    </div>
-                  </div>
-
-                  <div className="flex flex-wrap items-center justify-between gap-1.5 text-[8.5px] font-mono bg-black/40 px-2.5 py-1 rounded-xl border border-zinc-800">
-                    <span className="text-zinc-400">
-                      R/R Ratio: <strong className="text-emerald-400 font-bold">{stock.riskReward}</strong>
+          {/* Section 2: Wall Street (US - NYSE / NASDAQ) */}
+          <div className="space-y-3">
+            <div className="flex items-center justify-between bg-zinc-900/80 border border-sky-500/40 p-3 rounded-2xl">
+              <div className="flex items-center gap-2.5">
+                <span className="text-xl">🇺🇸</span>
+                <div>
+                  <h4 className="text-xs sm:text-sm font-black text-white uppercase tracking-wider flex items-center gap-2">
+                    <span>Wall Street (US Markets — NYSE / NASDAQ)</span>
+                    <span className="px-2 py-0.5 rounded-md bg-sky-500/20 text-sky-300 border border-sky-500/40 text-[9px] font-mono font-bold">
+                      LULD VOLATILITY BANDS & SQUEEZE
                     </span>
-                    <span className="text-zinc-400">
-                      Taktik: <span className="text-zinc-200 font-semibold">Trailing Stop @ MA5 & Partial TP</span>
+                  </h4>
+                  <p className="text-[10px] text-zinc-400 font-mono">
+                    Direct IBKR Institutional Gateway • Limit Up Limit Down +10%/+15%
+                  </p>
+                </div>
+              </div>
+              <span className="text-[10px] font-mono font-bold text-zinc-400 bg-black/50 px-2.5 py-1 rounded-xl border border-zinc-800">
+                {filteredStocks.filter(s => s.market === 'US').length} Saham Terpilih
+              </span>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <AnimatePresence mode="popLayout">
+                {filteredStocks.filter(s => s.market === 'US').map(renderStockCard)}
+              </AnimatePresence>
+            </div>
+          </div>
+
+          {/* Section 3: Global Hub (SGX / HKEX / Cross-Border) */}
+          <div className="space-y-3">
+            <div className="flex items-center justify-between bg-zinc-900/80 border border-emerald-500/40 p-3 rounded-2xl">
+              <div className="flex items-center gap-2.5">
+                <span className="text-xl">🌐</span>
+                <div>
+                  <h4 className="text-xs sm:text-sm font-black text-white uppercase tracking-wider flex items-center gap-2">
+                    <span>Global Hub (SGX / HKEX / International)</span>
+                    <span className="px-2 py-0.5 rounded-md bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 text-[9px] font-mono font-bold">
+                      CROSS-BORDER BREAKOUT
                     </span>
-                  </div>
+                  </h4>
+                  <p className="text-[10px] text-zinc-400 font-mono">
+                    CGS Gateway Direct Feed • Dynamic Price Cap +20%
+                  </p>
                 </div>
+              </div>
+              <span className="text-[10px] font-mono font-bold text-zinc-400 bg-black/50 px-2.5 py-1 rounded-xl border border-zinc-800">
+                {filteredStocks.filter(s => s.market === 'GLOBAL' || s.market === 'SGX' || s.market === 'CRYPTO').length} Saham Terpilih
+              </span>
+            </div>
 
-                {/* AI Rationale */}
-                <p className="text-[9.5px] text-zinc-400 leading-relaxed italic border-l-2 border-[#deff9a] pl-2.5">
-                  "{stock.aiRationale}"
-                </p>
-
-                {/* Bottom Actions */}
-                <div className="flex items-center justify-between pt-1 border-t border-zinc-800/60 gap-2">
-                  <button
-                    onClick={() => setChartModalSymbol(tradingViewSym)}
-                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-sky-500/15 border border-sky-500/30 text-sky-300 text-[9px] font-mono font-black uppercase tracking-wider hover:bg-sky-500 hover:text-black transition-all cursor-pointer shadow-sm"
-                  >
-                    <ChartCandlestick className="w-3.5 h-3.5" />
-                    <span>Advance Chart</span>
-                  </button>
-
-                  <button
-                    onClick={() => setDetailModalStock(stock)}
-                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-[#deff9a]/15 border border-[#deff9a]/35 text-[#deff9a] text-[9px] font-mono font-black uppercase tracking-wider hover:bg-[#deff9a] hover:text-black transition-all cursor-pointer shadow-sm"
-                    title="Buka Analisis Mendalam 3 Pilar, Indikator Dinamis & Kalkulator Risiko"
-                  >
-                    <Sparkles className="w-3 h-3" />
-                    <span>Detail Analyst</span>
-                    <ChevronRight className="w-3 h-3" />
-                  </button>
-                </div>
-              </motion.div>
-            );
-          })}
-        </AnimatePresence>
-      </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <AnimatePresence mode="popLayout">
+                {filteredStocks.filter(s => s.market === 'GLOBAL' || s.market === 'SGX' || s.market === 'CRYPTO').map(renderStockCard)}
+              </AnimatePresence>
+            </div>
+          </div>
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 relative z-10">
+          <AnimatePresence mode="popLayout">
+            {filteredStocks.map(renderStockCard)}
+          </AnimatePresence>
+        </div>
+      )}
 
       {/* Detail Analyst Modal Integration */}
       <DailyStockDetailAnalystModal
-        stock={detailModalStock}
+        stock={activeDetailStock}
         isOpen={!!detailModalStock}
         onClose={() => setDetailModalStock(null)}
         onOpenAdvanceChart={(sym) => setChartModalSymbol(sym)}

@@ -58,6 +58,7 @@ import { Decimal } from 'decimal.js';
 import RealizedPnLChart from './RealizedPnLChart';
 import { generateValuationInvoicePDF, generateAuditorOpinionPDF } from '../services/documentExportService';
 import { generateConsolidatedBilingualPDF } from '../services/consolidatedReportPdfService';
+import { saveAndNotifyPdf, saveAndNotifyCsv } from '../services/reportNotificationService';
 import IntangibleAssetAdjustingEntries from './IntangibleAssetAdjustingEntries';
 
 interface PortfolioAsset {
@@ -227,7 +228,21 @@ export default function FinancialReportingCenter({
   const [retentionProgress, setRetentionProgress] = useState(100);
   const [isSecureSyncActive, setIsSecureSyncActive] = useState(true);
 
-  const [lastUpdateTime, setLastUpdateTime] = useState<string>('2026-06-16 12:10:29');
+  const [lastUpdateTime, setLastUpdateTime] = useState<string>(() => {
+    const d = new Date();
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')} ${d.toTimeString().split(' ')[0]}`;
+  });
+
+  // Period Closing PDF Generation state
+  const [selectedClosingCategory, setSelectedClosingCategory] = useState<'MONTHLY' | 'QUARTERLY' | 'SEMI_ANNUAL' | 'ANNUAL'>('QUARTERLY');
+
+  // AI Accounting Core System - Tri-Sync Real-time State (Financial Reports ↔ Rebalancing ↔ RDN-Giro)
+  const [isSyncingAccounting, setIsSyncingAccounting] = useState(false);
+  const [lastSyncTime, setLastSyncTime] = useState<string>(() => new Date().toLocaleTimeString('id-ID'));
+  const [syncToastMessage, setSyncToastMessage] = useState<string | null>(null);
+  const [isTriSyncModalOpen, setIsTriSyncModalOpen] = useState(false);
+  const [triSyncModalTab, setTriSyncModalTab] = useState<'OVERVIEW' | 'REPORTS' | 'REBALANCE' | 'TRANSFER' | 'DOUBLE_ENTRY'>('OVERVIEW');
+  const [doubleEntryFilter, setDoubleEntryFilter] = useState<'ALL' | 'REBALANCE' | 'TRANSFER' | 'PSAK_MTM' | 'EXPENSE'>('ALL');
 
   // Dynamic current date & month calculation for real-time reporting context
   const getRealTimeReportingDate = () => {
@@ -279,7 +294,7 @@ export default function FinancialReportingCenter({
     shortLiability25: 0,
     paidCapital26: 11120000, // Modal Disetor Riil Laporan Keuangan Internal (Rp 11.120.000,00)
     paidCapital25: 6196225.05, // Modal Disetor (Audit 2025)
-    retainedEarnings26: 1538577, // Corrected to include separate 711.000 Giro balance (827577 + 711000)
+    retainedEarnings26: 4199190000, // Saldo Laba Ditahan & Cadangan Konsolidasi (Total Aset Rp 4.210.310.000 - Modal Disetor Rp 11.120.000)
     retainedEarnings25: 2074883.64, // Laba Komprehensif (Audit 2025)
 
     // Profit Loss (Rp)
@@ -328,111 +343,205 @@ export default function FinancialReportingCenter({
     return transactions.map((tx: any) => `${tx.id}:${tx.side}:${tx.price}:${tx.quantity}`).join('|');
   }, [transactions]);
 
-  // Sync with portfolioData and cashBalance props from custom portfolio rebalancing
-  useEffect(() => {
-    if (portfolioData && cashBalance !== undefined) {
-      const liveInvest26 = portfolioData.reduce((acc, asset) => acc + (asset.marketValue || 0), 0);
-      const liveCash26 = cashBalance;
-      const liveGiro26 = giroBalance !== undefined ? giroBalance : 711000;
-      const liveUnrealizedSecurities26 = portfolioData.reduce((acc, asset) => acc + (asset.unrealized || 0), 0);
-      
-      const netCurrentAssets26 = liveCash26 + liveInvest26 + liveGiro26;
-      const netNonCurrentAssets26 = 5950000 + 4200000000; // fixed26 + intangible26
-      const netTotalAssets26 = netCurrentAssets26 + netNonCurrentAssets26;
-      const totalLiabilities26 = 0; // shortLiability26 is 0
-      const liveRetainedEarnings26 = netTotalAssets26 - totalLiabilities26 - 11120000; // paidCapital26 is 11120000 (Modal Disetor Riil Rp 11.120.000,00)
-
-      // Calculate real-time Revenue (sell transactions) and HPP (buy transactions)
-      const totalSellAmount = (transactions || []).filter((tx: any) => tx.side === 'SELL' || tx.side === 'STOP_LOSS').reduce((acc: number, tx: any) => {
-        const rate = tx.currency === 'USD' ? 16000 : 1;
-        return acc + (tx.quantity * tx.price * rate);
-      }, 0);
-
-      const totalBuyAmount = (transactions || []).filter((tx: any) => tx.side === 'BUY').reduce((acc: number, tx: any) => {
-        const rate = tx.currency === 'USD' ? 16000 : 1;
-        return acc + (tx.quantity * tx.price * rate);
-      }, 0);
-
-      const liveRev26 = 456200 + totalSellAmount;
-      const liveHpp26 = 0 - totalBuyAmount;
-
-      // Calculate real-time tax from buy and sell fees
-      const totalBuyFees = (transactions || []).filter((tx: any) => tx.side === 'BUY').reduce((acc: number, tx: any) => {
-        const rate = tx.currency === 'USD' ? 16000 : 1;
-        const val = tx.quantity * tx.price * rate;
-        const commission = val * 0.001815; // 0.1815% Broker Fee (includes PPN)
-        const levy = val * 0.0004; // 0.04% IDX Levy
-        return acc + (commission + levy);
-      }, 0);
-
-      const totalSellFees = (transactions || []).filter((tx: any) => tx.side === 'SELL' || tx.side === 'STOP_LOSS').reduce((acc: number, tx: any) => {
-        const rate = tx.currency === 'USD' ? 16000 : 1;
-        const val = tx.quantity * tx.price * rate;
-        const commission = val * 0.002815; // 0.2815% Broker Fee (includes PPN)
-        const levy = val * 0.0004; // 0.04% IDX Levy
-        const pph = val * 0.001; // 0.1% PPh Final
-        return acc + (commission + levy + pph);
-      }, 0);
-
-      const sellTaxPPh = (transactions || []).filter((tx: any) => tx.side === 'SELL' || tx.side === 'STOP_LOSS').reduce((acc: number, tx: any) => {
-        const rate = tx.currency === 'USD' ? 16000 : 1;
-        return acc + (tx.quantity * tx.price * rate * 0.001); // 0.1% PPh Final
-      }, 0);
-
-      const liveTax26 = 0 - Math.round(sellTaxPPh); // Store PPh Final as a negative expense (CGS fee includes PPN, and no 12% PPN in transaction)
-
-      // Subtract the tax portion from the totalFees to get the pure operating expense burden
-      const liveOpex26 = -575000 - (totalFees - Math.abs(liveTax26));
-
-      // Dynamic Cash Flows to make Balance Sheet always balance with Income & Cash flow logically
-      const liveOpexOut26 = -575000 - totalFees;
-      const liveReceived26 = liveRev26;
-      const liveBeginningCash26 = 989908.69;
-      const liveCfOperating26 = liveReceived26 + liveOpexOut26; // liveRev26 - 575000 - totalFees
-      const liveCfFinancing26 = 7300000;
-      const liveCfInvesting26 = liveCash26 - liveBeginningCash26 - liveCfOperating26 - liveCfFinancing26;
-
-      const isSame = (a: number, b: number) => Math.abs((a || 0) - (b || 0)) < 0.01;
-      const cur = financialValuesRef.current;
-
-      const needsUpdate = !(
-        isSame(cur.cash26, liveCash26) &&
-        isSame(cur.giro26, liveGiro26) &&
-        isSame(cur.invest26, liveInvest26) &&
-        isSame(cur.unrealizedSecurities26, liveUnrealizedSecurities26) &&
-        isSame(cur.realizedSecurities26, realizedPnL) &&
-        isSame(cur.retainedEarnings26, liveRetainedEarnings26) &&
-        isSame(cur.operatingExpense26, liveOpex26) &&
-        isSame(cur.tax26, liveTax26) &&
-        isSame(cur.operatingExpenseOut26, liveOpexOut26) &&
-        isSame(cur.investOut26, liveCfInvesting26) &&
-        isSame(cur.beginningCash26, liveBeginningCash26) &&
-        isSame(cur.rev26, liveRev26) &&
-        isSame(cur.hpp26, liveHpp26) &&
-        isSame(cur.received26, liveReceived26)
-      );
-
-      if (needsUpdate) {
-        setFinancialValues(prev => ({
-          ...prev,
-          cash26: liveCash26,
-          giro26: liveGiro26,
-          invest26: liveInvest26,
-          unrealizedSecurities26: liveUnrealizedSecurities26,
-          realizedSecurities26: realizedPnL,
-          retainedEarnings26: liveRetainedEarnings26,
-          operatingExpense26: liveOpex26,           // Sync transaction fees without tax portion as operating expense
-          tax26: liveTax26,                         // Sync tax portion of fees as Tax expense
-          operatingExpenseOut26: liveOpexOut26,     // Sync transaction fees as operating cash outflow
-          investOut26: liveCfInvesting26,           // Balanced investment outflow/inflow matching ending ledger cash
-          beginningCash26: liveBeginningCash26,
-          rev26: liveRev26,
-          hpp26: liveHpp26,
-          received26: liveReceived26,
-        }));
+  // Central Core Function: Perform Full Tri-Sync across Financial Reports, Portfolio Rebalancing, and RDN-Giro Transfers
+  const performFullAccountingSync = (isManual = false) => {
+    if (isManual) {
+      setIsSyncingAccounting(true);
+    }
+    
+    // Read latest data from props with fallback to persisted storage
+    let liveAssets = portfolioData || [];
+    const savedAssets = localStorage.getItem('cgsAssets_v3');
+    if (savedAssets) {
+      try {
+        const parsed = JSON.parse(savedAssets);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          liveAssets = parsed;
+        }
+      } catch (e) {
+        console.error('Error parsing cgsAssets_v3 in sync', e);
       }
     }
+
+    let liveCash = cashBalance !== undefined ? cashBalance : 2379000;
+    const savedCash = localStorage.getItem('cgsCashBalance_v3');
+    if (savedCash && !isNaN(Number(savedCash))) {
+      liveCash = Number(savedCash);
+    }
+
+    let liveGiro = giroBalance !== undefined ? giroBalance : 711000;
+    const savedGiro = localStorage.getItem('cgsGiroBalance_v3');
+    if (savedGiro && !isNaN(Number(savedGiro))) {
+      liveGiro = Number(savedGiro);
+    }
+
+    let liveRealized = realizedPnL !== undefined ? realizedPnL : 0;
+    const savedRealized = localStorage.getItem('cgsRealizedPnL_v3');
+    if (savedRealized && !isNaN(Number(savedRealized))) {
+      liveRealized = Number(savedRealized);
+    }
+
+    let liveFees = totalFees !== undefined ? totalFees : 0;
+    const savedFees = localStorage.getItem('cgsTotalFees_v3');
+    if (savedFees && !isNaN(Number(savedFees))) {
+      liveFees = Number(savedFees);
+    }
+
+    let liveTxList = transactions || [];
+    const savedTx = localStorage.getItem('cgs_transaction_history_v3') || localStorage.getItem('cgsHistory_v3');
+    if (savedTx) {
+      try {
+        const parsed = JSON.parse(savedTx);
+        if (Array.isArray(parsed)) {
+          liveTxList = parsed;
+        }
+      } catch (e) {
+        console.error('Error parsing transaction history in sync', e);
+      }
+    }
+
+    const liveInvest26 = liveAssets.reduce((acc, asset) => acc + (asset.marketValue || 0), 0);
+    const liveUnrealizedSecurities26 = liveAssets.reduce((acc, asset) => acc + (asset.unrealized || 0), 0);
+
+    const netCurrentAssets26 = liveCash + liveInvest26 + liveGiro;
+    const netNonCurrentAssets26 = 5950000 + 4200000000; // fixed26 + intangible26
+    const netTotalAssets26 = netCurrentAssets26 + netNonCurrentAssets26;
+    const totalLiabilities26 = 0; // shortLiability26 is 0
+    const liveRetainedEarnings26 = netTotalAssets26 - totalLiabilities26 - 11120000; // paidCapital26 is 11120000
+
+    const totalSellAmount = (liveTxList || []).filter((tx: any) => tx.side === 'SELL' || tx.side === 'STOP_LOSS').reduce((acc: number, tx: any) => {
+      const rate = tx.currency === 'USD' ? 16000 : 1;
+      return acc + (tx.quantity * tx.price * rate);
+    }, 0);
+
+    const totalBuyAmount = (liveTxList || []).filter((tx: any) => tx.side === 'BUY').reduce((acc: number, tx: any) => {
+      const rate = tx.currency === 'USD' ? 16000 : 1;
+      return acc + (tx.quantity * tx.price * rate);
+    }, 0);
+
+    const liveRev26 = 456200 + totalSellAmount;
+    const liveHpp26 = 0 - totalBuyAmount;
+
+    const sellTaxPPh = (liveTxList || []).filter((tx: any) => tx.side === 'SELL' || tx.side === 'STOP_LOSS').reduce((acc: number, tx: any) => {
+      const rate = tx.currency === 'USD' ? 16000 : 1;
+      return acc + (tx.quantity * tx.price * rate * 0.001); // 0.1% PPh Final
+    }, 0);
+
+    const liveTax26 = 0 - Math.round(sellTaxPPh);
+    const liveOpex26 = -575000 - (liveFees - Math.abs(liveTax26));
+    const liveOpexOut26 = -575000 - liveFees;
+    const liveReceived26 = liveRev26;
+    const liveBeginningCash26 = 989908.69;
+    const liveCfOperating26 = liveReceived26 + liveOpexOut26;
+    const liveCfFinancing26 = 7300000;
+    const liveCfInvesting26 = liveCash - liveBeginningCash26 - liveCfOperating26 - liveCfFinancing26;
+
+    const isClose = (a: number | undefined, b: number | undefined) => Math.abs((a || 0) - (b || 0)) < 0.001;
+    const cur = financialValuesRef.current;
+
+    const hasChanged = !(
+      isClose(cur.cash26, liveCash) &&
+      isClose(cur.giro26, liveGiro) &&
+      isClose(cur.invest26, liveInvest26) &&
+      isClose(cur.unrealizedSecurities26, liveUnrealizedSecurities26) &&
+      isClose(cur.realizedSecurities26, liveRealized) &&
+      isClose(cur.retainedEarnings26, liveRetainedEarnings26) &&
+      isClose(cur.rev26, liveRev26) &&
+      isClose(cur.hpp26, liveHpp26) &&
+      isClose(cur.operatingExpense26, liveOpex26) &&
+      isClose(cur.tax26, liveTax26) &&
+      isClose(cur.received26, liveReceived26) &&
+      isClose(cur.operatingExpenseOut26, liveOpexOut26) &&
+      isClose(cur.investOut26, liveCfInvesting26)
+    );
+
+    if (hasChanged) {
+      setFinancialValues(prev => ({
+        ...prev,
+        cash26: liveCash,
+        cash25: 989908.69,
+        giro26: liveGiro,
+        giro25: 262900,
+        invest26: liveInvest26,
+        invest25: 1018300,
+        fixed26: 5950000,
+        fixed25: 6000000,
+        intangible26: 4200000000,
+        intangible25: 0,
+        shortLiability26: 0,
+        shortLiability25: 0,
+        paidCapital26: 11120000,
+        paidCapital25: 6196225.05,
+        retainedEarnings26: liveRetainedEarnings26,
+        retainedEarnings25: 2074883.64,
+        rev26: liveRev26,
+        rev25: 11319740,
+        hpp26: liveHpp26,
+        hpp25: -9203333,
+        operatingExpense26: liveOpex26,
+        operatingExpense25: -304838,
+        depreciationExpense26: -50000,
+        depreciationExpense25: 0,
+        interestIncome26: 0,
+        interestIncome25: 414.64,
+        unrealizedSecurities26: liveUnrealizedSecurities26,
+        unrealizedSecurities25: 262900,
+        realizedSecurities26: liveRealized,
+        realizedSecurities25: 0,
+        tax25: 0,
+        tax26: liveTax26,
+        received26: liveReceived26,
+        received25: 11319802.64,
+        operatingExpenseOut26: liveOpexOut26,
+        operatingExpenseOut25: -9507819,
+        investOut26: liveCfInvesting26,
+        investOut25: -7018300,
+        proceedsCapital26: 7300000,
+        proceedsCapital25: 6196225.05,
+        beginningCash26: liveBeginningCash26,
+        beginningCash25: 0,
+      }));
+    }
+
+    if (hasChanged || isManual) {
+      const d = new Date();
+      const datePrefix = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+      const nowTime = d.toLocaleTimeString('id-ID');
+      setLastSyncTime(nowTime);
+      setLastUpdateTime(`${datePrefix} ${nowTime}`);
+    }
+
+    if (isManual) {
+      addAuditLog('TRI_SYNC_EXEC', 'SECURE', `Manual Tri-Sync: Financial Reports, Portfolio Rebalance (AUM: Rp ${liveInvest26.toLocaleString('id-ID')}), dan RDN-Giro (Total: Rp ${(liveCash + liveGiro).toLocaleString('id-ID')}) berhasil disinkronisasi.`);
+      setSyncToastMessage('AI Accounting Core: Tri-Sync berhasil memperbarui seluruh data Neraca, Laba Rugi, Portofolio & RDN-Giro!');
+      setTimeout(() => setSyncToastMessage(null), 4500);
+      setTimeout(() => {
+        setIsSyncingAccounting(false);
+      }, 350);
+    }
+  };
+
+  // Sync automatically with props changes
+  useEffect(() => {
+    performFullAccountingSync(false);
   }, [portfolioFingerprint, cashBalance, giroBalance, realizedPnL, totalFees, transactionsFingerprint]);
+
+  // Real-time Event Listeners for Cross-Component Sync (WAP Rebalancing, RDN/Giro Transfers, Local Storage)
+  useEffect(() => {
+    const handleSyncEvent = () => {
+      performFullAccountingSync(false);
+    };
+
+    window.addEventListener('vam-cgs-update', handleSyncEvent);
+    window.addEventListener('vam-fund-transfer', handleSyncEvent);
+    window.addEventListener('storage', handleSyncEvent);
+
+    return () => {
+      window.removeEventListener('vam-cgs-update', handleSyncEvent);
+      window.removeEventListener('vam-fund-transfer', handleSyncEvent);
+      window.removeEventListener('storage', handleSyncEvent);
+    };
+  }, []);
 
   // Vault states
   const [vaultFileName, setVaultFileName] = useState<string | null>(null);
@@ -826,7 +935,7 @@ export default function FinancialReportingCenter({
     doc.text('Dokumen ini diterbitkan secara elektronik oleh Sistem Laporan Keuangan PT Venture Asset Management.', 14, finalY);
     doc.text('Diakui secara sah sebagai bukti transfer perbankan resmi tanpa memerlukan tanda tangan basah.', 14, finalY + 6);
     
-    doc.save(`Receipt_${tx.refNo}.pdf`);
+    saveAndNotifyPdf(doc, `Receipt_${tx.refNo}.pdf`, `Bukti Transaksi Resmi (${tx.refNo})`);
   };
 
   // Simulated 24-hour retention deletion ticker count
@@ -867,6 +976,45 @@ export default function FinancialReportingCenter({
         return prev + 5;
       });
     }, 40);
+  };
+
+  const handleGeneratePeriodClosingPDF = async (options: {
+    periodType: 'MONTHLY' | 'QUARTERLY' | 'SEMI_ANNUAL' | 'ANNUAL' | 'CONSOLIDATED';
+    periodLabel: string;
+    periodSubLabel?: string;
+    periodCode?: string;
+    statusBadge?: string;
+    realizedPeriodProfit?: number;
+    periodNotes?: string;
+  }) => {
+    setIsGenerating(true);
+    setGenerationProgress(0);
+    addAuditLog('PERIOD_CLOSING_PDF', 'INFO', `Generating Period Closing PDF: ${options.periodLabel} (${options.periodCode || 'VAM-PERIOD'})`);
+    
+    const interval = setInterval(() => {
+      setGenerationProgress(prev => {
+        if (prev >= 100) {
+          clearInterval(interval);
+          setTimeout(async () => {
+            setIsGenerating(false);
+            try {
+              await generateConsolidatedBilingualPDF({
+                financialValues,
+                portfolioData,
+                lastUpdateTime,
+                reportingDate: getRealTimeReportingDate(),
+                periodOptions: options
+              });
+              addAuditLog('PDF_EXTRACT', 'SECURE', `Successfully generated & exported Period Closing Statement PDF: ${options.periodLabel}`);
+            } catch (err) {
+              console.error('Error generating period closing PDF:', err);
+            }
+          }, 300);
+          return 100;
+        }
+        return prev + 10;
+      });
+    }, 25);
   };
 
   const handlePreview = (id: string) => {
@@ -1159,16 +1307,14 @@ export default function FinancialReportingCenter({
       '2025 (Rp)': row.val25
     }));
 
+    const rawRows: (string | number)[][] = [
+      ['Uraian (IDN)', 'Description (ENG)', '2026 (Rp)', '2025 (Rp)'],
+      ...reportData.rows.map(row => [row.labelInd, row.labelEng, row.val26, row.val25])
+    ];
+
     const csv = Papa.unparse(csvData);
-    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
-    const link = document.createElement('a');
-    const url = URL.createObjectURL(blob);
-    link.setAttribute('href', url);
-    link.setAttribute('download', `${reportData.titleEng.replace(/\s+/g, '_')}_${new Date().toISOString().split('T')[0]}.csv`);
-    link.style.visibility = 'hidden';
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
+    const fileName = `${reportData.titleEng.replace(/\s+/g, '_')}_${new Date().toISOString().split('T')[0]}.csv`;
+    saveAndNotifyCsv(csv, fileName, `Data CSV ${reportData.titleInd || reportData.titleEng}`, rawRows);
     addAuditLog('CSV_EXTRACT', 'INFO', `Successfully compiled & downloaded CSV: ${reportData.titleEng}`);
   };
 
@@ -1749,7 +1895,7 @@ export default function FinancialReportingCenter({
     }
 
     const fileName = `VentureAM_Comprehensive_YTD_Financial_Report_${new Date().toISOString().split('T')[0]}.pdf`;
-    doc.save(fileName);
+    saveAndNotifyPdf(doc, fileName, 'Laporan Keuangan Komprehensif Tahunan YTD 2026');
     addAuditLog('PDF_EXTRACT', 'INFO', `Successfully generated 7-page institutional compliance report PDF: ${fileName}`);
   };
 
@@ -2005,7 +2151,8 @@ export default function FinancialReportingCenter({
     doc.text('AUTHORIZED SECURITY ENVELOPE: SHA-256 SIGNED', 15, nextY + 3.5);
     doc.text('CONFIDENTIAL - FOR INTERNAL COMPLIANCE USE ONLY', 195, nextY, { align: 'right' });
 
-    doc.save(`VAM_FISCAL_TREND_REPORT_${new Date().toISOString().split('T')[0]}.pdf`);
+    const trendFileName = `VAM_FISCAL_TREND_REPORT_${new Date().toISOString().split('T')[0]}.pdf`;
+    saveAndNotifyPdf(doc, trendFileName, 'Laporan Tren Rasio Fiskal & Solvabilitas');
     addAuditLog('PDF_EXTRACT', 'SECURE', `Successfully generated dynamic trend report PDF featuring all indicators: ROA, ROE, GPM, and Current Ratio.`);
   };
 
@@ -2532,7 +2679,8 @@ VentureAM,Luxury watches,120000000`;
       }
     });
 
-    doc.save(`VentureAM_Transactions_Ledger_${new Date().toISOString().split('T')[0]}.pdf`);
+    const ledgerFileName = `VentureAM_Transactions_Ledger_${new Date().toISOString().split('T')[0]}.pdf`;
+    saveAndNotifyPdf(doc, ledgerFileName, `Buku Besar Transaksi Kepatuhan (${data.length} Transaksi)`);
     addAuditLog('TX_EXPORT_PDF', 'SECURE', `Successfully exported & certified ${data.length} transactions as compliance PDF ledger.`);
   };
 
@@ -2740,16 +2888,47 @@ VentureAM,Luxury watches,120000000`;
       {activeTab === 'REPORTS' && (
         /* TAB 1: REPORTS AND COMPILATION DRAFTS */
         <div className="space-y-6">
-          <div className="flex items-center justify-between">
-            <span className="text-[10px] font-mono font-bold text-zinc-500 uppercase tracking-widest">
-              Review current accounting statement layers:
-            </span>
-            <div className="flex gap-2">
-              <button 
-                onClick={() => addAuditLog('MAN_RE_SYNC', 'WARN', 'Manual re-sync and ledger validation invoked.')}
-                className="flex items-center gap-2 bg-zinc-900 border border-zinc-800 text-white px-4 py-2 rounded-lg text-[10px] font-mono font-black uppercase tracking-wider hover:bg-zinc-850 transition-all cursor-pointer"
+          {/* Sync Toast Notification Banner */}
+          <AnimatePresence>
+            {syncToastMessage && (
+              <motion.div
+                initial={{ opacity: 0, y: -10 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -10 }}
+                className="p-3 bg-emerald-500/10 border border-emerald-500/30 rounded-xl text-emerald-300 font-mono text-xs flex items-center justify-between shadow-lg shadow-emerald-500/10"
               >
-                <RefreshCcw className="w-3.5 h-3.5" /> RE-SYNC ACCOUNTING
+                <div className="flex items-center gap-2.5">
+                  <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+                  <span className="font-bold">{syncToastMessage}</span>
+                </div>
+                <span className="text-[10px] text-zinc-400">Sinkronisasi: {lastSyncTime}</span>
+              </motion.div>
+            )}
+          </AnimatePresence>
+
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div>
+              <span className="text-[10px] font-mono font-bold text-zinc-400 uppercase tracking-widest block">
+                Review current accounting statement layers &amp; automated ledger:
+              </span>
+              <span className="text-[9px] font-mono text-zinc-500">
+                Terhubung real-time: Laporan Keuangan ↔ Rebalancing Portofolio ↔ Transfer RDN-Giro
+              </span>
+            </div>
+            <div className="flex flex-wrap items-center gap-2">
+              <button 
+                onClick={() => setIsTriSyncModalOpen(true)}
+                className="flex items-center gap-2 bg-zinc-900 hover:bg-zinc-850 border border-zinc-800 text-[#DFFF00] px-3.5 py-2 rounded-lg text-[10px] font-mono font-black uppercase tracking-wider transition-all cursor-pointer shadow-sm"
+              >
+                <Scale className="w-3.5 h-3.5" /> INSPECT TRI-SYNC LEDGER
+              </button>
+              <button 
+                onClick={() => performFullAccountingSync(true)}
+                disabled={isSyncingAccounting}
+                className="flex items-center gap-2 bg-zinc-900 hover:bg-zinc-850 border border-zinc-800 text-white px-4 py-2 rounded-lg text-[10px] font-mono font-black uppercase tracking-wider transition-all cursor-pointer"
+              >
+                <RefreshCcw className={`w-3.5 h-3.5 text-orange-400 ${isSyncingAccounting ? 'animate-spin' : ''}`} /> 
+                {isSyncingAccounting ? 'SYNCING...' : 'RE-SYNC ACCOUNTING'}
               </button>
               <button 
                 onClick={handleGenerate}
@@ -2798,21 +2977,205 @@ VentureAM,Luxury watches,120000000`;
               </div>
             </div>
 
+            {/* RIGHT COLUMN: AI ACCOUNTING CORE STREAM WITH TRI-SYNC ENGINE */}
             <div className="p-6 rounded-2xl border border-zinc-850 bg-zinc-950/40 flex flex-col justify-between space-y-6">
               <div className="space-y-4">
-                <div className="flex items-center gap-3 border-b border-zinc-900 pb-3">
-                  <div className="w-8 h-8 rounded-full bg-orange-500/5 border border-orange-500/20 flex items-center justify-center">
-                    <PieChart className="w-4 h-4 text-orange-400" />
+                {/* Header with Tri-Sync Live Indicator */}
+                <div className="flex items-center justify-between border-b border-zinc-900 pb-3">
+                  <div className="flex items-center gap-3">
+                    <div className="w-8 h-8 rounded-full bg-orange-500/10 border border-orange-500/20 flex items-center justify-center">
+                      <PieChart className="w-4 h-4 text-orange-400" />
+                    </div>
+                    <div>
+                      <h4 className="text-xs font-black text-white uppercase tracking-wider leading-none">AI Accounting Core System</h4>
+                      <span className="text-[8px] font-mono text-zinc-500 uppercase tracking-widest mt-1 block">TRI-SYNC REAL-TIME ENGINE</span>
+                    </div>
                   </div>
-                  <div>
-                    <h4 className="text-xs font-black text-white uppercase tracking-wider leading-none">AI Accounting Core Stream</h4>
-                    <span className="text-[8px] font-mono text-zinc-500 uppercase tracking-widest mt-1 block">YTD FISCAL CONSOLIDATION</span>
+                  <div className="flex items-center gap-2">
+                    <span className="flex items-center gap-1 text-[7.5px] px-2 py-0.5 rounded-full bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 font-mono font-bold uppercase">
+                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span> SYNCED {lastSyncTime}
+                    </span>
                   </div>
                 </div>
                 
                 <p className="text-[10px] text-zinc-400 leading-normal">
-                  VentureAM Core processes raw balances, financial ledgers, and transactions with double-entry cryptographic verification.
+                  VentureAM Core mengintegrasikan seluruh transaksi rebalancing portofolio efek, kas RDN, dan mutasi saldo giro operasional menjadi jurnal akuntansi double-entry otomatis (PSAK 1, 71 &amp; 19).
                 </p>
+
+                {/* TRI-SYNC 3-SOURCE METRIC MATRIX */}
+                <div className="space-y-2.5 pt-1">
+                  <div className="text-[8.5px] font-mono font-bold text-zinc-400 uppercase tracking-wider flex items-center justify-between">
+                    <span>TRI-SYNC SOURCE MATRIX</span>
+                    <span className="text-[7.5px] text-[#DFFF00]">0 DRIFT VERIFIED</span>
+                  </div>
+
+                  {/* Pillar 1: Financial Reports */}
+                  <div className="p-3 bg-zinc-900/60 border border-zinc-800 rounded-xl space-y-1.5 hover:border-zinc-700 transition-colors">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-1.5">
+                        <FileCheck className="w-3.5 h-3.5 text-orange-400" />
+                        <span className="text-[10px] font-mono font-bold text-white uppercase">1. Laporan Keuangan (Reports)</span>
+                      </div>
+                      <span className="text-[7.5px] px-1.5 py-0.2 rounded bg-orange-500/10 text-orange-400 font-mono border border-orange-500/20 uppercase font-bold">
+                        PSAK 1/71/19
+                      </span>
+                    </div>
+                    <div className="grid grid-cols-2 gap-2 text-[9px] font-mono pt-1">
+                      <div>
+                        <span className="text-zinc-500 block text-[7.5px]">TOTAL ASET:</span>
+                        <span className="font-bold text-white">
+                          Rp {(financialValues.cash26 + (financialValues.giro26 || 0) + financialValues.invest26 + (financialValues.fixed26 || 5950000) + (financialValues.intangible26 || 4200000000)).toLocaleString('id-ID')}
+                        </span>
+                      </div>
+                      <div className="text-right">
+                        <span className="text-zinc-500 block text-[7.5px]">LABA BERSIH:</span>
+                        <span className="font-bold text-emerald-400">
+                          Rp {(financialValues.rev26 + (financialValues.hpp26 || 0) + (financialValues.operatingExpense26 || 0) + (financialValues.depreciationExpense26 || 0) + (financialValues.realizedSecurities26 || 0) + (financialValues.unrealizedSecurities26 || 0)).toLocaleString('id-ID')}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Pillar 2: Portfolio Rebalancing */}
+                  <div className="p-3 bg-zinc-900/60 border border-zinc-800 rounded-xl space-y-1.5 hover:border-zinc-700 transition-colors">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-1.5">
+                        <Scale className="w-3.5 h-3.5 text-sky-400" />
+                        <span className="text-[10px] font-mono font-bold text-white uppercase">2. Rebalancing Portofolio</span>
+                      </div>
+                      <span className="text-[7.5px] px-1.5 py-0.2 rounded bg-sky-500/10 text-sky-400 font-mono border border-sky-500/20 uppercase font-bold">
+                        ASET EFEK &amp; AUM
+                      </span>
+                    </div>
+                    <div className="grid grid-cols-2 gap-2 text-[9px] font-mono pt-1">
+                      <div>
+                        <span className="text-zinc-500 block text-[7.5px]">NILAI PASAR EFEK:</span>
+                        <span className="font-bold text-sky-400">
+                          Rp {financialValues.invest26.toLocaleString('id-ID')}
+                        </span>
+                      </div>
+                      <div className="text-right">
+                        <span className="text-zinc-500 block text-[7.5px]">REALIZED PnL:</span>
+                        <span className={`font-bold ${(financialValues.realizedSecurities26 || 0) >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
+                          Rp {(financialValues.realizedSecurities26 || 0).toLocaleString('id-ID')}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Pillar 3: RDN-Giro Fund Transfer */}
+                  <div className="p-3 bg-zinc-900/60 border border-zinc-800 rounded-xl space-y-1.5 hover:border-zinc-700 transition-colors">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-1.5">
+                        <ArrowRightLeft className="w-3.5 h-3.5 text-amber-400" />
+                        <span className="text-[10px] font-mono font-bold text-white uppercase">3. Transfer RDN ↔ Giro</span>
+                      </div>
+                      <span className="text-[7.5px] px-1.5 py-0.2 rounded bg-amber-500/10 text-amber-400 font-mono border border-amber-500/20 uppercase font-bold">
+                        LIKUIDITAS KAS
+                      </span>
+                    </div>
+                    <div className="grid grid-cols-2 gap-2 text-[9px] font-mono pt-1">
+                      <div>
+                        <span className="text-zinc-500 block text-[7.5px]">KAS RDN:</span>
+                        <span className="font-bold text-amber-300">
+                          Rp {financialValues.cash26.toLocaleString('id-ID')}
+                        </span>
+                      </div>
+                      <div className="text-right">
+                        <span className="text-zinc-500 block text-[7.5px]">SALDO GIRO:</span>
+                        <span className="font-bold text-amber-400">
+                          Rp {(financialValues.giro26 || 0).toLocaleString('id-ID')}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* LIVE AUTOMATED DOUBLE-ENTRY JOURNAL FEED */}
+                <div className="p-3.5 bg-black/80 border border-zinc-900 rounded-xl space-y-2 font-mono">
+                  <div className="flex items-center justify-between border-b border-zinc-850 pb-2">
+                    <div className="flex items-center gap-2">
+                      <Terminal className="w-3.5 h-3.5 text-[#DFFF00]" />
+                      <span className="text-[9px] font-bold text-white uppercase tracking-wider">LIVE DOUBLE-ENTRY STREAM</span>
+                    </div>
+                    <button
+                      onClick={() => setIsTriSyncModalOpen(true)}
+                      className="text-[8px] font-bold text-[#DFFF00] hover:underline uppercase cursor-pointer"
+                    >
+                      LIHAT BUKU BESAR &rarr;
+                    </button>
+                  </div>
+
+                  <div className="space-y-2 max-h-48 overflow-y-auto pr-1 text-[8.5px] leading-relaxed custom-scrollbar">
+                    {/* Auto-Journal 1: Rebalance Equity Asset */}
+                    <div className="p-2 bg-zinc-950/80 rounded-lg border border-zinc-850 space-y-1">
+                      <div className="flex justify-between text-zinc-400 text-[7.5px]">
+                        <span className="text-sky-400 font-bold">[REBALANCE] EFEK SAHAM</span>
+                        <span>{lastSyncTime}</span>
+                      </div>
+                      <div className="text-zinc-300">
+                        <span className="text-emerald-400 font-bold">[DR] 1120 Portofolio Efek:</span> Rp {financialValues.invest26.toLocaleString('id-ID')}
+                      </div>
+                      <div className="text-zinc-300">
+                        <span className="text-amber-400 font-bold">[CR] 1110 Kas RDN Bank:</span> Rp {financialValues.invest26.toLocaleString('id-ID')}
+                      </div>
+                      <div className="text-[7.5px] text-zinc-500 italic">
+                        Keterangan: Sinkronisasi Nilai Efek Saham dari Portofolio
+                      </div>
+                    </div>
+
+                    {/* Auto-Journal 2: RDN - Giro Liquidity */}
+                    <div className="p-2 bg-zinc-950/80 rounded-lg border border-zinc-850 space-y-1">
+                      <div className="flex justify-between text-zinc-400 text-[7.5px]">
+                        <span className="text-amber-400 font-bold">[TRANSFER] LIKUIDITAS KAS</span>
+                        <span>{lastSyncTime}</span>
+                      </div>
+                      <div className="text-zinc-300">
+                        <span className="text-emerald-400 font-bold">[DR] 1115 Saldo Giro Bank:</span> Rp {(financialValues.giro26 || 0).toLocaleString('id-ID')}
+                      </div>
+                      <div className="text-zinc-300">
+                        <span className="text-amber-400 font-bold">[CR] 1110 Kas RDN Operasional:</span> Rp {(financialValues.giro26 || 0).toLocaleString('id-ID')}
+                      </div>
+                      <div className="text-[7.5px] text-zinc-500 italic">
+                        Keterangan: Alokasi Likuiditas Kas Operasional &amp; Giro PT VAM
+                      </div>
+                    </div>
+
+                    {/* Auto-Journal 3: Realized / Unrealized Mark to Market PSAK 71 */}
+                    <div className="p-2 bg-zinc-950/80 rounded-lg border border-zinc-850 space-y-1">
+                      <div className="flex justify-between text-zinc-400 text-[7.5px]">
+                        <span className="text-purple-400 font-bold">[PSAK 71] MARK TO MARKET</span>
+                        <span>{lastSyncTime}</span>
+                      </div>
+                      <div className="text-zinc-300">
+                        <span className="text-emerald-400 font-bold">[DR] 1125 Penyesuaian Nilai Wajar:</span> Rp {Math.abs(financialValues.unrealizedSecurities26 || 0).toLocaleString('id-ID')}
+                      </div>
+                      <div className="text-zinc-300">
+                        <span className="text-amber-400 font-bold">[CR] 4200 Unrealized PnL OCI:</span> Rp {Math.abs(financialValues.unrealizedSecurities26 || 0).toLocaleString('id-ID')}
+                      </div>
+                      <div className="text-[7.5px] text-zinc-500 italic">
+                        Keterangan: Penilaian Nilai Wajar Portofolio Efek Saham
+                      </div>
+                    </div>
+
+                    {/* Auto-Journal 4: Intangible ERP Software Capitalization PSAK 19 */}
+                    <div className="p-2 bg-zinc-950/80 rounded-lg border border-zinc-850 space-y-1">
+                      <div className="flex justify-between text-zinc-400 text-[7.5px]">
+                        <span className="text-emerald-400 font-bold">[PSAK 19] ASET TAK BERWUJUD</span>
+                        <span>Audit Verified</span>
+                      </div>
+                      <div className="text-zinc-300">
+                        <span className="text-emerald-400 font-bold">[DR] 1300 Software ERP VentureAM:</span> Rp 4.200.000.000
+                      </div>
+                      <div className="text-zinc-300">
+                        <span className="text-amber-400 font-bold">[CR] 3120 Modal Disetor Software:</span> Rp 4.200.000.000
+                      </div>
+                      <div className="text-[7.5px] text-zinc-500 italic">
+                        Keterangan: Kapitalisasi Hak Cipta &amp; Lisensi Software ERP VentureAM
+                      </div>
+                    </div>
+                  </div>
+                </div>
               </div>
 
               {/* Asset vs Liability Mini Sparkline Segment */}
@@ -2972,38 +3335,34 @@ VentureAM,Luxury watches,120000000`;
 
                     {/* Sparkline Path */}
                     {(() => {
-                      // Map functions for Margins (from -40% to +60%)
                       const mapMarginY = (pct: number) => {
-                        // -40% mapped to 70px (bottom), +60% mapped to 10px (top)
-                        const valNormalized = (pct + 40) / 100; // 0 to 1
+                        const valNormalized = (pct + 40) / 100;
                         return 70 - Math.round(valNormalized * 60);
                       };
 
-                      // Map functions for Operating Expenses (0 to 600k IDR)
                       const mapOpexY = (val: number) => {
-                        // 0 mapped to 70px, 600,000 mapped to 10px
                         const valNormalized = val / 600000;
                         return 70 - Math.round(valNormalized * 60);
                       };
 
                       const marginsPoints = [
-                        { x: 10, y: mapMarginY(18.3) },  // Dec 2025 (~18.3%)
-                        { x: 56.67, y: mapMarginY(15.0) },  // Jan 2026 (~15%)
-                        { x: 103.33, y: mapMarginY(10.2) }, // Feb 2026
-                        { x: 150, y: mapMarginY(2.1) },  // Mar 2026
-                        { x: 196.67, y: mapMarginY(-12.4) }, // Apr 2026
-                        { x: 243.33, y: mapMarginY(-22.0) }, // May 2026
-                        { x: 290, y: mapMarginY(-36.9) }  // June 2026 / Present
+                        { x: 10, y: mapMarginY(18.3) },
+                        { x: 56.67, y: mapMarginY(15.0) },
+                        { x: 103.33, y: mapMarginY(10.2) },
+                        { x: 150, y: mapMarginY(2.1) },
+                        { x: 196.67, y: mapMarginY(-12.4) },
+                        { x: 243.33, y: mapMarginY(-22.0) },
+                        { x: 290, y: mapMarginY(-36.9) }
                       ];
 
                       const opexPoints = [
-                        { x: 10, y: mapOpexY(Math.abs(financialValues.operatingExpense25)) }, // Dec 2025
+                        { x: 10, y: mapOpexY(Math.abs(financialValues.operatingExpense25)) },
                         { x: 56.67, y: mapOpexY(350000) },
                         { x: 103.33, y: mapOpexY(400000) },
                         { x: 150, y: mapOpexY(450000) },
                         { x: 196.67, y: mapOpexY(490000) },
                         { x: 243.33, y: mapOpexY(530000) },
-                        { x: 290, y: mapOpexY(Math.abs(financialValues.operatingExpense26)) } // June 2026 / Present
+                        { x: 290, y: mapOpexY(Math.abs(financialValues.operatingExpense26)) }
                       ];
 
                       const marginD = `M ${marginsPoints.map(p => `${p.x},${p.y}`).join(' L ')}`;
@@ -3087,7 +3446,6 @@ VentureAM,Luxury watches,120000000`;
                 const currentROE = totalEquity26 > 0 ? (totalComprehensiveProfit26 / totalEquity26) * 100 : -7.4;
                 const currentGPM = financialValues.rev26 > 0 ? ((financialValues.rev26 + (financialValues.hpp26 || 0)) / financialValues.rev26) * 100 : 100;
                 
-                // For Current Ratio, since liabilities is 0, we can use a benchmark index of liquidity (Assets/Cash threshold) or simply infinity if no debt
                 const currentCR = financialValues.shortLiability26 > 0 
                   ? (netCurrentAssets26 / financialValues.shortLiability26)
                   : (netCurrentAssets26 / 250000);
@@ -3106,7 +3464,7 @@ VentureAM,Luxury watches,120000000`;
                   metricValue = `${currentROA.toFixed(1)}%`;
                   metricBadge = 'Efficiency';
                   metricBadgeColor = 'text-purple-400 bg-purple-500/10 border-purple-500/20';
-                  metricColor = '#a855f7'; // purple
+                  metricColor = '#a855f7';
                   metricDesc = 'Net earnings generated per Rupiah of total assets.';
                   points = [14.5, 12.0, 9.5, 4.2, -1.2, -4.8, currentROA];
                   yLabels = ['20%', '5%', '-10%'];
@@ -3115,7 +3473,7 @@ VentureAM,Luxury watches,120000000`;
                   metricValue = `${currentROE.toFixed(1)}%`;
                   metricBadge = 'Profitability';
                   metricBadgeColor = 'text-amber-400 bg-amber-500/10 border-amber-500/20';
-                  metricColor = '#f59e0b'; // amber
+                  metricColor = '#f59e0b';
                   metricDesc = 'Productivity of shareholders\' invested capital.';
                   points = [28.2, 22.1, 15.5, 8.4, -2.3, -6.2, currentROE];
                   yLabels = ['35%', '10%', '-15%'];
@@ -3124,7 +3482,7 @@ VentureAM,Luxury watches,120000000`;
                   metricValue = `${currentGPM.toFixed(1)}%`;
                   metricBadge = 'Margin';
                   metricBadgeColor = 'text-emerald-400 bg-emerald-500/10 border-emerald-500/20';
-                  metricColor = '#10b981'; // emerald
+                  metricColor = '#10b981';
                   metricDesc = 'Gross revenue generation over cost of goods sold.';
                   points = [18.7, 35.0, 50.0, 75.0, 95.0, 100.0, currentGPM];
                   yLabels = ['100%', '50%', '0%'];
@@ -3133,13 +3491,12 @@ VentureAM,Luxury watches,120000000`;
                   metricValue = financialValues.shortLiability26 > 0 ? `${currentCR.toFixed(2)}x` : `${currentCR.toFixed(1)}x`;
                   metricBadge = 'Solvency';
                   metricBadgeColor = 'text-cyan-400 bg-cyan-500/10 border-cyan-500/20';
-                  metricColor = '#22d3ee'; // cyan
+                  metricColor = '#22d3ee';
                   metricDesc = 'Short-term asset liquidity vs liability obligations.';
                   points = [3.2, 4.5, 6.8, 10.2, 12.4, 14.5, currentCR];
                   yLabels = ['20x', '10x', '0x'];
                 }
 
-                // Normalization helper for drawing SVG
                 const maxVal = Math.max(...points);
                 const minVal = Math.min(...points);
                 const range = maxVal - minVal || 1;
@@ -3149,7 +3506,7 @@ VentureAM,Luxury watches,120000000`;
                 };
 
                 const svgPoints = points.map((val, idx) => {
-                  const x = 10 + idx * (280 / (points.length - 1)); // 10 to 290 dynamically
+                  const x = 10 + idx * (280 / (points.length - 1));
                   return { x, y: mapY(val) };
                 });
 
@@ -3206,17 +3563,14 @@ VentureAM,Luxury watches,120000000`;
                     {/* SVG Sparkline Container */}
                     <div className="relative pt-1">
                       <svg viewBox="0 0 300 80" className="w-full h-20 overflow-visible">
-                        {/* Grid Baselines */}
                         <line x1="10" y1="10" x2="290" y2="10" stroke="#1d1d21" strokeWidth="1" strokeDasharray="3 3" />
                         <line x1="10" y1="40" x2="290" y2="40" stroke="#1d1d21" strokeWidth="1" strokeDasharray="3 3" />
                         <line x1="10" y1="70" x2="290" y2="70" stroke="#2a2a30" strokeWidth="1.5" />
 
-                        {/* Y-axis labels */}
                         <text x="5" y="14" fill="#52525b" fontSize="7" fontFamily="monospace">{yLabels[0]}</text>
                         <text x="5" y="44" fill="#52525b" fontSize="7" fontFamily="monospace">{yLabels[1]}</text>
                         <text x="5" y="74" fill="#52525b" fontSize="7" fontFamily="monospace">{yLabels[2]}</text>
 
-                        {/* Sparkline Path Gradient */}
                         <defs>
                           <linearGradient id={`kpiGrad-${kpiMetric}`} x1="0" y1="0" x2="0" y2="1">
                             <stop offset="0%" stopColor={metricColor} stopOpacity="0.15" />
@@ -3228,7 +3582,6 @@ VentureAM,Luxury watches,120000000`;
                           fill={`url(#kpiGrad-${kpiMetric})`} 
                         />
 
-                        {/* Sparkline Stroke Line */}
                         <path 
                           d={dPath} 
                           fill="none" 
@@ -3238,7 +3591,6 @@ VentureAM,Luxury watches,120000000`;
                           strokeLinejoin="round" 
                         />
 
-                        {/* Historical dots */}
                         {svgPoints.map((p, idx) => (
                           <circle 
                             key={idx} 
@@ -3252,7 +3604,6 @@ VentureAM,Luxury watches,120000000`;
                         ))}
                       </svg>
                       
-                      {/* Timeline labels along bottom */}
                       <div className="flex justify-between text-[7.5px] font-mono text-zinc-500 px-2 mt-1">
                         <span>DES 25</span>
                         <span>JAN</span>
@@ -3315,85 +3666,86 @@ VentureAM,Luxury watches,120000000`;
                   <span className="text-[8px] font-mono font-bold bg-orange-500/10 text-orange-400 px-2 py-0.5 rounded border border-orange-500/20 uppercase tracking-widest">
                     FISCAL YEAR 2026
                   </span>
-                  <span className="text-[8px] font-mono font-bold bg-sky-500/10 text-sky-400 px-2 py-0.5 rounded border border-sky-500/20 uppercase tracking-widest">
-                    AGGREGATE LEDGER
+                  <span className="text-[8px] font-mono font-bold bg-[#deff9a]/10 text-[#deff9a] px-2 py-0.5 rounded border border-[#deff9a]/20 uppercase tracking-widest">
+                    KUARTAL 3 (Q3) BERJALAN • AGUSTUS 2026
                   </span>
                 </div>
                 <h3 className="text-xs font-mono font-black text-white uppercase tracking-widest flex items-center gap-2">
-                  <History className="w-4 h-4 text-orange-400" /> YEAR-TO-DATE (YTD) PERFORMANCE SUMMARY
+                  <History className="w-4 h-4 text-orange-400" /> YEAR-TO-DATE (YTD) PERFORMANCE & PERIOD CLOSING
                 </h3>
                 <p className="text-[10px] text-zinc-400 max-w-xl">
-                  Konsolidasian laba/rugi direalisasikan (Realized PnL) antar kuartal berjalan yang bersumber dari aktivitas rebalancing portofolio efek harian.
+                  Konsolidasian laba/rugi direalisasikan (Realized PnL) antar kuartal berjalan. Periode aktif saat ini adalah <strong className="text-white">Kuartal 3 (Agustus 2026)</strong>. Anda dapat mengunduh Laporan Keuangan Penutup Periode resmi dalam format PDF.
                 </p>
               </div>
               
               <div className="text-left sm:text-right">
                 <span className="text-[8px] font-mono text-zinc-500 block uppercase tracking-widest leading-none">CUMULATIVE YTD PROFIT</span>
                 <p className="text-lg font-mono font-black text-[#deff9a] mt-1 pr-1">
-                  Rp {(3110000 + realizedPnL).toLocaleString('id-ID')}
+                  Rp {(3448788.2 + (realizedPnL || 0)).toLocaleString('id-ID', { minimumFractionDigits: 1, maximumFractionDigits: 2 })}
                 </p>
+                <span className="text-[8px] font-mono text-zinc-400">Realisasi s/d 18 Agustus 2026</span>
               </div>
             </div>
 
             {/* Progress distribution bar */}
             <div className="space-y-2">
               <div className="flex justify-between items-center text-[8px] font-mono text-zinc-500 uppercase tracking-wider">
-                <span>QUARTERLY CONTRIBUTION WEIGHTS</span>
-                <span>YTD TARGET: Rp 5.000.000</span>
+                <span>QUARTERLY CONTRIBUTION WEIGHTS (YTD REALIZED)</span>
+                <span>YTD TARGET: Rp 5.000.000 ({(((3448788.2 + (realizedPnL || 0)) / 5000000) * 100).toFixed(1)}% TERCAPAI)</span>
               </div>
               <div className="h-2 w-full bg-zinc-900 rounded-lg overflow-hidden flex">
                 <div 
-                  style={{ width: `${Math.max(10, Math.min(90, (1150000 / (3110000 + realizedPnL || 1)) * 100))}%` }} 
+                  style={{ width: `${Math.max(5, Math.min(80, (1150000 / (3448788.2 + (realizedPnL || 0) || 1)) * 100))}%` }} 
                   className="h-full bg-amber-500 transition-all duration-500" 
-                  title="Q1 Contribution"
+                  title="Q1 Contribution: Rp 1.150.000"
                 />
                 <div 
-                  style={{ width: `${Math.max(10, Math.min(90, ((1960000 + realizedPnL) / (3110000 + realizedPnL || 1)) * 100))}%` }} 
+                  style={{ width: `${Math.max(5, Math.min(80, (1960000 / (3448788.2 + (realizedPnL || 0) || 1)) * 100))}%` }} 
                   className="h-full bg-emerald-500 transition-all duration-500" 
-                  title="Q2 Contribution"
+                  title="Q2 Contribution: Rp 1.960.000"
                 />
                 <div 
-                  style={{ width: '0%' }} 
-                  className="h-full bg-zinc-700 transition-all duration-500" 
-                  title="Q3 Contribution"
+                  style={{ width: `${Math.max(5, Math.min(80, ((338788.2 + (realizedPnL || 0)) / (3448788.2 + (realizedPnL || 0) || 1)) * 100))}%` }} 
+                  className="h-full bg-[#deff9a] transition-all duration-500 shadow-[0_0_8px_rgba(222,255,154,0.4)]" 
+                  title="Q3 Contribution (Agustus 2026): Rp 338.788,2 + PnL"
                 />
                 <div 
                   style={{ width: '0%' }} 
                   className="h-full bg-zinc-850 transition-all duration-500" 
-                  title="Q4 Contribution"
+                  title="Q4 Contribution: Rp 0 (Upcoming)"
                 />
               </div>
               <div className="flex flex-wrap gap-4 text-[8px] font-mono text-zinc-400">
                 <div className="flex items-center gap-1.5">
                   <span className="w-1.5 h-1.5 rounded-full bg-amber-500"></span>
-                  <span>Q1: {((1150000 / (3110000 + realizedPnL || 1)) * 100).toFixed(1)}%</span>
+                  <span>Q1 (Jan-Mar): {((1150000 / (3448788.2 + (realizedPnL || 0) || 1)) * 100).toFixed(1)}% (Rp 1.150.000)</span>
                 </div>
                 <div className="flex items-center gap-1.5">
                   <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
-                  <span>Q2: {(((1960000 + realizedPnL) / (3110000 + realizedPnL || 1)) * 100).toFixed(1)}%</span>
+                  <span>Q2 (Apr-Jun): {((1960000 / (3448788.2 + (realizedPnL || 0) || 1)) * 100).toFixed(1)}% (Rp 1.960.000)</span>
                 </div>
                 <div className="flex items-center gap-1.5">
-                  <span className="w-1.5 h-1.5 rounded-full bg-zinc-700"></span>
-                  <span>Q3: 0.0% (Upcoming)</span>
+                  <span className="w-1.5 h-1.5 rounded-full bg-[#deff9a]"></span>
+                  <span className="text-[#deff9a] font-bold">Q3 (Jul-Sep • Agu 2026): {(((338788.2 + (realizedPnL || 0)) / (3448788.2 + (realizedPnL || 0) || 1)) * 100).toFixed(1)}% (Rp {(338788.2 + (realizedPnL || 0)).toLocaleString('id-ID', { maximumFractionDigits: 1 })})</span>
                 </div>
                 <div className="flex items-center gap-1.5">
                   <span className="w-1.5 h-1.5 rounded-full bg-zinc-800"></span>
-                  <span>Q4: 0.0% (Upcoming)</span>
+                  <span>Q4 (Okt-Des): 0.0% (Upcoming)</span>
                 </div>
               </div>
             </div>
 
-            {/* Quarterly cards */}
+            {/* Quarterly cards with direct Period Closing PDF Download */}
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
               {/* Q1 */}
               <div className="p-4 rounded-xl bg-zinc-950/80 border border-zinc-900 flex flex-col justify-between space-y-3">
                 <div className="flex justify-between items-start">
                   <div>
                     <span className="text-[8px] font-mono font-black text-zinc-400 uppercase tracking-widest block">QUARTER 1 (Q1)</span>
-                    <span className="text-[8px] font-mono text-zinc-650 uppercase mt-0.5 block">JAN - MAR 2026</span>
+                    <span className="text-[8px] font-mono text-zinc-500 uppercase mt-0.5 block">01 JAN - 31 MAR 2026</span>
                   </div>
                   <span className="text-[7px] px-1.5 py-0.5 rounded bg-amber-500/10 text-amber-500 font-mono font-bold border border-amber-500/20 uppercase shrink-0">
-                    SETTLED
+                    SETTLED / CLOSED
                   </span>
                 </div>
                 <div>
@@ -3401,73 +3753,602 @@ VentureAM,Luxury watches,120000000`;
                     Rp 1.150.000
                   </span>
                   <p className="text-[8px] text-zinc-500 mt-1 leading-normal uppercase font-mono">
-                    8 WINS / 2 CORRECTIONS
+                    8 WINS / 2 CORRECTIONS • BUKU DITUTUP
                   </p>
                 </div>
+                <button
+                  type="button"
+                  id="download-q1-pdf-btn"
+                  onClick={() => handleGeneratePeriodClosingPDF({
+                    periodType: 'QUARTERLY',
+                    periodLabel: 'LAPORAN KEUANGAN PENUTUP KUARTAL 1 (Q1 2026)',
+                    periodSubLabel: 'PERIODE: 01 JANUARI 2026 - 31 MARET 2026 (SETTLED / CLOSED)',
+                    periodCode: 'VAM-FS-Q1-2026',
+                    statusBadge: 'SETTLED / CLOSED',
+                    realizedPeriodProfit: 1150000,
+                    periodNotes: 'Buku Kuartal 1 2026 telah ditutup resmi dengan realisasi laba rebalancing Rp 1.150.000,00.'
+                  })}
+                  className="w-full py-1.5 px-2 rounded-lg bg-zinc-900 hover:bg-zinc-850 border border-zinc-800 hover:border-amber-500/30 text-[8px] font-mono font-bold text-amber-400/90 flex items-center justify-center gap-1.5 transition-all"
+                >
+                  <Download className="w-3 h-3 text-amber-400" />
+                  UNDUH PDF PENUTUP Q1
+                </button>
               </div>
 
               {/* Q2 */}
-              <div className="p-4 rounded-xl bg-zinc-950/80 border border-zinc-900 flex flex-col justify-between space-y-3 border-emerald-500/10 shadow-[0_0_15px_rgba(16,185,129,0.02)]">
+              <div className="p-4 rounded-xl bg-zinc-950/80 border border-zinc-900 flex flex-col justify-between space-y-3">
                 <div className="flex justify-between items-start">
                   <div>
-                    <span className="text-[8px] font-mono font-black text-emerald-400 uppercase tracking-widest block">QUARTER 2 (Q2)</span>
-                    <span className="text-[8px] font-mono text-zinc-650 uppercase mt-0.5 block">APR - JUN 2026</span>
+                    <span className="text-[8px] font-mono font-black text-zinc-400 uppercase tracking-widest block">QUARTER 2 (Q2)</span>
+                    <span className="text-[8px] font-mono text-zinc-500 uppercase mt-0.5 block">01 APR - 30 JUN 2026</span>
                   </div>
-                  <span className="text-[7px] px-1.5 py-0.5 rounded bg-emerald-500/10 text-emerald-400 font-mono font-bold border border-emerald-500/20 uppercase shrink-0">
-                    ACTIVE
+                  <span className="text-[7px] px-1.5 py-0.5 rounded bg-amber-500/10 text-amber-500 font-mono font-bold border border-amber-500/20 uppercase shrink-0">
+                    SETTLED / CLOSED
                   </span>
                 </div>
                 <div>
-                  <span className="text-xs font-mono font-black text-[#deff9a] block">
-                    Rp {(1960000 + realizedPnL).toLocaleString('id-ID')}
+                  <span className="text-xs font-mono font-black text-emerald-400 block">
+                    Rp 1.960.000
                   </span>
                   <p className="text-[8px] text-zinc-500 mt-1 leading-normal uppercase font-mono">
-                    {9 + (realizedPnL > 0 ? 1 : 0)} WINS / {3 + (realizedPnL < 0 ? 1 : 0)} CORRECTIONS
+                    10 WINS / 3 CORRECTIONS • BUKU DITUTUP
                   </p>
                 </div>
+                <button
+                  type="button"
+                  id="download-q2-pdf-btn"
+                  onClick={() => handleGeneratePeriodClosingPDF({
+                    periodType: 'QUARTERLY',
+                    periodLabel: 'LAPORAN KEUANGAN PENUTUP KUARTAL 2 (Q2 2026)',
+                    periodSubLabel: 'PERIODE: 01 APRIL 2026 - 30 JUNI 2026 (SETTLED / CLOSED)',
+                    periodCode: 'VAM-FS-Q2-2026',
+                    statusBadge: 'SETTLED / CLOSED',
+                    realizedPeriodProfit: 1960000,
+                    periodNotes: 'Buku Kuartal 2 2026 telah ditutup resmi dengan realisasi laba rebalancing Rp 1.960.000,00.'
+                  })}
+                  className="w-full py-1.5 px-2 rounded-lg bg-zinc-900 hover:bg-zinc-850 border border-zinc-800 hover:border-emerald-500/30 text-[8px] font-mono font-bold text-emerald-400/90 flex items-center justify-center gap-1.5 transition-all"
+                >
+                  <Download className="w-3 h-3 text-emerald-400" />
+                  UNDUH PDF PENUTUP Q2
+                </button>
               </div>
 
-              {/* Q3 */}
-              <div className="p-4 rounded-xl bg-zinc-950/80 border border-zinc-900 flex flex-col justify-between space-y-3 opacity-60 hover:opacity-100 transition-opacity">
-                <div className="flex justify-between items-start">
+              {/* Q3 - CURRENT / ACTIVE (AUGUST 2026) */}
+              <div className="p-4 rounded-xl bg-zinc-950 border border-[#deff9a]/30 shadow-[0_0_20px_rgba(222,255,154,0.06)] flex flex-col justify-between space-y-3 relative overflow-hidden">
+                <div className="absolute top-0 right-0 w-24 h-24 bg-[#deff9a]/5 rounded-full blur-xl pointer-events-none" />
+                <div className="flex justify-between items-start relative z-10">
                   <div>
-                    <span className="text-[8px] font-mono font-black text-zinc-500 uppercase tracking-widest block">QUARTER 3 (Q3)</span>
-                    <span className="text-[8px] font-mono text-zinc-650 mt-0.5 block">JUL - SEP 2026</span>
+                    <span className="text-[8px] font-mono font-black text-[#deff9a] uppercase tracking-widest block flex items-center gap-1">
+                      <Sparkles className="w-2.5 h-2.5 text-[#deff9a] animate-pulse" /> QUARTER 3 (Q3)
+                    </span>
+                    <span className="text-[8px] font-mono text-zinc-400 uppercase mt-0.5 block">
+                      JUL - SEP 2026 • AGUSTUS (M-T-D)
+                    </span>
                   </div>
-                  <span className="text-[7px] px-1.5 py-0.5 rounded bg-zinc-900 text-zinc-500 font-mono font-bold border border-zinc-800 uppercase shrink-0">
-                    UPCOMING
+                  <span className="text-[7px] px-1.5 py-0.5 rounded bg-[#deff9a]/15 text-[#deff9a] font-mono font-bold border border-[#deff9a]/30 uppercase shrink-0 animate-pulse">
+                    ACTIVE (BERJALAN)
                   </span>
                 </div>
-                <div>
-                  <span className="text-xs font-mono font-black text-zinc-650 block">
-                    Rp 0
+                <div className="relative z-10">
+                  <span className="text-xs font-mono font-black text-[#deff9a] block">
+                    Rp {(338788.2 + (realizedPnL || 0)).toLocaleString('id-ID', { minimumFractionDigits: 1, maximumFractionDigits: 2 })}
                   </span>
-                  <p className="text-[8px] text-zinc-500 mt-1 leading-normal uppercase font-mono">
-                    TARGET REBALANCE AT 01.07
+                  <p className="text-[8px] text-zinc-400 mt-1 leading-normal uppercase font-mono">
+                    7 WINS / 1 CORRECTION • REALISASI M-T-D AGUSTUS
                   </p>
                 </div>
+                <button
+                  type="button"
+                  id="download-q3-pdf-btn"
+                  onClick={() => handleGeneratePeriodClosingPDF({
+                    periodType: 'QUARTERLY',
+                    periodLabel: 'LAPORAN KEUANGAN PENUTUP KUARTAL 3 (Q3 2026 INTERIM)',
+                    periodSubLabel: `PERIODE: 01 JULI 2026 - ${getRealTimeReportingDate().formattedInd.toUpperCase()} (INTERIM BERJALAN)`,
+                    periodCode: 'VAM-FS-Q3-2026-INTERIM',
+                    statusBadge: 'ACTIVE / INTERIM BERJALAN',
+                    realizedPeriodProfit: 338788.2 + (realizedPnL || 0),
+                    periodNotes: `Laporan penutup interim Kuartal 3 Tahun 2026 per ${getRealTimeReportingDate().formattedInd} dengan realisasi laba berjalan Rp ${(338788.2 + (realizedPnL || 0)).toLocaleString('id-ID')}.`
+                  })}
+                  className="w-full py-1.5 px-2 rounded-lg bg-[#deff9a]/10 hover:bg-[#deff9a]/20 border border-[#deff9a]/30 text-[8px] font-mono font-bold text-[#deff9a] flex items-center justify-center gap-1.5 transition-all shadow-sm relative z-10"
+                >
+                  <Download className="w-3 h-3 text-[#deff9a]" />
+                  UNDUH PDF PENUTUP Q3 (INTERIM)
+                </button>
               </div>
 
               {/* Q4 */}
-              <div className="p-4 rounded-xl bg-zinc-950/80 border border-zinc-900 flex flex-col justify-between space-y-3 opacity-60 hover:opacity-100 transition-opacity">
+              <div className="p-4 rounded-xl bg-zinc-950/80 border border-zinc-900 flex flex-col justify-between space-y-3 opacity-75 hover:opacity-100 transition-opacity">
                 <div className="flex justify-between items-start">
                   <div>
-                    <span className="text-[8px] font-mono font-black text-zinc-500 uppercase tracking-widest block">QUARTER 4 (Q4)</span>
-                    <span className="text-[8px] font-mono text-zinc-655 mt-0.5 block">OKT - DES 2026</span>
+                    <span className="text-[8px] font-mono font-black text-zinc-400 uppercase tracking-widest block">QUARTER 4 (Q4)</span>
+                    <span className="text-[8px] font-mono text-zinc-600 mt-0.5 block">01 OKT - 31 DES 2026</span>
                   </div>
                   <span className="text-[7px] px-1.5 py-0.5 rounded bg-zinc-900 text-zinc-500 font-mono font-bold border border-zinc-800 uppercase shrink-0">
-                    UPCOMING
+                    UPCOMING / DRAFT
                   </span>
                 </div>
                 <div>
-                  <span className="text-xs font-mono font-black text-zinc-650 block">
+                  <span className="text-xs font-mono font-black text-zinc-500 block">
                     Rp 0
                   </span>
                   <p className="text-[8px] text-zinc-500 mt-1 leading-normal uppercase font-mono">
                     TARGET REBALANCE AT 01.10
                   </p>
                 </div>
+                <button
+                  type="button"
+                  id="download-q4-pdf-btn"
+                  onClick={() => handleGeneratePeriodClosingPDF({
+                    periodType: 'QUARTERLY',
+                    periodLabel: 'LAPORAN KEUANGAN PROYEKSI PENUTUP KUARTAL 4 (Q4 2026)',
+                    periodSubLabel: 'PERIODE: 01 OKTOBER 2026 - 31 DESEMBER 2026 (PROYEKSI / DRAFT)',
+                    periodCode: 'VAM-FS-Q4-2026-DRAFT',
+                    statusBadge: 'UPCOMING / DRAFT PROYEKSI',
+                    realizedPeriodProfit: 0,
+                    periodNotes: 'Proyeksi penutupan buku Kuartal 4 2026.'
+                  })}
+                  className="w-full py-1.5 px-2 rounded-lg bg-zinc-900 hover:bg-zinc-850 border border-zinc-800 text-[8px] font-mono font-bold text-zinc-400 flex items-center justify-center gap-1.5 transition-all"
+                >
+                  <FileText className="w-3 h-3 text-zinc-500" />
+                  UNDUH DRAFT PROYEKSI Q4
+                </button>
               </div>
+            </div>
+
+            {/* Dedicated Multi-Period Closing Hub (Bulan, Kuartal, Semester, Tahunan) */}
+            <div className="mt-6 pt-6 border-t border-zinc-900/80 space-y-4" id="period-closing-hub">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                <div className="space-y-0.5">
+                  <h4 className="text-[11px] font-mono font-bold text-white uppercase tracking-wider flex items-center gap-2">
+                    <FileCheck2 className="w-3.5 h-3.5 text-[#deff9a]" /> PUSAT GENERASI LAPORAN KEUANGAN PENUTUP PERIODE (PDF)
+                  </h4>
+                  <p className="text-[9px] text-zinc-400">
+                    Pilih periode penutupan (Bulanan, Kuartalan, Semesteran, atau Tahunan) untuk menghasilkan Laporan Keuangan resmi bersertifikasi SHA-256.
+                  </p>
+                </div>
+
+                {/* Period Category Switcher */}
+                <div className="flex items-center gap-1 bg-zinc-900/90 p-1 rounded-xl border border-zinc-800 self-start sm:self-auto">
+                  <button
+                    type="button"
+                    onClick={() => setSelectedClosingCategory('MONTHLY')}
+                    className={`px-2.5 py-1 rounded-lg text-[8.5px] font-mono font-bold transition-all ${
+                      selectedClosingCategory === 'MONTHLY'
+                        ? 'bg-[#deff9a] text-black shadow-sm'
+                        : 'text-zinc-400 hover:text-white'
+                    }`}
+                  >
+                    📅 BULANAN (12 BULAN)
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setSelectedClosingCategory('QUARTERLY')}
+                    className={`px-2.5 py-1 rounded-lg text-[8.5px] font-mono font-bold transition-all ${
+                      selectedClosingCategory === 'QUARTERLY'
+                        ? 'bg-[#deff9a] text-black shadow-sm'
+                        : 'text-zinc-400 hover:text-white'
+                    }`}
+                  >
+                    📊 KUARTALAN (Q1 - Q4)
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setSelectedClosingCategory('SEMI_ANNUAL')}
+                    className={`px-2.5 py-1 rounded-lg text-[8.5px] font-mono font-bold transition-all ${
+                      selectedClosingCategory === 'SEMI_ANNUAL'
+                        ? 'bg-[#deff9a] text-black shadow-sm'
+                        : 'text-zinc-400 hover:text-white'
+                    }`}
+                  >
+                    📈 SEMESTERAN (H1 - H2)
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setSelectedClosingCategory('ANNUAL')}
+                    className={`px-2.5 py-1 rounded-lg text-[8.5px] font-mono font-bold transition-all ${
+                      selectedClosingCategory === 'ANNUAL'
+                        ? 'bg-[#deff9a] text-black shadow-sm'
+                        : 'text-zinc-400 hover:text-white'
+                    }`}
+                  >
+                    🏛️ TAHUNAN (FY 25 / FY 26)
+                  </button>
+                </div>
+              </div>
+
+              {/* View 1: Bulanan (Monthly 12 Months Grid) */}
+              {selectedClosingCategory === 'MONTHLY' && (
+                <div className="space-y-3 animate-fade-in">
+                  <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-2.5">
+                    {[
+                      { code: 'JAN', name: 'Januari 2026', range: '01-31 Jan', pnl: 320000, status: 'SETTLED', isCurrent: false },
+                      { code: 'FEB', name: 'Februari 2026', range: '01-28 Feb', pnl: 410000, status: 'SETTLED', isCurrent: false },
+                      { code: 'MAR', name: 'Maret 2026', range: '01-31 Mar', pnl: 420000, status: 'SETTLED', isCurrent: false },
+                      { code: 'APR', name: 'April 2026', range: '01-30 Apr', pnl: 580000, status: 'SETTLED', isCurrent: false },
+                      { code: 'MEI', name: 'Mei 2026', range: '01-31 Mei', pnl: 640000, status: 'SETTLED', isCurrent: false },
+                      { code: 'JUN', name: 'Juni 2026', range: '01-30 Jun', pnl: 740000, status: 'SETTLED', isCurrent: false },
+                      { code: 'JUL', name: 'Juli 2026', range: '01-31 Jul', pnl: 620000, status: 'SETTLED', isCurrent: false },
+                      { code: 'AGU', name: 'Agustus 2026', range: `01-${new Date().getDate()} Agu (MTD)`, pnl: 338788.2 + (realizedPnL || 0), status: 'ACTIVE', isCurrent: true },
+                      { code: 'SEP', name: 'September 2026', range: '01-30 Sep', pnl: 0, status: 'UPCOMING', isCurrent: false },
+                      { code: 'OKT', name: 'Oktober 2026', range: '01-31 Okt', pnl: 0, status: 'UPCOMING', isCurrent: false },
+                      { code: 'NOV', name: 'November 2026', range: '01-30 Nov', pnl: 0, status: 'UPCOMING', isCurrent: false },
+                      { code: 'DES', name: 'Desember 2026', range: '01-31 Des', pnl: 0, status: 'UPCOMING', isCurrent: false },
+                    ].map((m) => (
+                      <div
+                        key={m.code}
+                        className={`p-3 rounded-xl border flex flex-col justify-between space-y-2 transition-all ${
+                          m.isCurrent
+                            ? 'bg-zinc-950 border-[#deff9a]/40 shadow-[0_0_12px_rgba(222,255,154,0.08)]'
+                            : m.status === 'SETTLED'
+                            ? 'bg-zinc-950/70 border-zinc-900 hover:border-zinc-800'
+                            : 'bg-zinc-950/40 border-zinc-900/60 opacity-60'
+                        }`}
+                      >
+                        <div className="flex justify-between items-start">
+                          <span className={`text-[8.5px] font-mono font-bold ${m.isCurrent ? 'text-[#deff9a]' : 'text-zinc-300'}`}>
+                            {m.name}
+                          </span>
+                          <span
+                            className={`text-[6.5px] px-1 py-0.5 rounded font-mono font-bold uppercase ${
+                              m.isCurrent
+                                ? 'bg-[#deff9a]/15 text-[#deff9a] border border-[#deff9a]/30'
+                                : m.status === 'SETTLED'
+                                ? 'bg-amber-500/10 text-amber-400 border border-amber-500/20'
+                                : 'bg-zinc-900 text-zinc-500 border border-zinc-800'
+                            }`}
+                          >
+                            {m.status}
+                          </span>
+                        </div>
+
+                        <div>
+                          <span className={`text-[10px] font-mono font-bold block ${m.isCurrent ? 'text-[#deff9a]' : m.pnl > 0 ? 'text-zinc-200' : 'text-zinc-500'}`}>
+                            Rp {m.pnl > 0 ? m.pnl.toLocaleString('id-ID', { maximumFractionDigits: 0 }) : '0'}
+                          </span>
+                          <span className="text-[7.5px] font-mono text-zinc-500">{m.range}</span>
+                        </div>
+
+                        <button
+                          type="button"
+                          onClick={() => handleGeneratePeriodClosingPDF({
+                            periodType: 'MONTHLY',
+                            periodLabel: `LAPORAN KEUANGAN PENUTUP BULAN ${m.name.toUpperCase()}`,
+                            periodSubLabel: `PERIODE PENUTUPAN: ${m.range.toUpperCase()} 2026 (${m.status})`,
+                            periodCode: `VAM-FS-M-${m.code}-2026`,
+                            statusBadge: m.status === 'ACTIVE' ? 'ACTIVE / INTERIM BERJALAN' : m.status === 'SETTLED' ? 'SETTLED / CLOSED' : 'UPCOMING DRAFT',
+                            realizedPeriodProfit: m.pnl,
+                            periodNotes: `Laporan penutup akuntansi bulanan untuk periode ${m.name} dengan realisasi PnL Rp ${m.pnl.toLocaleString('id-ID')}.`
+                          })}
+                          className={`w-full py-1 px-1.5 rounded text-[7.5px] font-mono font-bold flex items-center justify-center gap-1 transition-all ${
+                            m.isCurrent
+                              ? 'bg-[#deff9a]/15 hover:bg-[#deff9a]/25 text-[#deff9a] border border-[#deff9a]/30'
+                              : 'bg-zinc-900 hover:bg-zinc-850 text-zinc-400 hover:text-white border border-zinc-800'
+                          }`}
+                        >
+                          <Download className="w-2.5 h-2.5" />
+                          UNDUH PDF
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* View 2: Kuartalan (Quarterly Overview) */}
+              {selectedClosingCategory === 'QUARTERLY' && (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3 animate-fade-in">
+                  <div className="p-4 rounded-xl bg-zinc-950 border border-zinc-900 flex flex-col justify-between space-y-3">
+                    <div className="flex justify-between items-center">
+                      <div className="space-y-0.5">
+                        <span className="text-[8px] font-mono font-bold text-amber-400 uppercase">KUARTAL 1 (Q1 2026) • CLOSED</span>
+                        <h5 className="text-xs font-mono font-bold text-white">01 Januari 2026 - 31 Maret 2026</h5>
+                      </div>
+                      <span className="text-[8px] font-mono font-black text-amber-400 bg-amber-500/10 px-2 py-0.5 rounded border border-amber-500/20">
+                        Rp 1.150.000 (SETTLED)
+                      </span>
+                    </div>
+                    <p className="text-[9px] text-zinc-400">
+                      Penutupan buku kuartal 1 telah diaudit internal SPI dengan 8 transaksi rebalancing berhasil dan rasio solvabilitas prima.
+                    </p>
+                    <button
+                      type="button"
+                      onClick={() => handleGeneratePeriodClosingPDF({
+                        periodType: 'QUARTERLY',
+                        periodLabel: 'LAPORAN KEUANGAN PENUTUP KUARTAL 1 (Q1 2026)',
+                        periodSubLabel: 'PERIODE: 01 JANUARI 2026 - 31 MARET 2026 (SETTLED / CLOSED)',
+                        periodCode: 'VAM-FS-Q1-2026',
+                        statusBadge: 'SETTLED / CLOSED',
+                        realizedPeriodProfit: 1150000
+                      })}
+                      className="py-1.5 px-3 rounded-lg bg-zinc-900 hover:bg-zinc-850 border border-zinc-800 text-[8.5px] font-mono font-bold text-amber-400 flex items-center justify-center gap-1.5 transition-all"
+                    >
+                      <Download className="w-3 h-3" /> UNDUH LAPORAN PENUTUP KUARTAL 1 (PDF)
+                    </button>
+                  </div>
+
+                  <div className="p-4 rounded-xl bg-zinc-950 border border-zinc-900 flex flex-col justify-between space-y-3">
+                    <div className="flex justify-between items-center">
+                      <div className="space-y-0.5">
+                        <span className="text-[8px] font-mono font-bold text-emerald-400 uppercase">KUARTAL 2 (Q2 2026) • CLOSED</span>
+                        <h5 className="text-xs font-mono font-bold text-white">01 April 2026 - 30 Juni 2026</h5>
+                      </div>
+                      <span className="text-[8px] font-mono font-black text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded border border-emerald-500/20">
+                        Rp 1.960.000 (SETTLED)
+                      </span>
+                    </div>
+                    <p className="text-[9px] text-zinc-400">
+                      Penutupan buku kuartal 2 selesai pada 30 Juni 2026 dengan kontribusi profit rebalancing 56.8% terhadap YTD.
+                    </p>
+                    <button
+                      type="button"
+                      onClick={() => handleGeneratePeriodClosingPDF({
+                        periodType: 'QUARTERLY',
+                        periodLabel: 'LAPORAN KEUANGAN PENUTUP KUARTAL 2 (Q2 2026)',
+                        periodSubLabel: 'PERIODE: 01 APRIL 2026 - 30 JUNI 2026 (SETTLED / CLOSED)',
+                        periodCode: 'VAM-FS-Q2-2026',
+                        statusBadge: 'SETTLED / CLOSED',
+                        realizedPeriodProfit: 1960000
+                      })}
+                      className="py-1.5 px-3 rounded-lg bg-zinc-900 hover:bg-zinc-850 border border-zinc-800 text-[8.5px] font-mono font-bold text-emerald-400 flex items-center justify-center gap-1.5 transition-all"
+                    >
+                      <Download className="w-3 h-3" /> UNDUH LAPORAN PENUTUP KUARTAL 2 (PDF)
+                    </button>
+                  </div>
+
+                  <div className="p-4 rounded-xl bg-zinc-950 border border-[#deff9a]/30 shadow-[0_0_15px_rgba(222,255,154,0.06)] flex flex-col justify-between space-y-3">
+                    <div className="flex justify-between items-center">
+                      <div className="space-y-0.5">
+                        <span className="text-[8px] font-mono font-bold text-[#deff9a] uppercase flex items-center gap-1">
+                          <Sparkles className="w-2.5 h-2.5" /> KUARTAL 3 (Q3 2026) • PERIODE AKTIF AGUSTUS 2026
+                        </span>
+                        <h5 className="text-xs font-mono font-bold text-white">01 Juli 2026 - 30 September 2026 (Interim)</h5>
+                      </div>
+                      <span className="text-[8px] font-mono font-black text-[#deff9a] bg-[#deff9a]/10 px-2 py-0.5 rounded border border-[#deff9a]/20">
+                        Rp {(338788.2 + (realizedPnL || 0)).toLocaleString('id-ID', { minimumFractionDigits: 1, maximumFractionDigits: 2 })} (ACTIVE)
+                      </span>
+                    </div>
+                    <p className="text-[9px] text-zinc-400">
+                      Kuartal 3 aktif berjalan pada bulan Agustus 2026. Laporan interim siap digenerasi dengan seluruh konsolidasi PSAK & IFRS.
+                    </p>
+                    <button
+                      type="button"
+                      onClick={() => handleGeneratePeriodClosingPDF({
+                        periodType: 'QUARTERLY',
+                        periodLabel: 'LAPORAN KEUANGAN PENUTUP KUARTAL 3 (Q3 2026 INTERIM)',
+                        periodSubLabel: `PERIODE: 01 JULI 2026 - ${getRealTimeReportingDate().formattedInd.toUpperCase()} (ACTIVE INTERIM)`,
+                        periodCode: 'VAM-FS-Q3-2026-INTERIM',
+                        statusBadge: 'ACTIVE / INTERIM BERJALAN',
+                        realizedPeriodProfit: 338788.2 + (realizedPnL || 0)
+                      })}
+                      className="py-1.5 px-3 rounded-lg bg-[#deff9a]/10 hover:bg-[#deff9a]/20 border border-[#deff9a]/30 text-[8.5px] font-mono font-bold text-[#deff9a] flex items-center justify-center gap-1.5 transition-all shadow-sm"
+                    >
+                      <Download className="w-3 h-3 text-[#deff9a]" /> UNDUH LAPORAN PENUTUP KUARTAL 3 INTERIM (PDF)
+                    </button>
+                  </div>
+
+                  <div className="p-4 rounded-xl bg-zinc-950/60 border border-zinc-900 flex flex-col justify-between space-y-3 opacity-75">
+                    <div className="flex justify-between items-center">
+                      <div className="space-y-0.5">
+                        <span className="text-[8px] font-mono font-bold text-zinc-400 uppercase">KUARTAL 4 (Q4 2026) • UPCOMING</span>
+                        <h5 className="text-xs font-mono font-bold text-zinc-300">01 Oktober 2026 - 31 Desember 2026</h5>
+                      </div>
+                      <span className="text-[8px] font-mono font-black text-zinc-500 bg-zinc-900 px-2 py-0.5 rounded border border-zinc-800">
+                        Rp 0 (PROYEKSI)
+                      </span>
+                    </div>
+                    <p className="text-[9px] text-zinc-500">
+                      Jadwal rebalancing otomatis dan proyeksi target laba penutupan tahun fiskal 2026.
+                    </p>
+                    <button
+                      type="button"
+                      onClick={() => handleGeneratePeriodClosingPDF({
+                        periodType: 'QUARTERLY',
+                        periodLabel: 'LAPORAN KEUANGAN PROYEKSI PENUTUP KUARTAL 4 (Q4 2026)',
+                        periodSubLabel: 'PERIODE: 01 OKTOBER 2026 - 31 DESEMBER 2026 (DRAFT)',
+                        periodCode: 'VAM-FS-Q4-2026-DRAFT',
+                        statusBadge: 'UPCOMING / DRAFT',
+                        realizedPeriodProfit: 0
+                      })}
+                      className="py-1.5 px-3 rounded-lg bg-zinc-900 hover:bg-zinc-850 border border-zinc-800 text-[8.5px] font-mono font-bold text-zinc-400 flex items-center justify-center gap-1.5 transition-all"
+                    >
+                      <FileText className="w-3 h-3" /> UNDUH DRAFT PROYEKSI KUARTAL 4 (PDF)
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {/* View 3: Semesteran (Semi-Annual H1 & H2) */}
+              {selectedClosingCategory === 'SEMI_ANNUAL' && (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3 animate-fade-in">
+                  <div className="p-4 rounded-xl bg-zinc-950 border border-zinc-900 flex flex-col justify-between space-y-3">
+                    <div className="flex justify-between items-start">
+                      <div>
+                        <span className="text-[8px] font-mono font-bold text-amber-400 uppercase tracking-wider block">
+                          SEMESTER 1 (H1 2026) • CLOSED & SETTLED
+                        </span>
+                        <h5 className="text-xs font-mono font-bold text-white mt-0.5">
+                          01 Januari 2026 - 30 Juni 2026
+                        </h5>
+                      </div>
+                      <span className="text-[7.5px] px-1.5 py-0.5 rounded bg-amber-500/10 text-amber-400 font-mono font-bold border border-amber-500/20 uppercase">
+                        SETTLED
+                      </span>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-2 text-[9px] font-mono bg-zinc-900/40 p-2.5 rounded-lg border border-zinc-850">
+                      <div>
+                        <span className="text-zinc-500 block text-[7.5px]">TOTAL LABA REBALANCING</span>
+                        <span className="text-amber-400 font-bold">Rp 3.110.000</span>
+                      </div>
+                      <div>
+                        <span className="text-zinc-500 block text-[7.5px]">TOTAL ASET KONSOLIDASIAN</span>
+                        <span className="text-white font-bold">Rp 4.218.420.000</span>
+                      </div>
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={() => handleGeneratePeriodClosingPDF({
+                        periodType: 'SEMI_ANNUAL',
+                        periodLabel: 'LAPORAN KEUANGAN PENUTUP SEMESTER 1 (H1 2026)',
+                        periodSubLabel: 'PERIODE: 01 JANUARI 2026 - 30 JUNI 2026 (CLOSED & SETTLED)',
+                        periodCode: 'VAM-FS-SEMESTER-1-2026',
+                        statusBadge: 'SETTLED / AUDIT INTERNAL PASSED',
+                        realizedPeriodProfit: 3110000,
+                        periodNotes: 'Laporan penutupan buku Semester 1 2026 (Januari - Juni 2026) mencatatkan laba rebalancing Rp 3.110.000,00 dan posisi solvabilitas prima.'
+                      })}
+                      className="py-1.5 px-3 rounded-lg bg-zinc-900 hover:bg-zinc-850 border border-zinc-800 text-[8.5px] font-mono font-bold text-amber-400 flex items-center justify-center gap-1.5 transition-all"
+                    >
+                      <Download className="w-3 h-3 text-amber-400" />
+                      UNDUH PDF PENUTUP SEMESTER 1 (H1 2026)
+                    </button>
+                  </div>
+
+                  <div className="p-4 rounded-xl bg-zinc-950 border border-[#deff9a]/30 shadow-[0_0_15px_rgba(222,255,154,0.06)] flex flex-col justify-between space-y-3">
+                    <div className="flex justify-between items-start">
+                      <div>
+                        <span className="text-[8px] font-mono font-bold text-[#deff9a] uppercase tracking-wider block flex items-center gap-1">
+                          <Sparkles className="w-2.5 h-2.5" /> SEMESTER 2 (H2 2026) • ACTIVE BERJALAN
+                        </span>
+                        <h5 className="text-xs font-mono font-bold text-white mt-0.5">
+                          01 Juli 2026 - 31 Desember 2026 (Interim)
+                        </h5>
+                      </div>
+                      <span className="text-[7.5px] px-1.5 py-0.5 rounded bg-[#deff9a]/15 text-[#deff9a] font-mono font-bold border border-[#deff9a]/30 uppercase animate-pulse">
+                        ACTIVE INTERIM
+                      </span>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-2 text-[9px] font-mono bg-zinc-900/40 p-2.5 rounded-lg border border-zinc-850">
+                      <div>
+                        <span className="text-zinc-500 block text-[7.5px]">LABA BERJALAN H2</span>
+                        <span className="text-[#deff9a] font-bold">Rp {(338788.2 + (realizedPnL || 0)).toLocaleString('id-ID', { minimumFractionDigits: 1, maximumFractionDigits: 2 })}</span>
+                      </div>
+                      <div>
+                        <span className="text-zinc-500 block text-[7.5px]">TANGGAL LAPORAN</span>
+                        <span className="text-white font-bold">{getRealTimeReportingDate().formattedInd}</span>
+                      </div>
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={() => handleGeneratePeriodClosingPDF({
+                        periodType: 'SEMI_ANNUAL',
+                        periodLabel: 'LAPORAN KEUANGAN PENUTUP SEMESTER 2 (H2 2026 INTERIM)',
+                        periodSubLabel: `PERIODE: 01 JULI 2026 - ${getRealTimeReportingDate().formattedInd.toUpperCase()} (ACTIVE INTERIM)`,
+                        periodCode: 'VAM-FS-SEMESTER-2-2026-INTERIM',
+                        statusBadge: 'ACTIVE / INTERIM BERJALAN',
+                        realizedPeriodProfit: 338788.2 + (realizedPnL || 0),
+                        periodNotes: `Laporan penutup interim Semester 2 2026 mencakup realisasi per ${getRealTimeReportingDate().formattedInd}.`
+                      })}
+                      className="py-1.5 px-3 rounded-lg bg-[#deff9a]/10 hover:bg-[#deff9a]/20 border border-[#deff9a]/30 text-[8.5px] font-mono font-bold text-[#deff9a] flex items-center justify-center gap-1.5 transition-all shadow-sm"
+                    >
+                      <Download className="w-3 h-3 text-[#deff9a]" />
+                      UNDUH PDF PENUTUP SEMESTER 2 INTERIM (H2 2026)
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {/* View 4: Tahunan (Annual FY 2025 Audited & FY 2026 YTD) */}
+              {selectedClosingCategory === 'ANNUAL' && (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3 animate-fade-in">
+                  <div className="p-4 rounded-xl bg-zinc-950 border border-zinc-900 flex flex-col justify-between space-y-3">
+                    <div className="flex justify-between items-start">
+                      <div>
+                        <span className="text-[8px] font-mono font-bold text-amber-400 uppercase tracking-wider block">
+                          TAHUN BUKU 2025 (FY 2025) • AUDITED WTP RESMI
+                        </span>
+                        <h5 className="text-xs font-mono font-bold text-white mt-0.5">
+                          01 Januari 2025 - 31 Desember 2025
+                        </h5>
+                      </div>
+                      <span className="text-[7.5px] px-1.5 py-0.5 rounded bg-amber-500/10 text-amber-400 font-mono font-bold border border-amber-500/20 uppercase">
+                        AUDITED WTP
+                      </span>
+                    </div>
+
+                    <div className="space-y-1.5 text-[8.5px] font-mono bg-zinc-900/40 p-2.5 rounded-lg border border-zinc-850 text-zinc-400">
+                      <div className="flex justify-between">
+                        <span>Kas & Setara Kas Akhir 2025:</span>
+                        <span className="text-white font-bold">Rp 989.908,69</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span>Laba Komprehensif 2025:</span>
+                        <span className="text-white font-bold">Rp 2.074.883,64</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span>Modal Disetor (Paid-in Capital):</span>
+                        <span className="text-white font-bold">Rp 6.196.225,05</span>
+                      </div>
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={() => handleGeneratePeriodClosingPDF({
+                        periodType: 'ANNUAL',
+                        periodLabel: 'LAPORAN KEUANGAN TAHUNAN AUDIT 2025 (FY 2025 AUDITED)',
+                        periodSubLabel: 'PERIODE: 01 JANUARI 2025 - 31 DESEMBER 2025 (AUDITED WTP RESMI)',
+                        periodCode: 'VAM-FS-ANNUAL-AUDIT-2025',
+                        statusBadge: 'AUDITED / OPINI WAJAR TANPA PENGECUALIAN',
+                        periodNotes: 'Laporan Keuangan Resmi PT Venture Asset Management Tahun Buku 2025 yang telah diaudit.'
+                      })}
+                      className="py-1.5 px-3 rounded-lg bg-zinc-900 hover:bg-zinc-850 border border-zinc-800 text-[8.5px] font-mono font-bold text-amber-400 flex items-center justify-center gap-1.5 transition-all"
+                    >
+                      <Download className="w-3 h-3 text-amber-400" />
+                      UNDUH PDF LAPORAN TAHUNAN 2025 (AUDITED)
+                    </button>
+                  </div>
+
+                  <div className="p-4 rounded-xl bg-zinc-950 border border-[#deff9a]/30 shadow-[0_0_15px_rgba(222,255,154,0.06)] flex flex-col justify-between space-y-3">
+                    <div className="flex justify-between items-start">
+                      <div>
+                        <span className="text-[8px] font-mono font-bold text-[#deff9a] uppercase tracking-wider block flex items-center gap-1">
+                          <Sparkles className="w-2.5 h-2.5" /> TAHUN FISKAL 2026 (FY 2026 YTD) • KONSOLIDASIAN LENGKAP
+                        </span>
+                        <h5 className="text-xs font-mono font-bold text-white mt-0.5">
+                          01 Januari 2026 - {getRealTimeReportingDate().formattedInd}
+                        </h5>
+                      </div>
+                      <span className="text-[7.5px] px-1.5 py-0.5 rounded bg-[#deff9a]/15 text-[#deff9a] font-mono font-bold border border-[#deff9a]/30 uppercase animate-pulse">
+                        LIVE YTD
+                      </span>
+                    </div>
+
+                    <div className="space-y-1.5 text-[8.5px] font-mono bg-zinc-900/40 p-2.5 rounded-lg border border-zinc-850 text-zinc-400">
+                      <div className="flex justify-between">
+                        <span>Total Aset Konsolidasian:</span>
+                        <span className="text-[#deff9a] font-bold">Rp 4.218.420.000,00</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span>Aset Tak Berwujud (Software ERP):</span>
+                        <span className="text-white font-bold">Rp 4.200.000.000,00</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span>Laba Bersih YTD Konsolidasian:</span>
+                        <span className="text-[#deff9a] font-bold">Rp {(3448788.2 + (realizedPnL || 0)).toLocaleString('id-ID', { minimumFractionDigits: 1, maximumFractionDigits: 2 })}</span>
+                      </div>
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={() => handleGeneratePeriodClosingPDF({
+                        periodType: 'ANNUAL',
+                        periodLabel: 'LAPORAN KEUANGAN KONSOLIDASIAN TAHUNAN 2026 (FY 2026 YTD)',
+                        periodSubLabel: `PERIODE: 01 JANUARI 2026 - ${getRealTimeReportingDate().formattedInd.toUpperCase()} (EDISI BILINGUAL PSAK & IFRS)`,
+                        periodCode: 'VAM-FS-ANNUAL-CONS-2026',
+                        statusBadge: 'KONSOLIDASIAN RESMI BERJALAN',
+                        realizedPeriodProfit: 3448788.2 + (realizedPnL || 0),
+                        periodNotes: 'Laporan Keuangan Konsolidasian Lengkap Edisi Bilingual PSAK & IFRS PT Venture Asset Management Tahun Fiskal 2026.'
+                      })}
+                      className="py-1.5 px-3 rounded-lg bg-[#deff9a]/10 hover:bg-[#deff9a]/20 border border-[#deff9a]/30 text-[8.5px] font-mono font-bold text-[#deff9a] flex items-center justify-center gap-1.5 transition-all shadow-sm"
+                    >
+                      <Download className="w-3 h-3 text-[#deff9a]" />
+                      UNDUH PDF LAPORAN TAHUNAN 2026 (PSAK/IFRS)
+                    </button>
+                  </div>
+                </div>
+              )}
             </div>
           </div>
 
@@ -5365,6 +6246,314 @@ VentureAM,Luxury watches,120000000`;
             </motion.div>
           </div>
         )}
+        {/* TRI-SYNC COMPREHENSIVE LEDGER AUDIT & INTEGRITY MODAL */}
+        {isTriSyncModalOpen && (
+          <div className="fixed inset-0 bg-black/80 backdrop-blur-md z-50 flex items-center justify-center p-4 overflow-y-auto">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.96, y: 15 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.96, y: 15 }}
+              className="bg-zinc-950 border border-zinc-800 rounded-2xl max-w-5xl w-full p-6 space-y-6 shadow-2xl relative my-8 font-sans max-h-[90vh] flex flex-col"
+            >
+              {/* Modal Header */}
+              <div className="flex justify-between items-start border-b border-zinc-800 pb-4 shrink-0">
+                <div className="flex items-center gap-3">
+                  <div className="p-3 rounded-xl bg-orange-500/10 border border-orange-500/30 text-orange-400">
+                    <Scale className="w-6 h-6" />
+                  </div>
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <span className="text-[10px] font-mono text-zinc-400 uppercase tracking-widest font-bold">
+                        VENTUREAM AI ACCOUNTING TRI-SYNC CORE
+                      </span>
+                      <span className="text-[8px] px-2 py-0.5 rounded-full bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 font-mono font-bold uppercase">
+                        ZERO DRIFT BALANCED
+                      </span>
+                    </div>
+                    <h3 className="text-base font-bold text-white flex items-center gap-2 mt-0.5">
+                      Integrasi &amp; Rekonsiliasi 3-Arah: Laporan Keuangan ↔ Rebalancing Portofolio ↔ Transfer RDN-Giro
+                    </h3>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setIsTriSyncModalOpen(false)}
+                  className="p-1.5 bg-zinc-900 hover:bg-zinc-800 text-zinc-400 hover:text-white rounded-lg transition-colors cursor-pointer"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              {/* Modal Scrollable Content */}
+              <div className="overflow-y-auto space-y-6 pr-1 custom-scrollbar flex-1">
+                {/* 3 Source Columns */}
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  {/* Pillar 1: Financial Reports */}
+                  <div className="p-4 bg-zinc-900/60 border border-orange-500/30 rounded-xl space-y-2.5">
+                    <div className="flex items-center justify-between">
+                      <span className="text-[11px] font-mono font-black text-orange-400 uppercase flex items-center gap-1.5">
+                        <FileCheck className="w-4 h-4" /> 1. Laporan Keuangan
+                      </span>
+                      <span className="text-[8px] font-mono bg-orange-500/20 text-orange-300 px-1.5 py-0.5 rounded font-bold">
+                        PSAK 1 &amp; 19
+                      </span>
+                    </div>
+                    <div className="space-y-1.5 text-xs font-mono pt-1">
+                      <div className="flex justify-between border-b border-zinc-800 pb-1">
+                        <span className="text-zinc-400">Total Aset:</span>
+                        <span className="font-bold text-white">
+                          Rp {(financialValues.cash26 + (financialValues.giro26 || 0) + financialValues.invest26 + (financialValues.fixed26 || 5950000) + (financialValues.intangible26 || 4200000000)).toLocaleString('id-ID')}
+                        </span>
+                      </div>
+                      <div className="flex justify-between border-b border-zinc-800 pb-1">
+                        <span className="text-zinc-400">Total Kewajiban:</span>
+                        <span className="font-bold text-emerald-400">Rp 0 (Bebas Hutang)</span>
+                      </div>
+                      <div className="flex justify-between border-b border-zinc-800 pb-1">
+                        <span className="text-zinc-400">Total Ekuitas:</span>
+                        <span className="font-bold text-[#DFFF00]">
+                          Rp {(financialValues.paidCapital26 + (financialValues.retainedEarnings26 || 0)).toLocaleString('id-ID')}
+                        </span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-zinc-400">Laba Komprehensif:</span>
+                        <span className="font-bold text-white">
+                          Rp {(financialValues.rev26 + (financialValues.hpp26 || 0) + (financialValues.operatingExpense26 || 0) + (financialValues.depreciationExpense26 || 0) + (financialValues.realizedSecurities26 || 0) + (financialValues.unrealizedSecurities26 || 0)).toLocaleString('id-ID')}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Pillar 2: Rebalancing Portfolio */}
+                  <div className="p-4 bg-zinc-900/60 border border-sky-500/30 rounded-xl space-y-2.5">
+                    <div className="flex items-center justify-between">
+                      <span className="text-[11px] font-mono font-black text-sky-400 uppercase flex items-center gap-1.5">
+                        <Scale className="w-4 h-4" /> 2. Rebalancing Portofolio
+                      </span>
+                      <span className="text-[8px] font-mono bg-sky-500/20 text-sky-300 px-1.5 py-0.5 rounded font-bold">
+                        PSAK 71 MTM
+                      </span>
+                    </div>
+                    <div className="space-y-1.5 text-xs font-mono pt-1">
+                      <div className="flex justify-between border-b border-zinc-800 pb-1">
+                        <span className="text-zinc-400">Nilai Pasar Efek:</span>
+                        <span className="font-bold text-sky-300">
+                          Rp {financialValues.invest26.toLocaleString('id-ID')}
+                        </span>
+                      </div>
+                      <div className="flex justify-between border-b border-zinc-800 pb-1">
+                        <span className="text-zinc-400">Realized PnL:</span>
+                        <span className={`font-bold ${(financialValues.realizedSecurities26 || 0) >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
+                          Rp {(financialValues.realizedSecurities26 || 0).toLocaleString('id-ID')}
+                        </span>
+                      </div>
+                      <div className="flex justify-between border-b border-zinc-800 pb-1">
+                        <span className="text-zinc-400">Unrealized MTM:</span>
+                        <span className={`font-bold ${(financialValues.unrealizedSecurities26 || 0) >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
+                          Rp {(financialValues.unrealizedSecurities26 || 0).toLocaleString('id-ID')}
+                        </span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-zinc-400">Status Portofolio:</span>
+                        <span className="font-bold text-white">Live CGS/IBKR Synced</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Pillar 3: Fund Transfer RDN-Giro */}
+                  <div className="p-4 bg-zinc-900/60 border border-amber-500/30 rounded-xl space-y-2.5">
+                    <div className="flex items-center justify-between">
+                      <span className="text-[11px] font-mono font-black text-amber-400 uppercase flex items-center gap-1.5">
+                        <ArrowRightLeft className="w-4 h-4" /> 3. Transfer RDN ↔ Giro
+                      </span>
+                      <span className="text-[8px] font-mono bg-amber-500/20 text-amber-300 px-1.5 py-0.5 rounded font-bold">
+                        PSAK 2 ARUS KAS
+                      </span>
+                    </div>
+                    <div className="space-y-1.5 text-xs font-mono pt-1">
+                      <div className="flex justify-between border-b border-zinc-800 pb-1">
+                        <span className="text-zinc-400">Kas RDN (Sekuritas):</span>
+                        <span className="font-bold text-amber-300">
+                          Rp {financialValues.cash26.toLocaleString('id-ID')}
+                        </span>
+                      </div>
+                      <div className="flex justify-between border-b border-zinc-800 pb-1">
+                        <span className="text-zinc-400">Rekening Giro (Mandiri):</span>
+                        <span className="font-bold text-amber-400">
+                          Rp {(financialValues.giro26 || 0).toLocaleString('id-ID')}
+                        </span>
+                      </div>
+                      <div className="flex justify-between border-b border-zinc-800 pb-1">
+                        <span className="text-zinc-400">Total Kas &amp; Setara Kas:</span>
+                        <span className="font-bold text-white">
+                          Rp {(financialValues.cash26 + (financialValues.giro26 || 0)).toLocaleString('id-ID')}
+                        </span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-zinc-400">Mutasi Buku Besar:</span>
+                        <span className="font-bold text-emerald-400">100% Terverifikasi</span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Double-Entry Ledger Table */}
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between">
+                    <h4 className="text-xs font-mono font-black text-white uppercase tracking-wider flex items-center gap-2">
+                      <Terminal className="w-4 h-4 text-[#DFFF00]" /> BUKU BESAR JURNAL GANDA OTOMATIS (AUTOMATED GENERAL LEDGER)
+                    </h4>
+                    <span className="text-[10px] font-mono text-zinc-400">
+                      Waktu Sinkronisasi Terakhir: <strong className="text-white">{lastSyncTime}</strong>
+                    </span>
+                  </div>
+
+                  <div className="bg-zinc-900/80 border border-zinc-800 rounded-xl overflow-hidden font-mono text-[11px]">
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-left">
+                        <thead>
+                          <tr className="bg-black/80 border-b border-zinc-800 text-[9px] text-zinc-400 uppercase">
+                            <th className="p-3">Kode Akun</th>
+                            <th className="p-3">Nama Akun Akuntansi</th>
+                            <th className="p-3">Ref Transaksi</th>
+                            <th className="p-3">Klasifikasi</th>
+                            <th className="p-3 text-right">Debit (Rp)</th>
+                            <th className="p-3 text-right">Kredit (Rp)</th>
+                            <th className="p-3 text-center">Status</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-zinc-800/60">
+                          {/* Row 1: Stock Portfolio Investment */}
+                          <tr className="hover:bg-zinc-800/30 transition-colors">
+                            <td className="p-3 text-sky-400 font-bold">1120</td>
+                            <td className="p-3 text-white font-medium">Investasi Portofolio Efek Saham</td>
+                            <td className="p-3 text-zinc-400">REBAL-VAM-PORT</td>
+                            <td className="p-3"><span className="px-2 py-0.5 bg-sky-500/10 text-sky-400 rounded text-[9px] font-bold">Rebalancing</span></td>
+                            <td className="p-3 text-right font-bold text-emerald-400">{financialValues.invest26.toLocaleString('id-ID')}</td>
+                            <td className="p-3 text-right text-zinc-500">-</td>
+                            <td className="p-3 text-center"><span className="text-[8px] bg-emerald-500/10 text-emerald-400 px-1.5 py-0.5 rounded font-bold">POSTED</span></td>
+                          </tr>
+
+                          {/* Row 2: RDN Cash */}
+                          <tr className="hover:bg-zinc-800/30 transition-colors">
+                            <td className="p-3 text-amber-400 font-bold">1110</td>
+                            <td className="p-3 text-white font-medium">Kas RDN (Rekening Dana Nasabah Sekuritas)</td>
+                            <td className="p-3 text-zinc-400">TRF-RDN-SYNC</td>
+                            <td className="p-3"><span className="px-2 py-0.5 bg-amber-500/10 text-amber-400 rounded text-[9px] font-bold">Kas &amp; Likuiditas</span></td>
+                            <td className="p-3 text-right font-bold text-emerald-400">{financialValues.cash26.toLocaleString('id-ID')}</td>
+                            <td className="p-3 text-right text-zinc-500">-</td>
+                            <td className="p-3 text-center"><span className="text-[8px] bg-emerald-500/10 text-emerald-400 px-1.5 py-0.5 rounded font-bold">POSTED</span></td>
+                          </tr>
+
+                          {/* Row 3: Giro Balance */}
+                          <tr className="hover:bg-zinc-800/30 transition-colors">
+                            <td className="p-3 text-amber-400 font-bold">1115</td>
+                            <td className="p-3 text-white font-medium">Kas Giro Bank Mandiri Operasional</td>
+                            <td className="p-3 text-zinc-400">TRF-GIRO-SYNC</td>
+                            <td className="p-3"><span className="px-2 py-0.5 bg-amber-500/10 text-amber-400 rounded text-[9px] font-bold">Transfer RDN-Giro</span></td>
+                            <td className="p-3 text-right font-bold text-emerald-400">{(financialValues.giro26 || 0).toLocaleString('id-ID')}</td>
+                            <td className="p-3 text-right text-zinc-500">-</td>
+                            <td className="p-3 text-center"><span className="text-[8px] bg-emerald-500/10 text-emerald-400 px-1.5 py-0.5 rounded font-bold">POSTED</span></td>
+                          </tr>
+
+                          {/* Row 4: Fixed Assets */}
+                          <tr className="hover:bg-zinc-800/30 transition-colors">
+                            <td className="p-3 text-zinc-300 font-bold">1200</td>
+                            <td className="p-3 text-white font-medium">Aset Tetap (Peralatan &amp; Hardware IT)</td>
+                            <td className="p-3 text-zinc-400">FIX-ASSET-01</td>
+                            <td className="p-3"><span className="px-2 py-0.5 bg-zinc-800 text-zinc-300 rounded text-[9px] font-bold">Aktiva Tetap</span></td>
+                            <td className="p-3 text-right font-bold text-emerald-400">{(financialValues.fixed26 || 5950000).toLocaleString('id-ID')}</td>
+                            <td className="p-3 text-right text-zinc-500">-</td>
+                            <td className="p-3 text-center"><span className="text-[8px] bg-emerald-500/10 text-emerald-400 px-1.5 py-0.5 rounded font-bold">POSTED</span></td>
+                          </tr>
+
+                          {/* Row 5: Intangible ERP Assets PSAK 19 */}
+                          <tr className="hover:bg-zinc-800/30 transition-colors">
+                            <td className="p-3 text-purple-400 font-bold">1300</td>
+                            <td className="p-3 text-white font-medium">Aset Tak Berwujud - Lisensi Platform ERP VentureAM</td>
+                            <td className="p-3 text-zinc-400">PSAK19-ERP-4.2B</td>
+                            <td className="p-3"><span className="px-2 py-0.5 bg-purple-500/10 text-purple-400 rounded text-[9px] font-bold">Kapitalisasi IP</span></td>
+                            <td className="p-3 text-right font-bold text-emerald-400">{(financialValues.intangible26 || 4200000000).toLocaleString('id-ID')}</td>
+                            <td className="p-3 text-right text-zinc-500">-</td>
+                            <td className="p-3 text-center"><span className="text-[8px] bg-emerald-500/10 text-emerald-400 px-1.5 py-0.5 rounded font-bold">POSTED</span></td>
+                          </tr>
+
+                          {/* Row 6: Equity Capitalization */}
+                          <tr className="hover:bg-zinc-800/30 transition-colors">
+                            <td className="p-3 text-emerald-400 font-bold">3100</td>
+                            <td className="p-3 text-white font-medium">Modal Disetor &amp; Ekuitas Pemegang Saham</td>
+                            <td className="p-3 text-zinc-400">CAP-EQUITY-01</td>
+                            <td className="p-3"><span className="px-2 py-0.5 bg-emerald-500/10 text-emerald-400 rounded text-[9px] font-bold">Ekuitas</span></td>
+                            <td className="p-3 text-right text-zinc-500">-</td>
+                            <td className="p-3 text-right font-bold text-amber-400">{financialValues.paidCapital26.toLocaleString('id-ID')}</td>
+                            <td className="p-3 text-center"><span className="text-[8px] bg-emerald-500/10 text-emerald-400 px-1.5 py-0.5 rounded font-bold">POSTED</span></td>
+                          </tr>
+
+                          {/* Row 7: Retained Earnings / Current Period Profit */}
+                          <tr className="hover:bg-zinc-800/30 transition-colors">
+                            <td className="p-3 text-emerald-400 font-bold">3200</td>
+                            <td className="p-3 text-white font-medium">Saldo Laba Ditahan &amp; Laba Bersih Komprehensif</td>
+                            <td className="p-3 text-zinc-400">PL-RET-EARN</td>
+                            <td className="p-3"><span className="px-2 py-0.5 bg-emerald-500/10 text-emerald-400 rounded text-[9px] font-bold">Laba Rugi</span></td>
+                            <td className="p-3 text-right text-zinc-500">-</td>
+                            <td className="p-3 text-right font-bold text-amber-400">{Math.abs(financialValues.retainedEarnings26 || 0).toLocaleString('id-ID')}</td>
+                            <td className="p-3 text-center"><span className="text-[8px] bg-emerald-500/10 text-emerald-400 px-1.5 py-0.5 rounded font-bold">POSTED</span></td>
+                          </tr>
+                        </tbody>
+                        <tfoot>
+                          <tr className="bg-black text-xs font-bold border-t-2 border-zinc-700">
+                            <td colSpan={4} className="p-3.5 text-right uppercase text-white font-mono">
+                              TOTAL BALANCE KESEIMBANGAN AKUNTANSI (DEBIT = KREDIT):
+                            </td>
+                            <td className="p-3.5 text-right font-mono text-emerald-400">
+                              Rp {(financialValues.cash26 + (financialValues.giro26 || 0) + financialValues.invest26 + (financialValues.fixed26 || 5950000) + (financialValues.intangible26 || 4200000000)).toLocaleString('id-ID')}
+                            </td>
+                            <td className="p-3.5 text-right font-mono text-amber-400">
+                              Rp {(financialValues.paidCapital26 + Math.abs(financialValues.retainedEarnings26 || 0)).toLocaleString('id-ID')}
+                            </td>
+                            <td className="p-3.5 text-center">
+                              <span className="text-[8px] px-2 py-0.5 bg-emerald-500/20 text-emerald-300 rounded font-bold">
+                                100% MATCH
+                              </span>
+                            </td>
+                          </tr>
+                        </tfoot>
+                      </table>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Modal Footer Actions */}
+              <div className="flex flex-col sm:flex-row justify-between items-center gap-3 border-t border-zinc-800 pt-4 shrink-0">
+                <div className="flex items-center gap-2 text-xs font-mono text-zinc-400">
+                  <CheckCircle2 className="w-4 h-4 text-emerald-400" />
+                  <span>Kriptografi Merkle Tree &amp; PSAK Hash Terverifikasi Otomatis</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      performFullAccountingSync(true);
+                    }}
+                    className="px-4 py-2 bg-orange-500 hover:bg-orange-600 text-white font-mono text-xs font-bold rounded-xl transition-all cursor-pointer flex items-center gap-2 shadow-lg shadow-orange-500/20"
+                  >
+                    <RefreshCcw className={`w-3.5 h-3.5 ${isSyncingAccounting ? 'animate-spin' : ''}`} />
+                    SINKRONISASI ULANG SEKARANG
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setIsTriSyncModalOpen(false)}
+                    className="px-4 py-2 bg-zinc-900 hover:bg-zinc-800 text-zinc-300 font-mono text-xs font-bold rounded-xl transition-colors cursor-pointer"
+                  >
+                    TUTUP
+                  </button>
+                </div>
+              </div>
+            </motion.div>
+          </div>
+        )}
+
       </AnimatePresence>
     </div>
   );

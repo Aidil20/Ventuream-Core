@@ -268,7 +268,10 @@ export const WapAssetManagement: React.FC<WapAssetManagementProps> = ({ portfoli
   // AUTOMATIC SYNC TO CENTRAL CGS / VAM PORTFOLIO
   const syncInvestmentsToPortfolio = (investmentsList: InvestmentAsset[]) => {
     try {
-      localStorage.setItem('vam_investment_assets_v3', JSON.stringify(investmentsList));
+      const savedInvestmentsStr = JSON.stringify(investmentsList);
+      if (localStorage.getItem('vam_investment_assets_v3') !== savedInvestmentsStr) {
+        localStorage.setItem('vam_investment_assets_v3', savedInvestmentsStr);
+      }
 
       const currentCgsSaved = localStorage.getItem('cgsAssets_v3');
       let currentCgsAssets: any[] = currentCgsSaved ? JSON.parse(currentCgsSaved) : [];
@@ -299,11 +302,20 @@ export const WapAssetManagement: React.FC<WapAssetManagementProps> = ({ portfoli
           };
         });
 
-      const updatedCgs = [...stockOnly, ...syncedItems];
-      const updatedCgsStr = JSON.stringify(updatedCgs);
-      if (updatedCgsStr !== currentCgsSaved) {
-        localStorage.setItem('cgsAssets_v3', updatedCgsStr);
-        window.dispatchEvent(new CustomEvent('vam-cgs-update'));
+      // Check if custom investments actually changed
+      const previousCustomItems = currentCgsAssets.filter((item: any) => item.isCustomInvestment);
+      const isCustomSame = previousCustomItems.length === syncedItems.length && previousCustomItems.every((item, idx) => {
+        const other = syncedItems[idx];
+        return other && item.ticker === other.ticker && item.averagePrice === other.averagePrice;
+      });
+
+      if (!isCustomSame) {
+        const updatedCgs = [...stockOnly, ...syncedItems];
+        const updatedCgsStr = JSON.stringify(updatedCgs);
+        if (updatedCgsStr !== currentCgsSaved) {
+          localStorage.setItem('cgsAssets_v3', updatedCgsStr);
+          window.dispatchEvent(new CustomEvent('vam-cgs-update'));
+        }
       }
     } catch (err) {
       console.error("Error syncing investments to portfolio:", err);

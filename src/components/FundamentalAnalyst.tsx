@@ -27,7 +27,16 @@ import {
   Calculator,
   Globe2,
   Factory,
-  Briefcase
+  Briefcase,
+  Calendar,
+  Users,
+  Newspaper,
+  FileText,
+  BadgePercent,
+  Coins,
+  CheckCircle2,
+  Clock,
+  ExternalLink
 } from 'lucide-react';
 import { fetchFundamentalAudit, FundamentalAudit, searchAsset, AssetSearchInfo } from '../services/marketService';
 import TradingViewWidget from './TradingViewWidget';
@@ -572,7 +581,10 @@ export const FundamentalAnalyst: React.FC<FundamentalAnalystProps> = ({ onSelect
             {/* Deep Chart Analysis Section */}
             <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
                <div className="lg:col-span-3 bg-[#020407] rounded-[2.5rem] border border-zinc-800 p-1 overflow-hidden shadow-2xl h-[500px]">
-                  <TradingViewWidget symbol={getTradingViewSymbol(auditData.ticker)} />
+                  <TradingViewWidget 
+                    symbol={getTradingViewSymbol(auditData.ticker)} 
+                    overrideCurrentPrice={typeof auditData.lastPrice === 'number' ? auditData.lastPrice : undefined}
+                  />
                </div>
                
                <div className="lg:col-span-1 space-y-6">
@@ -671,7 +683,7 @@ export const FundamentalAnalyst: React.FC<FundamentalAnalystProps> = ({ onSelect
 
                 <div className="space-y-4">
                   {/* 1. Macro Context */}
-                  <CollapsibleSection title="Macro Economic Analysis" icon={Globe2} color="#fb7185">
+                  <CollapsibleSection title="Macro Economic Analysis & Market Linkage" icon={Globe2} color="#fb7185">
                       <div className="space-y-6">
                          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                             <div className="space-y-2">
@@ -687,6 +699,29 @@ export const FundamentalAnalyst: React.FC<FundamentalAnalystProps> = ({ onSelect
                                <p className="text-xs text-zinc-300 font-bold leading-relaxed">{auditData.economicAnalysis.interestRates}</p>
                             </div>
                          </div>
+
+                         {/* Macro Indicators Detailed Grid */}
+                         {auditData.economicAnalysis.macroIndicators && auditData.economicAnalysis.macroIndicators.length > 0 && (
+                           <div className="space-y-3 pt-2">
+                             <span className="text-[9px] font-black text-zinc-500 uppercase tracking-widest block">Bank Indonesia & Global Benchmark Factors</span>
+                             <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+                               {auditData.economicAnalysis.macroIndicators.map((item, idx) => (
+                                 <div key={idx} className="bg-zinc-900/70 p-3 rounded-2xl border border-zinc-800/80 hover:border-rose-500/30 transition-all">
+                                   <p className="text-[8px] font-black text-zinc-500 uppercase tracking-tight truncate">{item.indicator}</p>
+                                   <p className="text-xs font-black text-white my-1">{item.currentValue}</p>
+                                   <span className={`text-[7px] font-black uppercase px-1.5 py-0.5 rounded ${
+                                     item.trend === 'up' ? 'text-emerald-400 bg-emerald-500/10' :
+                                     item.trend === 'down' ? 'text-rose-400 bg-rose-500/10' :
+                                     'text-zinc-400 bg-zinc-800'
+                                   }`}>
+                                     {item.impact}
+                                   </span>
+                                 </div>
+                               ))}
+                             </div>
+                           </div>
+                         )}
+
                          <div className="p-5 bg-rose-500/5 border border-rose-500/10 rounded-2xl">
                             <p className="text-sm text-zinc-400 font-bold leading-relaxed italic">"{auditData.economicAnalysis.summary}"</p>
                          </div>
@@ -710,6 +745,21 @@ export const FundamentalAnalyst: React.FC<FundamentalAnalystProps> = ({ onSelect
                                <p className="text-xs text-zinc-300 font-bold leading-relaxed">{auditData.industryAnalysis.regulation}</p>
                             </div>
                          </div>
+
+                         {/* Sector Key Drivers */}
+                         {auditData.industryAnalysis.keyDrivers && auditData.industryAnalysis.keyDrivers.length > 0 && (
+                           <div className="pt-2 space-y-2">
+                             <span className="text-[9px] font-black text-zinc-500 uppercase tracking-widest block">Structural Industry Value Drivers</span>
+                             <div className="flex flex-wrap gap-2">
+                               {auditData.industryAnalysis.keyDrivers.map((driver, idx) => (
+                                 <span key={idx} className="px-3 py-1.5 bg-amber-500/10 border border-amber-500/20 rounded-xl text-[9px] font-bold text-amber-300">
+                                   {driver}
+                                 </span>
+                               ))}
+                             </div>
+                           </div>
+                         )}
+
                          <div className="p-5 bg-amber-500/5 border border-amber-500/10 rounded-2xl">
                             <p className="text-sm text-zinc-400 font-bold italic leading-relaxed">"{auditData.industryAnalysis.summary}"</p>
                          </div>
@@ -733,9 +783,257 @@ export const FundamentalAnalyst: React.FC<FundamentalAnalystProps> = ({ onSelect
                                <p className="text-xs text-zinc-300 font-bold leading-relaxed">{auditData.companyAnalysis.businessModel}</p>
                             </div>
                          </div>
+
+                         {/* GCG & Metadata Badges */}
+                         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 pt-2 border-t border-zinc-800/60">
+                            {auditData.companyAnalysis.gcgScore && (
+                              <div className="p-3.5 bg-purple-500/10 border border-purple-500/20 rounded-2xl">
+                                <span className="text-[8px] font-black text-purple-300 uppercase tracking-wider block mb-1">Tata Kelola (GCG Score)</span>
+                                <p className="text-xs font-black text-white">{auditData.companyAnalysis.gcgScore}</p>
+                              </div>
+                            )}
+                            {auditData.companyAnalysis.headquarters && (
+                              <div className="p-3.5 bg-zinc-900/60 border border-zinc-800 rounded-2xl">
+                                <span className="text-[8px] font-black text-zinc-500 uppercase tracking-wider block mb-1">Kantor Pusat (Headquarters)</span>
+                                <p className="text-xs font-bold text-zinc-200">{auditData.companyAnalysis.headquarters}</p>
+                              </div>
+                            )}
+                            {auditData.companyAnalysis.employeesCount && (
+                              <div className="p-3.5 bg-zinc-900/60 border border-zinc-800 rounded-2xl">
+                                <span className="text-[8px] font-black text-zinc-500 uppercase tracking-wider block mb-1">Jumlah Karyawan</span>
+                                <p className="text-xs font-bold text-zinc-200">{auditData.companyAnalysis.employeesCount}</p>
+                              </div>
+                            )}
+                         </div>
+
                          <div className="p-5 bg-purple-500/5 border border-purple-500/10 rounded-2xl">
                             <p className="text-sm text-zinc-400 font-bold italic leading-relaxed">"{auditData.companyAnalysis.summary}"</p>
                          </div>
+                      </div>
+                  </CollapsibleSection>
+
+                  {/* NEW 3B. Real Corporate Actions (Aksi Korporasi Terkini) */}
+                  <CollapsibleSection title="Corporate Actions & Bursa Filings" icon={Calendar} color="#38bdf8" defaultOpen={true}>
+                      <div className="space-y-6">
+                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                           <div className="flex items-center gap-2">
+                             <span className="text-[10px] font-black text-white uppercase tracking-widest">Aksi Korporasi Terkini & Kalender Bursa Terkait</span>
+                             <span className="px-2 py-0.5 rounded-md bg-sky-500/10 text-sky-400 border border-sky-500/20 text-[8px] font-black uppercase">IDX Official</span>
+                           </div>
+                           <span className="text-[8px] font-bold text-zinc-500">Dividen, RUPS, Right Issue & Buyback Saham</span>
+                        </div>
+
+                        {auditData.corporateActions && auditData.corporateActions.length > 0 ? (
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            {auditData.corporateActions.map((action, idx) => (
+                              <div key={idx} className="bg-zinc-900/60 border border-zinc-800/80 rounded-2xl p-5 hover:border-sky-500/40 transition-all space-y-3 relative overflow-hidden group">
+                                <div className="flex items-start justify-between gap-3">
+                                  <div className="space-y-1">
+                                    <div className="flex items-center gap-2">
+                                      <span className="px-2 py-0.5 rounded bg-sky-500/20 text-sky-300 font-mono text-[9px] font-black uppercase">{action.type}</span>
+                                      <span className={`text-[8px] font-black uppercase px-2 py-0.5 rounded ${
+                                        String(action.status || '').toLowerCase().includes('selesai') || String(action.status || '').toLowerCase().includes('completed') ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20' :
+                                        String(action.status || '').toLowerCase().includes('berjalan') || String(action.status || '').toLowerCase().includes('ongoing') ? 'bg-amber-500/10 text-amber-400 border border-amber-500/20' :
+                                        'bg-sky-500/10 text-sky-400 border border-sky-500/20'
+                                      }`}>
+                                        {action.status || 'Scheduled'}
+                                      </span>
+                                    </div>
+                                    <h5 className="text-xs font-black text-white leading-snug pt-1">{action.title}</h5>
+                                  </div>
+                                  <div className="text-right shrink-0">
+                                    <span className={`text-[8px] font-black uppercase px-2 py-0.5 rounded ${
+                                      String(action.impact || '').toLowerCase().includes('positif') || String(action.impact || '').toLowerCase().includes('positive') ? 'text-emerald-400 bg-emerald-500/10' :
+                                      String(action.impact || '').toLowerCase().includes('waspada') || String(action.impact || '').toLowerCase().includes('caution') || String(action.impact || '').toLowerCase().includes('dilutif') ? 'text-amber-400 bg-amber-500/10' :
+                                      'text-zinc-400 bg-zinc-800'
+                                    }`}>
+                                      {action.impact || 'Neutral'}
+                                    </span>
+                                  </div>
+                                </div>
+
+                                {/* Key Dates & Values */}
+                                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 pt-2 border-t border-zinc-800/50">
+                                  {action.cumDate && (
+                                    <div className="bg-black/40 p-2 rounded-xl border border-zinc-800/40">
+                                      <span className="text-[7px] font-black text-zinc-500 uppercase block">Cum Date</span>
+                                      <p className="text-[10px] font-mono font-bold text-zinc-200">{action.cumDate}</p>
+                                    </div>
+                                  )}
+                                  {action.exDate && (
+                                    <div className="bg-black/40 p-2 rounded-xl border border-zinc-800/40">
+                                      <span className="text-[7px] font-black text-zinc-500 uppercase block">Ex Date</span>
+                                      <p className="text-[10px] font-mono font-bold text-zinc-200">{action.exDate}</p>
+                                    </div>
+                                  )}
+                                  {action.paymentDate && (
+                                    <div className="bg-black/40 p-2 rounded-xl border border-zinc-800/40">
+                                      <span className="text-[7px] font-black text-zinc-500 uppercase block">Payment Date</span>
+                                      <p className="text-[10px] font-mono font-bold text-sky-400">{action.paymentDate}</p>
+                                    </div>
+                                  )}
+                                  {action.amount && (
+                                    <div className="bg-black/40 p-2 rounded-xl border border-zinc-800/40">
+                                      <span className="text-[7px] font-black text-zinc-500 uppercase block">Nominal/Rasio</span>
+                                      <p className="text-[10px] font-black text-emerald-400">{action.amount}</p>
+                                    </div>
+                                  )}
+                                </div>
+
+                                <p className="text-[10px] text-zinc-400 font-medium leading-relaxed">{action.description}</p>
+                              </div>
+                            ))}
+                          </div>
+                        ) : (
+                          <div className="p-6 bg-zinc-900/30 border border-zinc-800 rounded-2xl text-center">
+                            <p className="text-xs text-zinc-500 font-bold">Tidak ada aksi korporasi tertunda dalam pipeline terdekat.</p>
+                          </div>
+                        )}
+                      </div>
+                  </CollapsibleSection>
+
+                  {/* NEW 3C. Insider Trading & Shareholder Structure */}
+                  <CollapsibleSection title="Insider Trading & Shareholder Structure" icon={Users} color="#10b981" defaultOpen={true}>
+                      <div className="space-y-6">
+                        {/* Major Shareholders Breakdown */}
+                        {auditData.shareholderStructure && auditData.shareholderStructure.length > 0 && (
+                          <div className="space-y-3">
+                            <div className="flex items-center justify-between">
+                              <span className="text-[10px] font-black text-zinc-400 uppercase tracking-widest">Struktur Kepemilikan Saham Signifikan</span>
+                              <span className="text-[8px] font-bold text-emerald-400 uppercase">Pemegang Saham Pengendali (PSP) & Publik</span>
+                            </div>
+
+                            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+                              {auditData.shareholderStructure.map((holder, idx) => (
+                                <div key={idx} className="bg-zinc-900/60 p-4 rounded-2xl border border-zinc-800 hover:border-emerald-500/30 transition-all space-y-1.5">
+                                  <div className="flex items-center justify-between">
+                                    <span className={`text-[7px] font-black uppercase px-2 py-0.5 rounded ${
+                                      String(holder.category || '').toLowerCase().includes('pengendali') ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30' :
+                                      String(holder.category || '').toLowerCase().includes('institusi') ? 'bg-sky-500/10 text-sky-400' :
+                                      'bg-zinc-800 text-zinc-400'
+                                    }`}>
+                                      {holder.category || 'Shareholder'}
+                                    </span>
+                                    <span className="text-xs font-black text-emerald-400">{holder.percentage}</span>
+                                  </div>
+                                  <h6 className="text-[11px] font-black text-white truncate pt-1">{holder.name}</h6>
+                                  <p className="text-[9px] font-mono text-zinc-500">{holder.shares} lembar</p>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Insider Transactions Table */}
+                        <div className="space-y-3 pt-2">
+                          <div className="flex items-center justify-between">
+                            <span className="text-[10px] font-black text-zinc-400 uppercase tracking-widest">Aktivitas Transaksi Orang Dalam (Direksi & Komisaris)</span>
+                            <span className="text-[8px] font-bold text-zinc-500 uppercase">Keterbukaan Informasi Bursa Efek Indonesia</span>
+                          </div>
+
+                          {auditData.insiderTransactions && auditData.insiderTransactions.length > 0 ? (
+                            <div className="overflow-x-auto">
+                              <table className="w-full text-left text-xs">
+                                <thead>
+                                  <tr className="border-b border-zinc-800 text-[8px] font-black text-zinc-500 uppercase tracking-wider">
+                                    <th className="pb-3 px-3">Nama & Jabatan</th>
+                                    <th className="pb-3 px-3">Tipe Aksi</th>
+                                    <th className="pb-3 px-3">Volume & Harga</th>
+                                    <th className="pb-3 px-3">Total Nilai</th>
+                                    <th className="pb-3 px-3">Tanggal</th>
+                                    <th className="pb-3 px-3">Kepemilikan Pasca</th>
+                                    <th className="pb-3 px-3">Analisis Sinyal</th>
+                                  </tr>
+                                </thead>
+                                <tbody className="divide-y divide-zinc-800/60">
+                                  {auditData.insiderTransactions.map((tx, idx) => (
+                                    <tr key={idx} className="hover:bg-zinc-900/40 transition-colors">
+                                      <td className="py-3 px-3">
+                                        <p className="font-bold text-white text-xs">{tx.personName}</p>
+                                        <p className="text-[9px] text-zinc-500 uppercase">{tx.position}</p>
+                                      </td>
+                                      <td className="py-3 px-3">
+                                        <span className={`px-2 py-0.5 rounded font-black text-[9px] uppercase ${
+                                          String(tx.transactionType || '').toUpperCase() === 'BUY' || String(tx.transactionType || '').toUpperCase().includes('BELI')
+                                            ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20'
+                                            : 'bg-rose-500/10 text-rose-400 border border-rose-500/20'
+                                        }`}>
+                                          {tx.transactionType || 'TRADE'}
+                                        </span>
+                                      </td>
+                                      <td className="py-3 px-3 font-mono">
+                                        <p className="text-zinc-200 font-bold text-[11px]">{tx.sharesCount}</p>
+                                        <p className="text-[9px] text-zinc-500">@ {tx.pricePerShare}</p>
+                                      </td>
+                                      <td className="py-3 px-3 font-mono font-bold text-white text-[11px]">
+                                        {tx.totalValue}
+                                      </td>
+                                      <td className="py-3 px-3 text-zinc-400 font-mono text-[10px]">
+                                        {tx.transactionDate}
+                                      </td>
+                                      <td className="py-3 px-3 font-mono font-bold text-emerald-400 text-[11px]">
+                                        {tx.postOwnershipPercent}
+                                      </td>
+                                      <td className="py-3 px-3 text-zinc-400 text-[10px] max-w-xs leading-relaxed">
+                                        {tx.notes}
+                                      </td>
+                                    </tr>
+                                  ))}
+                                </tbody>
+                              </table>
+                            </div>
+                          ) : (
+                            <div className="p-6 bg-zinc-900/30 border border-zinc-800 rounded-2xl text-center">
+                              <p className="text-xs text-zinc-500 font-bold">Tidak ada perubahan kepemilikan orang dalam yang dilaporkan dalam 90 hari terakhir.</p>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                  </CollapsibleSection>
+
+                  {/* NEW 3D. Material News & Catalysts Affecting Valuation */}
+                  <CollapsibleSection title="Material Catalysts & IDX Disclosures" icon={Newspaper} color="#f59e0b" defaultOpen={true}>
+                      <div className="space-y-6">
+                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                          <span className="text-[10px] font-black text-white uppercase tracking-widest">Keterbukaan Informasi Bursa & Berita Pengaruh Nilai</span>
+                          <span className="text-[8px] font-bold text-zinc-500 uppercase">Valuation Impact & Fundamental Drivers</span>
+                        </div>
+
+                        {auditData.materialNewsCatalysts && auditData.materialNewsCatalysts.length > 0 ? (
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            {auditData.materialNewsCatalysts.map((news, idx) => (
+                              <div key={idx} className="bg-zinc-900/60 border border-zinc-800 rounded-2xl p-5 hover:border-amber-500/40 transition-all space-y-3 relative group">
+                                <div className="flex items-start justify-between gap-3">
+                                  <div className="flex items-center gap-2">
+                                    <span className="px-2 py-0.5 rounded bg-zinc-800 text-zinc-300 text-[8px] font-black uppercase">{news.category || 'DISCLOSURE'}</span>
+                                    <span className="text-[8px] font-mono text-zinc-500">{news.date}</span>
+                                    <span className="text-[7px] font-black text-zinc-600 uppercase">[{news.source}]</span>
+                                  </div>
+                                  <span className={`text-[8px] font-black uppercase px-2 py-0.5 rounded ${
+                                    String(news.sentiment || '').toLowerCase().includes('positif') || String(news.sentiment || '').toLowerCase().includes('bullish') || String(news.sentiment || '').toLowerCase().includes('positive') ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20' :
+                                    String(news.sentiment || '').toLowerCase().includes('negatif') || String(news.sentiment || '').toLowerCase().includes('bearish') || String(news.sentiment || '').toLowerCase().includes('negative') ? 'bg-rose-500/10 text-rose-400 border border-rose-500/20' :
+                                    'bg-zinc-800 text-zinc-400'
+                                  }`}>
+                                    {news.sentiment || 'NEUTRAL'}
+                                  </span>
+                                </div>
+
+                                <h5 className="text-xs font-black text-white group-hover:text-amber-300 transition-colors leading-snug">{news.title}</h5>
+
+                                <p className="text-[10px] text-zinc-400 leading-relaxed font-medium">{news.summary}</p>
+
+                                <div className="p-3 bg-amber-500/5 border border-amber-500/10 rounded-xl">
+                                  <span className="text-[8px] font-black text-amber-400 uppercase tracking-widest block mb-1">Pengaruh Terhadap Valuasi & Nilai Emiten</span>
+                                  <p className="text-[10px] font-bold text-zinc-300">{news.impactOnValuation}</p>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        ) : (
+                          <div className="p-6 bg-zinc-900/30 border border-zinc-800 rounded-2xl text-center">
+                            <p className="text-xs text-zinc-500 font-bold">Tidak ada keterbukaan informasi material khusus dalam periode pantauan terbaru.</p>
+                          </div>
+                        )}
                       </div>
                   </CollapsibleSection>
 
