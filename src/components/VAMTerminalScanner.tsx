@@ -26,7 +26,7 @@ const ScannerRow: React.FC<{
             backgroundColor: ["rgba(223, 255, 0, 0)", "rgba(223, 255, 0, 0.08)", "rgba(223, 255, 0, 0)"],
             transition: { duration: 1, ease: "easeOut" }
         });
-    }, [res.score, res.metrics['Price'], controls]);
+    }, [res.score, res.metrics['Price']]);
 
     return (
         <motion.tr 

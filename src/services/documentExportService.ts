@@ -2,6 +2,7 @@ import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import pptxgen from 'pptxgenjs';
 import { saveAndNotifyPdf } from './reportNotificationService';
+import { embedOfficialQrValidationStamp, embedDualSignatureQrBlocks } from './officialDocValidationService';
 
 // ==========================================
 // GRAPHICAL UI DIAGRAM HELPERS FOR PDF
@@ -754,7 +755,21 @@ export async function generatePresentationPDF() {
 
   doc.setFontSize(9);
   doc.setTextColor(140, 150, 170);
-  doc.text("Email Dukungan: pt.ventuream@gmail.com | aidilsyahdan2000@gmail.com", pageWidth / 2, 160, { align: 'center' });
+  doc.text("Email Dukungan: pt.ventuream@gmail.com | aidilsyahdan2000@gmail.com", pageWidth / 2, 148, { align: 'center' });
+
+  // Official Institutional Validation Stamp for Executive Board Deck
+  await embedOfficialQrValidationStamp({
+    doc,
+    divisionKey: 'DIREKSI_EKSEKUTIF',
+    documentTitle: 'Bahan Paparan Eksekutif & Presentasi Sistem VentureAM',
+    docNumber: 'VAM/DIR/2026/EXEC-0821',
+    classification: 'DOKUMEN RESMI DIREKSI (INSTITUTIONAL PRESENTATION)',
+    x: (pageWidth - 110) / 2,
+    y: 154,
+    width: 110,
+    height: 26,
+    theme: 'dark'
+  });
 
   saveAndNotifyPdf(doc, 'VentureAM_Presentation_Deck.pdf', 'Dokumen Presentasi Regulator & Eksekutif');
 }
@@ -1347,6 +1362,22 @@ export async function generateUserManualPDF() {
     headStyles: { fillColor: [30, 42, 60], textColor: [223, 255, 0] }
   });
 
+  const manualFinalY = (doc as any).lastAutoTable?.finalY || (b5Y + 30);
+
+  // Official Institutional Validation Stamp for Tech User Manual
+  await embedOfficialQrValidationStamp({
+    doc,
+    divisionKey: 'DIVISI_TEKNOLOGI_SISTEM',
+    documentTitle: 'Buku Manual Panduan Operasional Sistem ERP VentureAM',
+    docNumber: 'VAM/TIS/2026/MANUAL-0821',
+    classification: 'DOKUMEN PANDUAN RESMI SISTEM (INTERNAL TRAINING)',
+    x: 12,
+    y: manualFinalY + 6,
+    width: pageWidth - 24,
+    height: 22,
+    theme: 'light'
+  });
+
   // Save PDF & trigger toast
   saveAndNotifyPdf(doc, 'VentureAM_User_Manual_Guide.pdf', 'Panduan Pengguna Sistem (User Manual Guide)');
 }
@@ -1783,10 +1814,24 @@ export async function generateWeeklyMarketInsightPDF(data?: WeeklyMarketInsightR
   doc.setTextColor(223, 255, 0);
   doc.text("[APPROVED - CIO INSTITUTIONAL COMMITTEE]", 22 + sigW, currentY + 19);
 
+  // Official Institutional Validation Stamp for Capital Market & Portfolio Research
+  await embedOfficialQrValidationStamp({
+    doc,
+    divisionKey: 'DIVISI_PORTOFOLIO_PASAR_MODAL',
+    documentTitle: 'Laporan Riset Pasar Mingguan & Analisis Kuantitatif Portofolio',
+    docNumber: `VAM/PPM/2026/WMI-${new Date().toISOString().slice(0, 10).replace(/-/g, '')}`,
+    classification: 'DOKUMEN RESMI RISET INVESTASI (MARKET INSIGHT)',
+    x: 14,
+    y: currentY + 28,
+    width: pw - 28,
+    height: 22,
+    theme: 'dark'
+  });
+
   doc.setFontSize(6.5);
   doc.setTextColor(120, 130, 150);
-  doc.text(`VentureAM Institutional System | Hal 3 dari 3`, 14, ph - 10);
-  doc.text(`Dicetak: ${new Date().toLocaleString('id-ID')}`, pw - 60, ph - 10);
+  doc.text(`VentureAM Institutional System | Hal 3 dari 3`, 14, ph - 8);
+  doc.text(`Dicetak: ${new Date().toLocaleString('id-ID')}`, pw - 60, ph - 8);
 
   const weeklyFileName = `Weekly_Market_Insight_${new Date().toISOString().slice(0, 10)}.pdf`;
   saveAndNotifyPdf(doc, weeklyFileName, 'Laporan Insight Pasar Mingguan');
@@ -2129,10 +2174,24 @@ export async function generateSystemBlueprintPDF(): Promise<jsPDF> {
   doc.setTextColor(168, 85, 247);
   doc.text("[APPROVED - AIDIL SYAHDAN AL FITRAH]", 18 + sigW + 4, currentY + 13);
 
+  // Official Institutional Validation Stamp for System Architecture Blueprint
+  await embedOfficialQrValidationStamp({
+    doc,
+    divisionKey: 'DIVISI_TEKNOLOGI_SISTEM',
+    documentTitle: 'Cetak Biru Arsitektur Sistem & Spesifikasi Enterprise ERP VentureAM',
+    docNumber: 'VAM/TIS/2026/BLUEPRINT-0821',
+    classification: 'DOKUMEN RESMI ARSITEKTUR TEKNOLOGI (PSAK 19 BLUEPRINT)',
+    x: 10,
+    y: currentY + 24,
+    width: pw - 20,
+    height: 20,
+    theme: 'dark'
+  });
+
   doc.setFontSize(6);
   doc.setTextColor(120, 130, 150);
-  doc.text("VentureAM Official System Architecture Blueprint | Halaman 4 dari 4", 10, ph - 6);
-  doc.text(`Dicetak: ${new Date().toLocaleString('id-ID')}`, pw - 55, ph - 6);
+  doc.text("VentureAM Official System Architecture Blueprint | Halaman 4 dari 4", 10, ph - 4);
+  doc.text(`Dicetak: ${new Date().toLocaleString('id-ID')}`, pw - 55, ph - 4);
 
   const bpFileName = `VentureAM_Official_System_Blueprint_${new Date().toISOString().slice(0, 10)}.pdf`;
   saveAndNotifyPdf(doc, bpFileName, 'Dokumen Cetak Biru Arsitektur Sistem');
@@ -3072,19 +3131,24 @@ export async function generateValuationInvoicePDF(): Promise<jsPDF> {
 
   currentY += 46;
 
-  // Security Note
-  doc.setFillColor(15, 20, 30);
-  doc.roundedRect(10, currentY, pw - 20, 16, 2, 2, 'F');
-  doc.setFontSize(6);
-  doc.setFont("Helvetica", "normal");
-  doc.setTextColor(140, 155, 180);
-  doc.text("BERKAS INI DITERBITKAN SECARA RESMI SEBAGAI LAMPIRAN VALUASI LAPORAN KEUANGAN & AUDIT ASSET TAK BERWUJWUD.", 15, currentY + 5);
-  doc.text("Kode Hash Verifikasi Sistem: SHA256-VAM-VAL-88942-08102026 | Salinan Terotentikasi Google Cloud Platform Runtime Environment.", 15, currentY + 10);
+  // Official Institutional Validation Stamp for Intangible Asset Valuation Invoice
+  await embedOfficialQrValidationStamp({
+    doc,
+    divisionKey: 'DIVISI_KEUANGAN_AUDIT',
+    documentTitle: 'Faktur Penilaian & Sertifikat Valuasi Aset Tak Berwujud PSAK 19',
+    docNumber: 'VAM/KAA/2026/VAL-0821-INV',
+    classification: 'DOKUMEN RESMI VALUASI KEUANGAN (PSAK 19 / IAS 38)',
+    x: 10,
+    y: currentY,
+    width: pw - 20,
+    height: 22,
+    theme: 'dark'
+  });
 
   doc.setFontSize(6);
   doc.setTextColor(120, 130, 150);
-  doc.text("VentureAM Valuation Invoice & Intangible Asset Certificate | Halaman 4 dari 4", 10, ph - 6);
-  doc.text(`Dicetak: ${new Date().toLocaleString('id-ID')}`, pw - 55, ph - 6);
+  doc.text("VentureAM Valuation Invoice & Intangible Asset Certificate | Halaman 4 dari 4", 10, ph - 4);
+  doc.text(`Dicetak: ${new Date().toLocaleString('id-ID')}`, pw - 55, ph - 4);
 
   const invoiceFileName = `VentureAM_Faktur_Penilaian_Aset_Tak_Berwujud_${new Date().toISOString().slice(0, 10)}.pdf`;
   saveAndNotifyPdf(doc, invoiceFileName, 'Faktur Penilaian & Sertifikat Aset Tak Berwujud');
@@ -3325,58 +3389,42 @@ export async function generateAuditorOpinionPDF(): Promise<jsPDF> {
   doc.text(splitGoing, 14, currentY);
   currentY += splitGoing.length * 3.8 + 12;
 
-  // Signatures Box
-  doc.setFont("Helvetica", "bold");
-  doc.setFontSize(8.5);
-  doc.setTextColor(15, 23, 42);
-  doc.text("SATUAN PENGAWAS INTERN (SPI)", 14, currentY);
-  doc.text("KOMITE AUDIT & DEWAN PENGAWAS", pw - 85, currentY);
+  // Signatures Box with Official Division QR Codes
+  await embedDualSignatureQrBlocks({
+    doc,
+    leftDivisionKey: 'SATUAN_PENGAWAS_INTERN',
+    rightDivisionKey: 'DIREKSI_EKSEKUTIF',
+    docNumber: 'VAM/SPI/2026/AUDIT-0821-REVIEW',
+    documentTitle: 'Laporan Reviu Auditor Internal & Kinerja Perseroan (Unaudited SPI)',
+    startY: currentY,
+    leftHeaderTitle: 'SATUAN PENGAWAS INTERN (SPI)',
+    leftSignerName: 'DIVISI AKUNTANSI & PELAPORAN KORPORASI',
+    leftSignerRole: 'Satuan Pengawas Intern (Internal Audit)',
+    rightHeaderTitle: 'KOMITE AUDIT & DEWAN PENGAWAS',
+    rightSignerName: 'Aidil Syahdan Al fitrah',
+    rightSignerRole: 'President Director'
+  });
 
-  currentY += 4;
-  doc.setFont("Helvetica", "normal");
-  doc.setFontSize(7.5);
-  doc.setTextColor(100, 116, 139);
-  doc.text("PT Venture Asset Management", 14, currentY);
-  doc.text("PT Venture Asset Management", pw - 85, currentY);
+  currentY += 40;
 
-  currentY += 18;
-
-  // Signature Lines
-  doc.setDrawColor(203, 213, 225);
-  doc.line(14, currentY, 70, currentY);
-  doc.line(pw - 85, currentY, pw - 15, currentY);
-
-  currentY += 4;
-  doc.setFont("Helvetica", "bold");
-  doc.setFontSize(8);
-  doc.setTextColor(15, 23, 42);
-  doc.text("DIVISI AKUNTANSI & PELAPORAN KORPORASI", 14, currentY);
-  doc.text("Aidil Syahdan Al fitrah", pw - 85, currentY);
-
-  currentY += 3.5;
-  doc.setFont("Helvetica", "normal");
-  doc.setFontSize(7);
-  doc.setTextColor(100, 116, 139);
-  doc.text("Satuan Pengawas Intern (Internal Audit)", 14, currentY);
-  doc.text("President Director", pw - 85, currentY);
-
-  currentY += 12;
-
-  // Final Hash Footer
-  doc.setFillColor(15, 23, 42);
-  doc.roundedRect(12, currentY, pw - 24, 14, 2, 2, 'F');
-  doc.setFontSize(6.5);
-  doc.setTextColor(223, 255, 0);
-  doc.setFont("Helvetica", "bold");
-  doc.text("SERTIFIKAT AUDIT INTERNAL DIGITAL DIENKRIPSI SHA-256", 16, currentY + 5);
-  doc.setFont("Helvetica", "normal");
-  doc.setTextColor(226, 232, 240);
-  doc.text("Digital Signature Hash: SPI-UNAUDITED-20260810-VAM-INTERNAL-REVIEW | Internal Audit Verified", 16, currentY + 10);
+  // Official Institutional Validation Stamp for Internal Audit Unit & Corporate Reporting
+  await embedOfficialQrValidationStamp({
+    doc,
+    divisionKey: 'SATUAN_PENGAWAS_INTERN',
+    documentTitle: 'Laporan Reviu Auditor Internal & Kinerja Perseroan (Unaudited SPI)',
+    docNumber: 'VAM/SPI/2026/AUDIT-0821-REVIEW',
+    classification: 'DOKUMEN REVIU AUDITOR INTERNAL (SPI VERIFIED)',
+    x: 12,
+    y: currentY,
+    width: pw - 24,
+    height: 22,
+    theme: 'dark'
+  });
 
   doc.setFontSize(6.5);
   doc.setTextColor(148, 163, 184);
-  doc.text("Laporan Reviu Auditor Internal PT Venture Asset Management (Unaudited) | Halaman 2 dari 2", 14, ph - 6);
-  doc.text(`Dicetak: ${new Date().toLocaleString('id-ID')}`, pw - 55, ph - 6);
+  doc.text("Laporan Reviu Auditor Internal PT Venture Asset Management (Unaudited) | Halaman 2 dari 2", 14, ph - 4);
+  doc.text(`Dicetak: ${new Date().toLocaleString('id-ID')}`, pw - 55, ph - 4);
 
   const auditFileName = `VentureAM_Laporan_Reviu_Auditor_Internal_Unaudited_${new Date().toISOString().slice(0, 10)}.pdf`;
   saveAndNotifyPdf(doc, auditFileName, 'Laporan Reviu Auditor Internal Perseroan');

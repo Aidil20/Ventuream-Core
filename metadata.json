@@ -1,6 +1,6 @@
 {
   "name": "Venture-Ai",
-  "description": "Institutional asset management & technical terminal with interactive TradingView chart widgets, automated Swing High/Low detection, visual Support & Resistance bands overlay, and ARA day trading analytics.",
+  "description": "Institutional asset management terminal with Automated Market & Intelligence Reporting (AMIR) powered by Gemini Deep Research, Custody & Portfolio Integration (CPI) 4-way cross-reconciliation, PSAK 71 compliance, and automated financial intelligence.",
   "requestFramePermissions": [
     "camera"
   ],

@@ -3,10 +3,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, useRef, Suspense, lazy } from 'react';
 import { io } from 'socket.io-client';
-import jsPDF from 'jspdf';
-import autoTable from 'jspdf-autotable';
 import { 
   Home, 
   PieChart, 
@@ -61,12 +59,21 @@ import {
   BookOpen,
   Download,
   Terminal,
-  ArrowLeftRight
+  ArrowLeftRight,
+  QrCode,
+  Sparkles,
+  Compass,
+  Building2,
+  Settings2, 
+  Filter, 
+  Target, 
+  ArrowLeft, 
+  Users, 
+  ShieldAlert, 
+  Lock
 } from 'lucide-react';
-import FinancialReconciliationView from './components/FinancialReconciliationView';
 import { motion, AnimatePresence } from 'motion/react';
 import { Decimal } from 'decimal.js';
-import * as XLSX from 'xlsx';
 import { 
   fetchLatestInsights, 
   MarketInsight, 
@@ -77,54 +84,23 @@ import {
   fetchLivePrices 
 } from './services/marketService';
 import { fetchMarketNewsSummary, MarketNewsItem } from './services/geminiService';
-import TradingViewWidget from './components/TradingViewWidget';
-import PortfolioChart from './components/PortfolioChart';
-import RealizedPnLChart from './components/RealizedPnLChart';
 import { useTransactionManager } from './hooks/useTransactionManager';
-import { TransactionTable } from './components/TransactionTable';
-import { UserManagement } from './components/UserManagement';
-import { MyCompanyOverview } from './components/MyCompanyOverview';
 import { GlobalGatewayBanner } from './components/GlobalGatewayBanner';
 import { ensureUserProfile } from './services/userService';
 import { UserProfile, UserRole } from './types';
-import { Settings2, Filter, Target, ArrowLeft, Users, ShieldAlert, Lock } from 'lucide-react';
 import { Sparkline } from './components/Sparkline';
 import { AssetDetail } from './components/AssetDetail';
-import VamSmartScanner from './components/VamSmartScanner';
-import IntradayScanner from './components/IntradayScanner';
-import GlobalIndicesFeed from './components/GlobalIndicesFeed';
-import MarketOverviewWidget from './components/MarketOverviewWidget';
-import LegalDocumentCenter from './components/LegalDocumentCenter';
-import FinancialReportingCenter from './components/FinancialReportingCenter';
-import RegulatoryArchive from './components/RegulatoryArchive';
-import RegulatoryReport from './components/RegulatoryReport';
-import TaskCenter from './components/TaskCenter';
-import IdxPriceList from './components/IdxPriceList';
-import WebSocketDiagnosticPanel from './components/WebSocketDiagnosticPanel';
-import { MarketHeatmap } from './components/MarketHeatmap';
-import { MarketSentimentBanner } from './components/MarketSentimentBanner';
-import GlobalIntelFeed from './components/GlobalIntelFeed';
-import TradingViewMarketWidget from './components/TradingViewMarketWidget';
-import TradingViewScreenerWidget from './components/TradingViewScreenerWidget';
 import { MarketMetricCard } from './components/MarketMetricCard';
-import { ExternalGateways } from './components/ExternalGateways';
-import { InternationalGatewayDashboard } from './components/InternationalGatewayDashboard';
-import { NewsFeed } from './components/NewsFeed';
 import MarketNewsTicker from './components/MarketNewsTicker';
-import DocumentExportCenter from './components/DocumentExportCenter';
 import { fetchMarketNews } from './services/marketService';
-import { StockExplorer } from './components/StockExplorer';
-import { FundamentalAnalyst } from './components/FundamentalAnalyst';
 import { initAuth, googleSignIn, logout as googleLogout, db, auth } from './lib/auth';
-import { WorkspaceHub } from './components/WorkspaceHub';
-import EconomicCalendarWidget from './components/EconomicCalendarWidget';
 import { User } from 'firebase/auth';
 import { doc, onSnapshot } from 'firebase/firestore';
 import { GlobalSearch } from './components/GlobalSearch';
 import HoldingCard, { GroupedHoldingCards, generateHoldingsPDF } from './components/HoldingCard';
 import BulkActionPanel from './components/BulkActionPanel';
-import { AuditSync } from './components/AuditSync';
-import { SystemUpdateModal } from './components/SystemUpdateModal';
+import PortfolioChart from './components/PortfolioChart';
+import RealizedPnLChart from './components/RealizedPnLChart';
 import PortfolioTreemap from './components/PortfolioTreemap';
 import CategoryExposureCard from './components/CategoryExposureCard';
 import { 
@@ -133,6 +109,55 @@ import {
   saveAndNotifyCsv,
   triggerReportToast 
 } from './services/reportNotificationService';
+
+// Lazy-loaded heavy modules for maximum speed & instantaneous initial page rendering
+const AmirDeepResearchHub = lazy(() => import('./components/AmirDeepResearchHub'));
+const CustodyPortfolioIntegrationHub = lazy(() => import('./components/CustodyPortfolioIntegrationHub'));
+const FinancialReconciliationView = lazy(() => import('./components/FinancialReconciliationView'));
+const TradingViewWidget = lazy(() => import('./components/TradingViewWidget'));
+const TradingViewMarketWidget = lazy(() => import('./components/TradingViewMarketWidget'));
+const TradingViewScreenerWidget = lazy(() => import('./components/TradingViewScreenerWidget'));
+const TransactionTable = lazy(() => import('./components/TransactionTable').then(m => ({ default: m.TransactionTable })));
+const UserManagement = lazy(() => import('./components/UserManagement').then(m => ({ default: m.UserManagement })));
+const MyCompanyOverview = lazy(() => import('./components/MyCompanyOverview').then(m => ({ default: m.MyCompanyOverview })));
+const VamSmartScanner = lazy(() => import('./components/VamSmartScanner'));
+const IntradayScanner = lazy(() => import('./components/IntradayScanner'));
+const GlobalIndicesFeed = lazy(() => import('./components/GlobalIndicesFeed'));
+const MarketOverviewWidget = lazy(() => import('./components/MarketOverviewWidget'));
+const LegalDocumentCenter = lazy(() => import('./components/LegalDocumentCenter'));
+const FinancialReportingCenter = lazy(() => import('./components/FinancialReportingCenter'));
+const RegulatoryArchive = lazy(() => import('./components/RegulatoryArchive'));
+const RegulatoryReport = lazy(() => import('./components/RegulatoryReport'));
+const TaskCenter = lazy(() => import('./components/TaskCenter'));
+const IdxPriceList = lazy(() => import('./components/IdxPriceList'));
+const WebSocketDiagnosticPanel = lazy(() => import('./components/WebSocketDiagnosticPanel'));
+const MarketHeatmap = lazy(() => import('./components/MarketHeatmap').then(m => ({ default: m.MarketHeatmap })));
+const MarketSentimentBanner = lazy(() => import('./components/MarketSentimentBanner').then(m => ({ default: m.MarketSentimentBanner })));
+const GlobalIntelFeed = lazy(() => import('./components/GlobalIntelFeed').then(m => ({ default: m.GlobalIntelFeed })));
+const ExternalGateways = lazy(() => import('./components/ExternalGateways'));
+const InternationalGatewayDashboard = lazy(() => import('./components/InternationalGatewayDashboard'));
+const NewsFeed = lazy(() => import('./components/NewsFeed'));
+const DocumentExportCenter = lazy(() => import('./components/DocumentExportCenter'));
+const StockExplorer = lazy(() => import('./components/StockExplorer').then(m => ({ default: m.StockExplorer })));
+const FundamentalAnalyst = lazy(() => import('./components/FundamentalAnalyst').then(m => ({ default: m.FundamentalAnalyst })));
+const WorkspaceHub = lazy(() => import('./components/WorkspaceHub').then(m => ({ default: m.WorkspaceHub })));
+const EconomicCalendarWidget = lazy(() => import('./components/EconomicCalendarWidget'));
+const AuditSync = lazy(() => import('./components/AuditSync').then(m => ({ default: m.AuditSync })));
+const SystemUpdateModal = lazy(() => import('./components/SystemUpdateModal').then(m => ({ default: m.SystemUpdateModal })));
+const DocumentVerificationModal = lazy(() => import('./components/DocumentVerificationModal'));
+
+// High-speed lightweight loading fallback for sub-views
+const ViewLoadingFallback = () => (
+  <div className="flex flex-col items-center justify-center p-12 min-h-[40vh] space-y-4">
+    <div className="relative flex items-center justify-center">
+      <div className="w-9 h-9 border-2 border-zinc-800 border-t-[#DFFF00] rounded-full animate-spin" />
+    </div>
+    <div className="text-center">
+      <p className="text-xs font-mono font-bold text-zinc-300 uppercase tracking-widest">Loading Module...</p>
+      <p className="text-[10px] font-mono text-zinc-500 mt-1">Initializing secure protocol</p>
+    </div>
+  </div>
+);
 
 const ASSETS = [
   {
@@ -220,6 +245,8 @@ const HOLDINGS = [
 
 const SIDEBAR_MENU = [
   { id: 0, label: "Dashboard Utama", icon: Home, path: "home", color: "#deff9a" },
+  { id: 108, label: "AMIR Deep Research", icon: Sparkles, path: "amir-research", color: "#DFFF00" },
+  { id: 109, label: "Custody & Portfolio (CPI)", icon: Building2, path: "custody-integration", color: "#DFFF00" },
   { id: 99, label: "About Company", icon: Building, path: "my-company", color: "#DFFF00" },
   { id: 102, label: "Inventaris Aset WAP", icon: Server, path: "wap-assets", color: "#DFFF00" },
   { id: 21, label: "M&A Factor issue", icon: Activity, path: "vamsmartscanner", color: "#DFFF00" },
@@ -284,7 +311,12 @@ import WapAssetManagement from './components/WapAssetManagement';
 import { WeeklyMarketInsightGenerator } from './components/WeeklyMarketInsightGenerator';
 
 const myCGSPortfolio = {
-  accountID: "YU001HC5400154",
+  accountID: "IJKL2926",
+  clientCode: "IJKL2926",
+  broker: "CGS International Sekuritas",
+  ibkrGatewayAccount: "U25457915",
+  cimbRdnAccount: "800201481600",
+  cimbGiroAccount: "860019881100",
   owner: "PT Venture Asset Management",
   cashBalance: 452286.00,
   assets: [
@@ -646,6 +678,28 @@ export default function App() {
   }, []);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isSystemUpdateModalOpen, setIsSystemUpdateModalOpen] = useState(false);
+  const [isDocVerificationModalOpen, setIsDocVerificationModalOpen] = useState(false);
+  const [verificationDocParam, setVerificationDocParam] = useState<string | undefined>(undefined);
+  const [verificationDivisionParam, setVerificationDivisionParam] = useState<string | undefined>(undefined);
+  const [verificationHashParam, setVerificationHashParam] = useState<string | undefined>(undefined);
+
+  // Detect ?verify= URL parameter on mount or route changes (for QR scanning directly into app via Google Lens / Camera)
+  useEffect(() => {
+    try {
+      const urlParams = new URLSearchParams(window.location.search);
+      const verifyCode = urlParams.get('verify');
+      const divCode = urlParams.get('div');
+      const hashCode = urlParams.get('hash');
+      if (verifyCode) {
+        setVerificationDocParam(decodeURIComponent(verifyCode));
+        if (divCode) setVerificationDivisionParam(decodeURIComponent(divCode));
+        if (hashCode) setVerificationHashParam(decodeURIComponent(hashCode));
+        setIsDocVerificationModalOpen(true);
+      }
+    } catch (err) {
+      console.warn('Failed parsing verification URL param', err);
+    }
+  }, []);
   const [autoSyncEnabled, setAutoSyncEnabled] = useState(() => {
     try {
       const saved = localStorage.getItem('vam_auto_sync_enabled');
@@ -733,30 +787,83 @@ export default function App() {
       };
     });
   });
-  const [cgsCashBalance, setCgsCashBalance] = useState(() => {
+  interface UnifiedCashBalances {
+    cgsCashBalance: number;
+    cgsGiroBalance: number;
+  }
+
+  const [cashBalances, setCashBalances] = useState<UnifiedCashBalances>(() => {
+    let rdn = 452286.00;
+    let giro = 711000.00;
     try {
       const saved = localStorage.getItem('cgsCashBalance_v3');
       if (saved !== null) {
         const parsed = parseFloat(saved);
-        if (!isNaN(parsed)) return parsed;
+        if (!isNaN(parsed)) rdn = parsed;
       }
     } catch (e) {
       console.error("Failed to parse cgsCashBalance", e);
     }
-    return 452286.00;
-  });
-  const [cgsGiroBalance, setCgsGiroBalance] = useState(() => {
     try {
-      const saved = localStorage.getItem('cgsGiroBalance_v3');
-      if (saved !== null) {
-        const parsed = parseFloat(saved);
-        if (!isNaN(parsed)) return parsed;
+      const savedGiro = localStorage.getItem('cgsGiroBalance_v3');
+      if (savedGiro !== null) {
+        const parsed = parseFloat(savedGiro);
+        if (!isNaN(parsed)) giro = parsed;
       }
     } catch (e) {
       console.error("Failed to parse cgsGiroBalance", e);
     }
-    return 711000.00; // Corrected default Giro balance
+    return { cgsCashBalance: rdn, cgsGiroBalance: giro };
   });
+
+  const cgsCashBalance = cashBalances.cgsCashBalance;
+  const cgsGiroBalance = cashBalances.cgsGiroBalance;
+
+  // Unified update handler for RDN and Giro balances that uses a single React state setter function
+  // and guarantees immediate synchronous persistence to localStorage
+  const handleUpdateBalances = useCallback((
+    updates: Partial<UnifiedCashBalances> | ((prev: UnifiedCashBalances) => Partial<UnifiedCashBalances>)
+  ) => {
+    setCashBalances(prev => {
+      const partial = typeof updates === 'function' ? updates(prev) : updates;
+      const nextState: UnifiedCashBalances = {
+        cgsCashBalance: partial.cgsCashBalance !== undefined && !isNaN(Number(partial.cgsCashBalance))
+          ? Number(partial.cgsCashBalance)
+          : prev.cgsCashBalance,
+        cgsGiroBalance: partial.cgsGiroBalance !== undefined && !isNaN(Number(partial.cgsGiroBalance))
+          ? Number(partial.cgsGiroBalance)
+          : prev.cgsGiroBalance,
+      };
+
+      // Persist to localStorage immediately upon update
+      try {
+        localStorage.setItem('cgsCashBalance_v3', nextState.cgsCashBalance.toString());
+        localStorage.setItem('cgsGiroBalance_v3', nextState.cgsGiroBalance.toString());
+      } catch (e) {
+        console.error("Failed to immediately persist balances to localStorage", e);
+      }
+
+      // Notify other components/tabs
+      try {
+        window.dispatchEvent(new CustomEvent('vam-balance-update', { detail: nextState }));
+        window.dispatchEvent(new CustomEvent('vam-cgs-update'));
+      } catch (e) {}
+
+      return nextState;
+    });
+  }, []);
+
+  const setCgsCashBalance = useCallback((val: number | ((prev: number) => number)) => {
+    handleUpdateBalances(prev => ({
+      cgsCashBalance: typeof val === 'function' ? val(prev.cgsCashBalance) : val
+    }));
+  }, [handleUpdateBalances]);
+
+  const setCgsGiroBalance = useCallback((val: number | ((prev: number) => number)) => {
+    handleUpdateBalances(prev => ({
+      cgsGiroBalance: typeof val === 'function' ? val(prev.cgsGiroBalance) : val
+    }));
+  }, [handleUpdateBalances]);
   const [cgsRealizedPnL, setCgsRealizedPnL] = useState(() => {
     try {
       const saved = localStorage.getItem('cgsRealizedPnL_v3');
@@ -867,6 +974,43 @@ export default function App() {
       });
     });
   }, [cgsAssets]);
+
+  // Cross-component & cross-tab balance synchronization listener
+  useEffect(() => {
+    const handleBalanceSync = () => {
+      try {
+        const savedCash = localStorage.getItem('cgsCashBalance_v3');
+        const savedGiro = localStorage.getItem('cgsGiroBalance_v3');
+        setCashBalances(prev => {
+          let newRdn = prev.cgsCashBalance;
+          let newGiro = prev.cgsGiroBalance;
+          if (savedCash !== null) {
+            const parsed = parseFloat(savedCash);
+            if (!isNaN(parsed)) newRdn = parsed;
+          }
+          if (savedGiro !== null) {
+            const parsed = parseFloat(savedGiro);
+            if (!isNaN(parsed)) newGiro = parsed;
+          }
+          if (newRdn === prev.cgsCashBalance && newGiro === prev.cgsGiroBalance) {
+            return prev;
+          }
+          return { cgsCashBalance: newRdn, cgsGiroBalance: newGiro };
+        });
+      } catch (e) {
+        console.error("Failed to reload balances from localStorage", e);
+      }
+    };
+
+    window.addEventListener('vam-balance-update', handleBalanceSync);
+    window.addEventListener('vam-cgs-update', handleBalanceSync);
+    window.addEventListener('storage', handleBalanceSync);
+    return () => {
+      window.removeEventListener('vam-balance-update', handleBalanceSync);
+      window.removeEventListener('vam-cgs-update', handleBalanceSync);
+      window.removeEventListener('storage', handleBalanceSync);
+    };
+  }, []);
 
   useEffect(() => {
     localStorage.setItem('cgsCashBalance_v3', cgsCashBalance.toString());
@@ -1017,8 +1161,10 @@ export default function App() {
       { ticker: "PRDL.JK", lots: 10, averagePrice: 980, marketPrice: 1050 },
       { ticker: "RANS.JK", lots: 10, averagePrice: 380, marketPrice: 410 }
     ]);
-    setCgsCashBalance(452286.00);
-    setCgsGiroBalance(711000.00);
+    handleUpdateBalances({
+      cgsCashBalance: 452286.00,
+      cgsGiroBalance: 711000.00
+    });
     setCgsRealizedPnL(0);
     setCgsTotalFees(0);
     resetHistory();
@@ -1027,7 +1173,7 @@ export default function App() {
     localStorage.removeItem('cgsGiroBalance_v3');
     localStorage.removeItem('cgsRealizedPnL_v3');
     localStorage.removeItem('cgsTotalFees_v3');
-  }, [resetHistory]);
+  }, [handleUpdateBalances, resetHistory]);
 
   const [selectedStudies, setSelectedStudies] = useState<string[]>(["MASimple@tv-basicstudies", "MAExp@tv-basicstudies"]);
   const [livePrices, setLivePrices] = useState<Record<string, number>>({});
@@ -1153,7 +1299,9 @@ export default function App() {
     return portfolioData.reduce((acc, curr) => new Decimal(acc).plus(curr.marketValue || 0).toNumber(), 0);
   }, [portfolioData]);
 
-  const exportPortfolioAnalysisToPDF = () => {
+  const exportPortfolioAnalysisToPDF = async () => {
+    const { default: jsPDF } = await import('jspdf');
+    const { default: autoTable } = await import('jspdf-autotable');
     const doc = new jsPDF();
     
     // Header section
@@ -1373,7 +1521,10 @@ export default function App() {
     const csvRows: string[] = [];
     csvRows.push('VENTUREAM INSTITUTIONAL SYSTEM - PORTFOLIO PERFORMANCE & RISK ANALYSIS');
     csvRows.push(`Printed Time,${escapeCSV(formatTime)}`);
-    csvRows.push('Account ID,YU001HC5400154');
+    csvRows.push('Client Code (CGS International Sekuritas),IJKL2926');
+    csvRows.push('USD Gateway Account (Interactive Brokers),U25457915');
+    csvRows.push('CIMB Niaga RDN Account,800201481600');
+    csvRows.push('CIMB Niaga Giro Account,860019881100');
     csvRows.push('Gateway System Status,CONNECTED & SECURED');
     csvRows.push('');
     
@@ -1431,7 +1582,8 @@ export default function App() {
     saveAndNotifyCsv(csvContent, fileName, 'Data CSV Portofolio & Kinerja', rawRows);
   };
 
-  const exportPortfolioAnalysisToExcel = () => {
+  const exportPortfolioAnalysisToExcel = async () => {
+    const XLSX = await import('xlsx');
     const rdnCash = cgsCashBalance;
     const giroAccountBalance = cgsGiroBalance;
     const totalAssetVal = totalPortfolioValue;
@@ -1525,11 +1677,13 @@ export default function App() {
   const [giroInputVal, setGiroInputVal] = useState(cgsGiroBalance.toString());
 
   useEffect(() => {
-    setRdnInputVal(cgsCashBalance.toString());
+    const val = cgsCashBalance.toString();
+    setRdnInputVal(prev => prev !== val ? val : prev);
   }, [cgsCashBalance]);
 
   useEffect(() => {
-    setGiroInputVal(cgsGiroBalance.toString());
+    const val = cgsGiroBalance.toString();
+    setGiroInputVal(prev => prev !== val ? val : prev);
   }, [cgsGiroBalance]);
   const [marketSubTab, setMarketSubTab] = useState<'overview' | 'explorer' | 'fundamental' | 'screener'>('overview');
   const [fundamentalSymbol, setFundamentalSymbol] = useState<string | undefined>(undefined);
@@ -1570,7 +1724,7 @@ export default function App() {
     }
 
     if (userRole === 'Public') {
-      const allowedPaths = ['home', 'my-company', 'wap-assets', 'market', 'calendar', 'fundamental', 'weekly-insight', 'scanner', 'asset-detail', 'users', 'vamsmartscanner', 'audit-sync'];
+      const allowedPaths = ['home', 'amir-research', 'custody-integration', 'my-company', 'wap-assets', 'market', 'calendar', 'fundamental', 'weekly-insight', 'scanner', 'asset-detail', 'users', 'vamsmartscanner', 'audit-sync'];
       return !allowedPaths.includes(path);
     }
     const item = SIDEBAR_MENU.find(m => m.path === path);
@@ -2503,21 +2657,25 @@ export default function App() {
       window.dispatchEvent(new CustomEvent('vam-market-update', { detail: data }));
 
       // Update Technical Logs (State)
-      setTechnicalLogs(prev => prev.map(log => {
-        if (log.symbol === symbol) {
-          const currentPerf = log.performance || generateSimulatedPerformance();
-          const lastVal = currentPerf[currentPerf.length - 1];
-          // Determine trend based on current signal
-          const bias = log.signal === 'BUY' ? 0.3 : log.signal === 'SELL' ? -0.3 : 0;
-          const newVal = lastVal + (Math.random() - 0.5 + bias) * 2;
-          return { 
-            ...log, 
-            price: typeof price === 'number' ? price.toLocaleString('id-ID') : (price || 'N/A'),
-            performance: [...currentPerf.slice(1), newVal]
-          };
-        }
-        return log;
-      }));
+      setTechnicalLogs(prev => {
+        const hasMatching = prev.some(log => log.symbol === symbol);
+        if (!hasMatching) return prev;
+        return prev.map(log => {
+          if (log.symbol === symbol) {
+            const currentPerf = log.performance || generateSimulatedPerformance();
+            const lastVal = currentPerf[currentPerf.length - 1];
+            // Determine trend based on current signal
+            const bias = log.signal === 'BUY' ? 0.3 : log.signal === 'SELL' ? -0.3 : 0;
+            const newVal = lastVal + (Math.random() - 0.5 + bias) * 2;
+            return { 
+              ...log, 
+              price: typeof price === 'number' ? price.toLocaleString('id-ID') : (price || 'N/A'),
+              performance: [...currentPerf.slice(1), newVal]
+            };
+          }
+          return log;
+        });
+      });
 
       // Check Alerts Logic
       setAlerts(currentAlerts => {
@@ -2530,21 +2688,6 @@ export default function App() {
         });
 
         if (triggeredAlerts.length > 0) {
-          // Schedule notification update outside the current reducer tick
-          setTimeout(() => {
-            setNotifications(prev => [
-              ...triggeredAlerts.map(a => ({
-                id: Math.random().toString(36).substring(7),
-                symbol: a.symbol,
-                price: price,
-                targetPrice: a.targetPrice,
-                condition: a.condition,
-                timestamp: Date.now()
-              })),
-              ...prev
-            ].slice(0, 5));
-          }, 0);
-
           // Deactivate triggered alerts
           return currentAlerts.map(a => {
             const isTriggered = triggeredAlerts.some(ta => ta.id === a.id);
@@ -2554,15 +2697,7 @@ export default function App() {
         return currentAlerts;
       });
 
-      // Direct DOM Update (Fast Path) for sub-second visual feedback
-      const tickerElements = document.querySelectorAll(`[id^="price-${symbol}"]`);
-      tickerElements.forEach(el => {
-        if (el instanceof HTMLElement) {
-          el.innerText = `Rp ${new Intl.NumberFormat('id-ID').format(price)}`;
-          el.classList.add('text-[#deff9a]', 'animate-pulse');
-          setTimeout(() => el.classList.remove('animate-pulse'), 400);
-        }
-      });
+      // Live prices updated smoothly via React state
     });
 
     socket.on('news-update', (news: any) => {
@@ -4575,7 +4710,12 @@ export default function App() {
               </button>
               <h3 className="text-sm font-semibold text-slate-300 uppercase tracking-widest">Legal Document Automation</h3>
             </div>
-            <LegalDocumentCenter />
+            <LegalDocumentCenter 
+              onOpenVerifier={(docNum, divCode, hash) => {
+                setVerificationDocParam(docNum);
+                setIsDocVerificationModalOpen(true);
+              }}
+            />
           </div>
         );
       case 'export-center':
@@ -4732,6 +4872,17 @@ export default function App() {
           );
         }
         return <WorkspaceHub onAuthRequired={() => setNeedsAuth(true)} />;
+      case 'amir-research':
+        return <AmirDeepResearchHub />;
+      case 'custody-integration':
+        return (
+          <CustodyPortfolioIntegrationHub 
+            portfolioData={portfolioData}
+            cgsAssets={cgsAssets}
+            cgsCashBalance={cgsCashBalance}
+            cgsGiroBalance={cgsGiroBalance}
+          />
+        );
       case 'my-company':
         return <MyCompanyOverview portfolioData={portfolioData} />;
       case 'wap-assets':
@@ -5089,6 +5240,18 @@ export default function App() {
             
             <div className="text-right flex items-center gap-3">
               <button
+                onClick={() => {
+                  setVerificationDocParam(undefined);
+                  setIsDocVerificationModalOpen(true);
+                }}
+                className="hidden sm:flex items-center gap-2 px-3 py-2 bg-emerald-500/10 hover:bg-emerald-500 hover:text-black text-emerald-400 text-[10px] font-black uppercase tracking-wider rounded-xl border border-emerald-500/30 transition-all cursor-pointer shadow-md"
+                title="Validasi Keaslian Dokumen & QR Code Divisi Resmi"
+              >
+                <ShieldCheck className="w-3.5 h-3.5" />
+                <span>Validasi QR Dokumen</span>
+              </button>
+
+              <button
                 onClick={() => setActiveTab('legal')}
                 className="hidden sm:flex items-center gap-2 px-3 py-2 bg-[#DFFF00]/10 hover:bg-[#DFFF00] hover:text-black text-[#DFFF00] text-[10px] font-black uppercase tracking-wider rounded-xl border border-[#DFFF00]/30 transition-all cursor-pointer shadow-md"
                 title="Cetak Dokumen Presentasi & Manual User"
@@ -5298,7 +5461,9 @@ export default function App() {
                 transition={{ duration: 0.2 }}
                 className={activeTab === 'home' ? 'p-0' : ''}
               >
-                {renderContent()}
+                <Suspense fallback={<ViewLoadingFallback />}>
+                  {renderContent()}
+                </Suspense>
               </motion.div>
             </AnimatePresence>
           </main>
@@ -5538,11 +5703,33 @@ export default function App() {
       </div>
 
       {/* System App Update & Maintenance Modal */}
-      <SystemUpdateModal 
-        isOpen={isSystemUpdateModalOpen} 
-        onClose={() => setIsSystemUpdateModalOpen(false)} 
-        onTriggerSystemRefresh={syncMarketConnectivity} 
-      />
+      <Suspense fallback={null}>
+        {isSystemUpdateModalOpen && (
+          <SystemUpdateModal 
+            isOpen={isSystemUpdateModalOpen} 
+            onClose={() => setIsSystemUpdateModalOpen(false)} 
+            onTriggerSystemRefresh={syncMarketConnectivity} 
+          />
+        )}
+      </Suspense>
+
+      {/* Official Institutional Document QR Verification Modal */}
+      <Suspense fallback={null}>
+        {isDocVerificationModalOpen && (
+          <DocumentVerificationModal
+            isOpen={isDocVerificationModalOpen}
+            onClose={() => {
+              setIsDocVerificationModalOpen(false);
+              setVerificationDocParam(undefined);
+              setVerificationDivisionParam(undefined);
+              setVerificationHashParam(undefined);
+            }}
+            initialDocNumber={verificationDocParam}
+            initialDivisionCode={verificationDivisionParam}
+            initialHash={verificationHashParam}
+          />
+        )}
+      </Suspense>
     </div>
   );
 }

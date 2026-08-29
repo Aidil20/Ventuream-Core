@@ -552,18 +552,21 @@ export function AuditSync({ autoSyncEnabled = true }: { autoSyncEnabled?: boolea
           }
         });
 
-        setTickersList(prev => 
-          prev.map(ticker => {
+        setTickersList(prev => {
+          let changed = false;
+          const next = prev.map(ticker => {
             const livePrice = priceMap[ticker.symbol.toUpperCase()];
-            if (livePrice && livePrice > 0) {
+            if (livePrice && livePrice > 0 && Math.abs(ticker.externalPrice - livePrice) > 0.001) {
+              changed = true;
               return {
                 ...ticker,
                 externalPrice: livePrice
               };
             }
             return ticker;
-          })
-        );
+          });
+          return changed ? next : prev;
+        });
         if (isManual) {
           setSyncStatus('Live finance metrics synchronized.');
           setTimeout(() => setSyncStatus(''), 2000);

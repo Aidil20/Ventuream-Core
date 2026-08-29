@@ -63,8 +63,8 @@ export interface AssetData {
   id: string;
   code: string;
   name: string;
-  category: 'Properti & Gedung' | 'Mesin & Genset' | 'Inventaris IT & Server' | 'Kendaraan Operasional' | 'Peralatan Kantor';
-  location: 'HQ Jakarta SCBD' | 'Data Center BSD' | 'Branch Surabaya' | 'Colo Server SG';
+  category: 'Properti & Gedung' | 'Mesin & Genset' | 'Inventaris IT & Server' | 'Kendaraan Operasional' | 'Peralatan Kantor' | 'Aset Tak Berwujud';
+  location: 'HQ Jakarta SCBD' | 'Kantor Operasional VAM' | 'Data Center BSD' | 'Branch Surabaya' | 'Colo Server SG' | 'Server On-Premise & Cloud Repository VAM' | string;
   condition: 'Baik / Operasional' | 'Pemeliharaan Rutin' | 'Butuh Perbaikan' | 'Afkir / Replacement';
   valuation: number; // IDR
   purchaseDate: string;
@@ -165,9 +165,40 @@ export interface BorrowRecord {
   purpose: string;
 }
 
-// Initial Datasets (Empty by default for manual user input)
+// Initial Datasets (Aset fisik & Aset tak berwujud VAM)
 const INITIAL_INVESTMENTS: InvestmentAsset[] = [];
-const INITIAL_ASSETS: AssetData[] = [];
+const INITIAL_ASSETS: AssetData[] = [
+  {
+    id: 'AST-PC-01',
+    code: 'AST-PC-01',
+    name: 'PC & Monitor Workstation (1 Unit)',
+    category: 'Inventaris IT & Server',
+    location: 'Kantor Operasional VAM',
+    condition: 'Baik / Operasional',
+    valuation: 6000000,
+    purchaseDate: '2025-01-10',
+    lastMaintenance: '2025-01-10',
+    nextMaintenance: '2026-12-31',
+    assignedTo: 'Trader / Analyst VAM',
+    borrowStatus: 'Tersedia',
+    serialNumber: 'VAM-IT-PC-01'
+  },
+  {
+    id: 'AST-SFT-ERP-01',
+    code: 'AST-SFT-ERP-01',
+    name: 'VentureAM Institutional System',
+    category: 'Aset Tak Berwujud',
+    location: 'Server On-Premise & Cloud Repository VAM',
+    condition: 'Baik / Operasional',
+    valuation: 4200000000,
+    purchaseDate: '2025-01-01',
+    lastMaintenance: '2026-01-15',
+    nextMaintenance: '2026-12-31',
+    assignedTo: 'Engineering & Quantitative Lead VAM',
+    borrowStatus: 'In-Service',
+    serialNumber: 'VAM-SFT-ERP-2026-SPI'
+  }
+];
 const INITIAL_MAINTENANCE_TASKS: MaintenanceTask[] = [];
 const INITIAL_BORROW_RECORDS: BorrowRecord[] = [];
 
@@ -181,7 +212,8 @@ const CATEGORY_COLORS: Record<string, string> = {
   'Mesin & Genset': '#ec4899', // Pink
   'Inventaris IT & Server': '#06b6d4', // Cyan
   'Kendaraan Operasional': '#6366f1', // Indigo
-  'Peralatan Kantor': '#94a3b8'  // Slate
+  'Peralatan Kantor': '#94a3b8', // Slate
+  'Aset Tak Berwujud': '#8b5cf6'  // Violet (Software / Intangible IP)
 };
 
 const CONDITION_COLORS: Record<string, string> = {
@@ -199,11 +231,28 @@ const formatValuationIDR = (val: number) => {
 };
 
 export const WapAssetManagement: React.FC<WapAssetManagementProps> = ({ portfolioData }) => {
-  // State Management with LocalStorage Persistence
+  // State Management with LocalStorage Persistence & Dummy Sanitization
   const [assets, setAssets] = useState<AssetData[]>(() => {
     try {
       const saved = localStorage.getItem('vam_wap_assets_v3');
-      if (saved) return JSON.parse(saved);
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          const hasDummy = parsed.some((a: any) => 
+            a.code?.includes('SRV') || a.code?.includes('HQ') || a.code?.includes('TRD') || a.code?.includes('CAR') || a.code?.includes('GEN') || a.code?.includes('AST-00') ||
+            a.name?.toLowerCase().includes('scbd') || a.name?.toLowerCase().includes('datacenter') || a.name?.toLowerCase().includes('alphard') || a.name?.toLowerCase().includes('generator')
+          );
+          if (!hasDummy) {
+            // Ensure AST-SFT-ERP-01 is present
+            const hasErp = parsed.some((a: any) => a.code === 'AST-SFT-ERP-01' || a.id === 'AST-SFT-ERP-01');
+            if (!hasErp) {
+              const erpAsset = INITIAL_ASSETS.find(a => a.code === 'AST-SFT-ERP-01');
+              if (erpAsset) return [...parsed, erpAsset];
+            }
+            return parsed;
+          }
+        }
+      }
     } catch (e) {
       console.error(e);
     }
@@ -213,7 +262,16 @@ export const WapAssetManagement: React.FC<WapAssetManagementProps> = ({ portfoli
   const [investmentAssets, setInvestmentAssets] = useState<InvestmentAsset[]>(() => {
     try {
       const saved = localStorage.getItem('vam_investment_assets_v3');
-      if (saved) return JSON.parse(saved);
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          const hasDummy = parsed.some((inv: any) => 
+            inv.code?.includes('SKK') || inv.code?.includes('PE') || inv.code?.includes('LON') || inv.code?.includes('BND') || inv.code?.includes('INV-00') ||
+            inv.name?.toLowerCase().includes('st011') || inv.name?.toLowerCase().includes('nusantara logistik') || inv.name?.toLowerCase().includes('berkah agro') || inv.name?.toLowerCase().includes('ori024')
+          );
+          if (!hasDummy) return parsed;
+        }
+      }
     } catch (e) {
       console.error(e);
     }
@@ -755,8 +813,8 @@ export const WapAssetManagement: React.FC<WapAssetManagementProps> = ({ portfoli
               onClick={() => setShowAddModal(true)}
               className="px-3.5 py-2.5 bg-zinc-900 hover:bg-zinc-800 text-zinc-200 font-bold text-xs rounded-xl border border-zinc-700 flex items-center gap-1.5 transition-all cursor-pointer"
             >
-              <Box className="w-4 h-4 text-sky-400" />
-              <span>+ Aset Fisik</span>
+              <Box className="w-4 h-4 text-[#DFFF00]" />
+              <span>+ Aset Operasional / IT</span>
             </button>
 
             <button
@@ -855,7 +913,7 @@ export const WapAssetManagement: React.FC<WapAssetManagementProps> = ({ portfoli
             }`}
           >
             <Box className="w-4 h-4" />
-            <span>Inventaris Fisik WAP ({filteredAssets.length})</span>
+            <span>Inventaris Aset WAP ({filteredAssets.length})</span>
           </button>
 
           <button
@@ -968,9 +1026,10 @@ export const WapAssetManagement: React.FC<WapAssetManagementProps> = ({ portfoli
                   className="bg-transparent text-xs font-bold text-[#DFFF00] focus:outline-none cursor-pointer"
                 >
                   <option value="Semua" className="bg-zinc-900 text-white">Semua Kategori</option>
+                  <option value="Aset Tak Berwujud" className="bg-zinc-900 text-white">Aset Tak Berwujud (Software/ERP)</option>
+                  <option value="Inventaris IT & Server" className="bg-zinc-900 text-white">Inventaris IT &amp; Server</option>
                   <option value="Properti & Gedung" className="bg-zinc-900 text-white">Properti &amp; Gedung</option>
                   <option value="Mesin & Genset" className="bg-zinc-900 text-white">Mesin &amp; Genset</option>
-                  <option value="Inventaris IT & Server" className="bg-zinc-900 text-white">Inventaris IT &amp; Server</option>
                   <option value="Kendaraan Operasional" className="bg-zinc-900 text-white">Kendaraan Operasional</option>
                   <option value="Peralatan Kantor" className="bg-zinc-900 text-white">Peralatan Kantor</option>
                 </select>
@@ -985,6 +1044,8 @@ export const WapAssetManagement: React.FC<WapAssetManagementProps> = ({ portfoli
                   className="bg-transparent text-xs font-bold text-[#DFFF00] focus:outline-none cursor-pointer"
                 >
                   <option value="Semua" className="bg-zinc-900 text-white">Semua Lokasi</option>
+                  <option value="Kantor Operasional VAM" className="bg-zinc-900 text-white">Kantor Operasional VAM</option>
+                  <option value="Server On-Premise & Cloud Repository VAM" className="bg-zinc-900 text-white">Server &amp; Cloud Repository VAM</option>
                   <option value="HQ Jakarta SCBD" className="bg-zinc-900 text-white">HQ Jakarta SCBD</option>
                   <option value="Data Center BSD" className="bg-zinc-900 text-white">Data Center BSD</option>
                   <option value="Branch Surabaya" className="bg-zinc-900 text-white">Branch Surabaya</option>
@@ -1153,10 +1214,10 @@ export const WapAssetManagement: React.FC<WapAssetManagementProps> = ({ portfoli
           <div className="flex items-center justify-between bg-zinc-950 p-4 rounded-xl border border-zinc-800">
             <div>
               <h2 className="text-sm font-black text-white uppercase tracking-wider">
-                Katalog Inventaris Fisik VAM ({filteredAssets.length} Unit)
+                Katalog Inventaris Aset WAP ({filteredAssets.length} Item)
               </h2>
               <p className="text-[10px] text-zinc-400">
-                Data infrastruktur gedung, server, genset, dan armada operasional PT Venture Asset Management.
+                Data infrastruktur hardware, server, dan aset tak berwujud software ERP PT Venture Asset Management.
               </p>
             </div>
 
@@ -1165,7 +1226,7 @@ export const WapAssetManagement: React.FC<WapAssetManagementProps> = ({ portfoli
               className="px-3.5 py-1.5 bg-[#DFFF00] text-black font-bold text-xs rounded-xl flex items-center gap-1.5 hover:bg-[#cbe600] transition-all cursor-pointer"
             >
               <Plus className="w-4 h-4 stroke-[3]" />
-              <span>Tambah Fisik</span>
+              <span>Tambah Aset</span>
             </button>
           </div>
 
@@ -1204,7 +1265,14 @@ export const WapAssetManagement: React.FC<WapAssetManagementProps> = ({ portfoli
                         </td>
 
                         <td className="p-3.5 whitespace-nowrap">
-                          <span className="px-2.5 py-1 rounded-full text-[10px] font-bold bg-zinc-900 border border-zinc-700 text-zinc-300">
+                          <span 
+                            className="px-2.5 py-1 rounded-full text-[10px] font-bold border"
+                            style={{
+                              backgroundColor: `${CATEGORY_COLORS[a.category] || '#71717a'}15`,
+                              color: CATEGORY_COLORS[a.category] || '#d4d4d8',
+                              borderColor: `${CATEGORY_COLORS[a.category] || '#71717a'}35`
+                            }}
+                          >
                             {a.category}
                           </span>
                         </td>
@@ -1800,10 +1868,10 @@ export const WapAssetManagement: React.FC<WapAssetManagementProps> = ({ portfoli
                   </div>
                   <div>
                     <h3 className="text-base font-black text-white uppercase tracking-tight">
-                      Registrasi Aset Fisik
+                      Registrasi Aset Fisik &amp; Tak Berwujud
                     </h3>
                     <p className="text-[10px] text-zinc-400 font-mono">
-                      Form Input Gedung, Server, Genset &amp; Kendaraan
+                      Form Input Server, Software ERP/IP, Perangkat &amp; Fasilitas
                     </p>
                   </div>
                 </div>
@@ -1818,11 +1886,11 @@ export const WapAssetManagement: React.FC<WapAssetManagementProps> = ({ portfoli
 
               <form onSubmit={handleAddAssetSubmit} className="space-y-4 font-mono text-xs">
                 <div className="space-y-1">
-                  <label className="text-[10px] font-bold text-zinc-400 uppercase">Nama Aset Fisik *</label>
+                  <label className="text-[10px] font-bold text-zinc-400 uppercase">Nama Aset / Software *</label>
                   <input
                     type="text"
                     required
-                    placeholder="e.g. Cluster Server Dell PowerEdge R750"
+                    placeholder="e.g. VentureAM Institutional System / Server Workstation"
                     value={newAssetForm.name}
                     onChange={(e) => setNewAssetForm(prev => ({ ...prev, name: e.target.value }))}
                     className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-3 py-2 text-white focus:outline-none focus:border-sky-400"
@@ -1837,8 +1905,9 @@ export const WapAssetManagement: React.FC<WapAssetManagementProps> = ({ portfoli
                       onChange={(e) => setNewAssetForm(prev => ({ ...prev, category: e.target.value as any }))}
                       className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-3 py-2 text-white focus:outline-none focus:border-sky-400 cursor-pointer"
                     >
-                      <option value="Properti & Gedung">Properti &amp; Gedung</option>
+                      <option value="Aset Tak Berwujud">Aset Tak Berwujud (Software/IP)</option>
                       <option value="Inventaris IT & Server">Inventaris IT &amp; Server</option>
+                      <option value="Properti & Gedung">Properti &amp; Gedung</option>
                       <option value="Mesin & Genset">Mesin &amp; Genset</option>
                       <option value="Kendaraan Operasional">Kendaraan Operasional</option>
                       <option value="Peralatan Kantor">Peralatan Kantor</option>
@@ -1852,6 +1921,8 @@ export const WapAssetManagement: React.FC<WapAssetManagementProps> = ({ portfoli
                       onChange={(e) => setNewAssetForm(prev => ({ ...prev, location: e.target.value as any }))}
                       className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-3 py-2 text-white focus:outline-none focus:border-sky-400 cursor-pointer"
                     >
+                      <option value="Server On-Premise & Cloud Repository VAM">Server &amp; Cloud Repository VAM</option>
+                      <option value="Kantor Operasional VAM">Kantor Operasional VAM</option>
                       <option value="HQ Jakarta SCBD">HQ Jakarta SCBD</option>
                       <option value="Data Center BSD">Data Center BSD</option>
                       <option value="Branch Surabaya">Branch Surabaya</option>

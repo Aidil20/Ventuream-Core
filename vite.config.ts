@@ -16,6 +16,9 @@ export default defineConfig(({mode}) => {
     },
     build: {
       outDir: 'dist',
+      target: 'esnext',
+      cssCodeSplit: true,
+      chunkSizeWarningLimit: 1200,
       rollupOptions: {
         output: {
           manualChunks(id) {
@@ -23,11 +26,23 @@ export default defineConfig(({mode}) => {
               if (id.includes('jspdf') || id.includes('html2canvas')) {
                 return 'pdf-vendor';
               }
+              if (id.includes('xlsx') || id.includes('papaparse') || id.includes('pptxgenjs')) {
+                return 'sheet-vendor';
+              }
               if (id.includes('recharts') || id.includes('d3')) {
                 return 'charts-vendor';
               }
+              if (id.includes('motion')) {
+                return 'motion-vendor';
+              }
               if (id.includes('lucide-react')) {
                 return 'icons-vendor';
+              }
+              if (id.includes('firebase')) {
+                return 'firebase-vendor';
+              }
+              if (id.includes('socket.io-client') || id.includes('decimal.js')) {
+                return 'core-vendor';
               }
             }
           },

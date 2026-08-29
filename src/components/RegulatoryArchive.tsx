@@ -30,6 +30,7 @@ import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import { saveAndNotifyPdf } from '../services/reportNotificationService';
 import { generateAuditorOpinionPDF } from '../services/documentExportService';
+import { embedDualSignatureQrBlocks, OfficialDivisionKey } from '../services/officialDocValidationService';
 
 interface RegulatorDoc {
   id: string;
@@ -345,24 +346,49 @@ export default function RegulatoryArchive() {
         const splitBody = doc.splitTextToSize(bodyContent, pw - 28);
         doc.text(splitBody, 14, 66);
 
-        // Signature Lines
-        const currentY = 140;
-        doc.setFont('helvetica', 'bold');
-        doc.setFontSize(8.5);
-        doc.text('DIVISI AKUNTANSI & PELAPORAN KORPORASI', 14, currentY);
-        doc.text('KOMITE AUDIT & DEWAN PENGAWAS', pw - 85, currentY);
+        // Signature Lines with Official Division QR Codes
+        let leftDivKey: OfficialDivisionKey = 'DIVISI_KEUANGAN_AUDIT';
+        let leftHeader = 'DIVISI AKUNTANSI & PELAPORAN KORPORASI';
+        let leftSigner = 'DIVISI AKUNTANSI & PELAPORAN KORPORASI';
+        let leftRole = 'Satuan Pengawas Intern (Internal Audit)';
 
-        doc.setDrawColor(203, 213, 225);
-        doc.line(14, currentY + 20, 70, currentY + 20);
-        doc.line(pw - 85, currentY + 20, pw - 15, currentY + 20);
+        if (docItem.category?.toLowerCase().includes('portofolio')) {
+          leftDivKey = 'DIVISI_PORTOFOLIO_PASAR_MODAL';
+          leftHeader = 'DIVISI PORTOFOLIO & RISET PASAR MODAL';
+          leftSigner = 'Aidil Syahdan Al fitrah';
+          leftRole = 'Head of Portfolio Management & CIO';
+        } else if (docItem.category?.toLowerCase().includes('risiko') || docItem.category?.toLowerCase().includes('kepatuhan')) {
+          leftDivKey = 'DIVISI_KEPATUHAN_RISIKO';
+          leftHeader = 'DIVISI KEPATUHAN & MANAJEMEN RISIKO';
+          leftSigner = 'Tim Kepatuhan OJK & Regulasi Pasar Modal';
+          leftRole = 'Chief Compliance Officer';
+        } else if (docItem.category?.toLowerCase().includes('legal') || docItem.actionType === 'UBO_DECL') {
+          leftDivKey = 'DIREKSI_EKSEKUTIF';
+          leftHeader = 'DIREKSI EKSEKUTIF PERSEROAN';
+          leftSigner = 'Aidil Syahdan Al fitrah';
+          leftRole = 'President Director / UBO 90%';
+        } else if (docItem.category?.toLowerCase().includes('settlement') || docItem.actionType === 'GATEWAY_SETTL') {
+          leftDivKey = 'DIVISI_KEUANGAN_AUDIT';
+          leftHeader = 'DIVISI AKUNTANSI & PELAPORAN KORPORASI';
+          leftSigner = 'DIVISI AKUNTANSI & PELAPORAN KORPORASI';
+          leftRole = 'Satuan Pengawas Intern (Internal Audit)';
+        }
 
-        doc.text('DIVISI AKUNTANSI & PELAPORAN KORPORASI', 14, currentY + 25);
-        doc.text('Aidil Syahdan Al fitrah', pw - 85, currentY + 25);
-
-        doc.setFont('helvetica', 'normal');
-        doc.setFontSize(7.5);
-        doc.text('Satuan Pengawas Intern (Internal Audit)', 14, currentY + 29);
-        doc.text('President Director', pw - 85, currentY + 29);
+        const currentY = 125;
+        await embedDualSignatureQrBlocks({
+          doc,
+          leftDivisionKey: leftDivKey,
+          rightDivisionKey: 'DIREKSI_EKSEKUTIF',
+          docNumber: docItem.docNumber,
+          documentTitle: docItem.title,
+          startY: currentY,
+          leftHeaderTitle: leftHeader,
+          leftSignerName: leftSigner,
+          leftSignerRole: leftRole,
+          rightHeaderTitle: 'KOMITE AUDIT & DEWAN PENGAWAS',
+          rightSignerName: 'Aidil Syahdan Al fitrah',
+          rightSignerRole: 'President Director'
+        });
 
         // Save & trigger toast notification with View File modal
         const docFileName = `${docItem.docNumber.replace(/[/\\?%*:|"<>]/g, '_')}.pdf`;

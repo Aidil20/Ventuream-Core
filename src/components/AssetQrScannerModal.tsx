@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { motion } from 'motion/react';
+import { motion, AnimatePresence } from 'motion/react';
 import jsQR from 'jsqr';
 import {
   Camera,
@@ -371,9 +371,12 @@ export function AssetQrScannerModal({
     setScannedResult(result);
   }, [parsePayload, playBeep]);
 
+  const isScanningActiveRef = useRef(isScanningActive);
+  isScanningActiveRef.current = isScanningActive;
+
   // Video Frame Scanning Loop
   const scanVideoFrame = useCallback(() => {
-    if (!videoRef.current || !canvasRef.current || !isScanningActive) return;
+    if (!videoRef.current || !canvasRef.current || !isScanningActiveRef.current) return;
 
     const video = videoRef.current;
     const canvas = canvasRef.current;
@@ -395,8 +398,10 @@ export function AssetQrScannerModal({
       }
     }
 
-    scanLoopRef.current = requestAnimationFrame(scanVideoFrame);
-  }, [isScanningActive, handleDetectedCode]);
+    if (isScanningActiveRef.current) {
+      scanLoopRef.current = requestAnimationFrame(scanVideoFrame);
+    }
+  }, [handleDetectedCode]);
 
   // Stop Camera helper
   const stopCameraInternal = useCallback(() => {
@@ -408,8 +413,8 @@ export function AssetQrScannerModal({
       cameraStreamRef.current.getTracks().forEach(t => t.stop());
       cameraStreamRef.current = null;
     }
-    setIsScanningActive(false);
-    setTorchOn(false);
+    setIsScanningActive(prev => (prev ? false : prev));
+    setTorchOn(prev => (prev ? false : prev));
   }, []);
 
   // Start Camera helper
@@ -418,6 +423,11 @@ export function AssetQrScannerModal({
     try {
       if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
         throw new Error('Camera access is not supported in this browser window.');
+      }
+
+      if (cameraStreamRef.current) {
+        cameraStreamRef.current.getTracks().forEach(t => t.stop());
+        cameraStreamRef.current = null;
       }
 
       const stream = await navigator.mediaDevices.getUserMedia({
@@ -437,17 +447,17 @@ export function AssetQrScannerModal({
       }
 
       const track = stream.getVideoTracks()[0];
-      const capabilities = (track && track.getCapabilities) ? track.getCapabilities() as { torch?: boolean } : {};
+      const capabilities = (track && track.getCapabilities) ? (track.getCapabilities() as { torch?: boolean }) : {};
       if (capabilities.torch) {
         setHasTorch(true);
       }
 
-      setIsScanningActive(true);
+      setIsScanningActive(prev => (prev ? prev : true));
     } catch (err: unknown) {
       const errorMsg = err instanceof Error ? err.message : 'Unable to initialize camera sensor.';
       console.warn('Camera sensor notice:', errorMsg);
       setCameraError(errorMsg);
-      setIsScanningActive(false);
+      setIsScanningActive(prev => (prev ? false : prev));
     }
   }, []);
 
@@ -543,16 +553,16 @@ export function AssetQrScannerModal({
     }
   };
 
-  if (!isOpen) return null;
-
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6 bg-black/80 backdrop-blur-md overflow-y-auto">
-      <motion.div
-        initial={{ opacity: 0, scale: 0.95, y: 10 }}
-        animate={{ opacity: 1, scale: 1, y: 0 }}
-        exit={{ opacity: 0, scale: 0.95, y: 10 }}
-        className="w-full max-w-2xl bg-zinc-950 border border-zinc-800 rounded-3xl shadow-2xl overflow-hidden my-auto flex flex-col max-h-[90vh]"
-      >
+    <AnimatePresence>
+      {isOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6 bg-black/80 backdrop-blur-md overflow-y-auto">
+          <motion.div
+            initial={{ opacity: 0, scale: 0.95, y: 10 }}
+            animate={{ opacity: 1, scale: 1, y: 0 }}
+            exit={{ opacity: 0, scale: 0.95, y: 10 }}
+            className="w-full max-w-2xl bg-zinc-950 border border-zinc-800 rounded-3xl shadow-2xl overflow-hidden my-auto flex flex-col max-h-[90vh]"
+          >
         {/* Modal Header */}
         <div className="flex items-center justify-between p-5 border-b border-zinc-800/80 bg-zinc-900/40">
           <div className="flex items-center gap-3">
@@ -1039,5 +1049,7 @@ export function AssetQrScannerModal({
         </div>
       </motion.div>
     </div>
+      )}
+    </AnimatePresence>
   );
 }

@@ -1,6 +1,7 @@
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import { saveAndNotifyPdf } from './reportNotificationService';
+import { embedOfficialQrValidationStamp } from './officialDocValidationService';
 
 export interface FinancialParams {
   financialValues: any;
@@ -124,24 +125,39 @@ export const generateConsolidatedBilingualPDF = async ({
   doc.text(periodSubLabel, 20, 40);
   doc.text(`Periode: ${periodOptions?.periodSubLabel || 'Tahun Fiskal 2026 YTD & Buku Penuh 2025 Komparatif'}  |  Per ${reportingDate.formattedInd}`, 20, 47);
 
-  // Metadata Card
+  // Metadata Card & QR Stamp
   let y = 62;
   doc.setFillColor(248, 249, 250);
   doc.setDrawColor(225, 228, 232);
-  doc.roundedRect(14, y, 182, 38, 2, 2, 'FD');
+  doc.roundedRect(14, y, 108, 38, 2, 2, 'FD');
 
   doc.setFont('helvetica', 'bold');
-  doc.setFontSize(8.5);
+  doc.setFontSize(8);
   doc.setTextColor(30, 30, 30);
-  doc.text('INFORMASI DOKUMEN & STANDAR REGULASI / REGULATORY COMPLIANCE', 18, y + 6);
+  doc.text('INFORMASI DOKUMEN & KEPATUHAN REGULASI', 18, y + 6);
 
   doc.setFont('helvetica', 'normal');
-  doc.setFontSize(8);
+  doc.setFontSize(7);
   doc.setTextColor(70, 70, 70);
-  doc.text(`• Nomor Registrasi: ${periodCode}`, 18, y + 13);
-  doc.text('• Basis Akuntansi: SAK / PSAK 1, PSAK 71, PSAK 2, PSAK 19 & IFRS 9, IAS 1, IAS 7, IAS 38', 18, y + 19);
-  doc.text(`• Status Pemeriksaan: Unaudited by KAP / Reviewed by SPI (${statusBadge})`, 18, y + 25);
-  doc.text(`• Timestamp Cetak: ${lastUpdateTime}  |  Mata Uang Pelaporan: Rupiah (IDR)`, 18, y + 31);
+  doc.text(`• No. Registrasi: ${periodCode}`, 18, y + 12);
+  doc.text('• Standar: PSAK 1, 71, 2, 19 & IFRS 9, IAS 1, 7, 38', 18, y + 17);
+  doc.text(`• Status: ${statusBadge}`, 18, y + 22);
+  doc.text(`• Waktu: ${lastUpdateTime}`, 18, y + 27);
+  doc.text('• Divisi: DIVISI KEUANGAN & AUDIT KONSOLIDASI', 18, y + 32);
+
+  // Embed QR Validation Stamp Box on Page 1
+  await embedOfficialQrValidationStamp({
+    doc,
+    divisionKey: 'DIVISI_KEUANGAN_AUDIT',
+    documentTitle: periodLabel,
+    docNumber: periodCode,
+    classification: 'LAPORAN KEUANGAN KONSOLIDASIAN RESMI',
+    x: 125,
+    y: y,
+    width: 71,
+    height: 38,
+    theme: 'light'
+  });
 
   // Key Financial Highlights
   y = 104;
@@ -506,6 +522,20 @@ export const generateConsolidatedBilingualPDF = async ({
   doc.text('Komite Audit & Kepatuhan Tata Kelola', 115, sigY + 39);
   doc.text('PT Venture Asset Management', 115, sigY + 44);
   doc.text('Status: Internal Review Passed', 115, sigY + 49);
+
+  // Official Institutional Validation Stamp & QR Block on concluding page
+  await embedOfficialQrValidationStamp({
+    doc,
+    divisionKey: 'DIVISI_KEUANGAN_AUDIT',
+    documentTitle: 'Pengesahan Laporan Keuangan Konsolidasian & Catatan Audit SPI',
+    docNumber: periodCode,
+    classification: 'DOKUMEN RESMI TEROTORISASI (LEVEL 1 INSTITUTIONAL)',
+    x: 14,
+    y: sigY + 55,
+    width: 182,
+    height: 22,
+    theme: 'light'
+  });
 
   // ==========================================
   // RUNNING HEADER & FOOTER ON ALL PAGES

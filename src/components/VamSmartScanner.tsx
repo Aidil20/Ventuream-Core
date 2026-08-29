@@ -408,7 +408,6 @@ function VamSmartScanner() {
     const interval = setInterval(() => {
       setSecondsToNextFeedRefresh(prev => {
         if (prev <= 1) {
-          setTimeout(() => fetchMaLiveIssues(true), 0);
           return 12;
         }
         return prev - 1;
@@ -417,6 +416,13 @@ function VamSmartScanner() {
 
     return () => clearInterval(interval);
   }, [isFeedStreaming]);
+
+  useEffect(() => {
+    if (!isFeedStreaming) return;
+    if (secondsToNextFeedRefresh === 12) {
+      fetchMaLiveIssues(true);
+    }
+  }, [secondsToNextFeedRefresh, isFeedStreaming]);
 
   // Synergy Simulator States
   const [targetValuation, setTargetValuation] = useState<number>(1000); // USD Millions
